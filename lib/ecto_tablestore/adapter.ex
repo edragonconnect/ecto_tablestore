@@ -699,7 +699,6 @@ defmodule Ecto.Adapters.Tablestore do
         {String.to_atom(attr_key), attr_value}
       end
 
-    IO.puts("extract_as_keyword prepared_attrs: #{inspect(prepared_attrs)}")
     Keyword.merge(prepared_attrs, prepared_pks)
   end
 
@@ -731,12 +730,10 @@ defmodule Ecto.Adapters.Tablestore do
   end
 
   defp construct_row_updates({key, value}, acc) when is_atom(key) do
-    case Keyword.has_key?(acc, :put) do
-      false ->
-        Keyword.put(acc, :put, [{Atom.to_string(key), value}])
-
-      true ->
-        Keyword.update!(acc, :put, &[{Atom.to_string(key), value} | &1])
+    if Keyword.has_key?(acc, :put) do
+      Keyword.update!(acc, :put, &[{Atom.to_string(key), value} | &1])
+    else
+      Keyword.put(acc, :put, [{Atom.to_string(key), value}])
     end
   end
 
