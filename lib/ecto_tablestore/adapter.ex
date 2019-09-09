@@ -138,9 +138,8 @@ defmodule Ecto.Adapters.Tablestore do
                        module :: Ecto.Schema.t(),
                        [{key :: String.t() | atom(), value :: integer | String.t()}]
                      }
-                   | schema_entity ::
-                     Ecto.Schema.t()
-                     | {[schema_entity :: Ecto.Schema.t()], options :: Keyword.t()}
+                   | (schema_entity :: Ecto.Schema.t())
+                   | {[schema_entity :: Ecto.Schema.t()], options :: Keyword.t()}
                  ]
       def batch_get(gets) do
         Ecto.Adapters.Tablestore.batch_get(

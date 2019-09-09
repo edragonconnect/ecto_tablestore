@@ -3,9 +3,15 @@ defmodule EctoTablestore.Integer do
 
   def type, do: :integer
 
-  def cast(int) do
+  def cast({:increment, int}) when is_integer(int) do
+    {:ok, {:increment, int}}
+  end
+
+  def cast(int) when is_integer(int) do
     {:ok, int}
   end
+
+  def cast(_term), do: :error
 
   def load(term) when is_integer(term) do
     {:ok, term}
