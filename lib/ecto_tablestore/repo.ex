@@ -1,4 +1,40 @@
 defmodule EctoTablestore.Repo do
+  @moduledoc """
+  Defines a repository for Tablestore.
+
+  A repository maps to an underlying data store, controlled by `Ecto.Adapters.Tablestore` adapter.
+
+  When used, the repository expects the `:otp_app` option, and uses `Ecto.Adapters.Tablestore` by default.
+  The `:otp_app` should point to an OTP application that has repository configuration. For example, the repository:
+
+  ```elixir
+  defmodule EctoTablestore.MyRepo do
+    use EctoTablestore.Repo,
+      otp_app: :my_otp_app
+  end
+  ```
+
+  Configure `ex_aliyun_ots` as usual:
+
+  ```elixir
+  config :ex_aliyun_ots, MyInstance,
+    name: "MY_INSTANCE_NAME",
+    endpoint: "MY_INSTANCE_ENDPOINT",
+    access_key_id: "MY_OTS_ACCESS_KEY",
+    access_key_secret: "MY_OTS_ACCESS_KEY_SECRET"
+
+  config :ex_aliyun_ots,
+    instances: [MyInstance]
+  ```
+
+  Add the following configuration to associate `MyRepo` with the previous configuration of `ex_aliyun_ots`:
+
+  ```elixir
+  config :my_otp_app, EctoTablestore.MyRepo,
+    instance: MyInstance
+  ```
+  """
+
   defmacro __using__(opts) do
     quote bind_quoted: [opts: opts] do
       use Ecto.Repo,
@@ -15,10 +51,10 @@ defmodule EctoTablestore.Repo do
   @doc """
   Similar to `c:get/3` but use schema entity which has been filled the whole primary key(s).
 
-  Notice:
+  **NOTICE**:
 
-  If there are some attribute column(s) are provided in entity, these fields will be combined within multiple `:==` filtering expressions;
-  If there are some attribute column(s) are provided and meanwhile set `filter` option, they will be merged into a composite filter.
+  * If there are some attribute column(s) are provided in entity, these fields will be combined within multiple `:==` filtering expressions;
+  * If there are some attribute column(s) are provided and meanwhile set `filter` option, they will be merged into a composite filter.
 
   ## Options
 
@@ -183,4 +219,12 @@ defmodule EctoTablestore.Repo do
               changeset :: Ecto.Changeset.t(),
               opts :: Keyword.t()
             ) :: {:ok, Ecto.Schema.t()} | {:error, term()}
+
+  @doc """
+  Please see `c:Ecto.Repo.start_link/2` for details.
+  """
+  @callback start_link(opts :: Keyword.t()) ::
+            {:ok, pid}
+            | {:error, {:already_started, pid}}
+            | {:error, term}
 end

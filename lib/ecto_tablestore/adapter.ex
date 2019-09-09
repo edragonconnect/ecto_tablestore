@@ -152,7 +152,7 @@ defmodule Ecto.Adapters.Tablestore do
         }
 
       nil ->
-        raise "Not set `instance` in Repo configuration properly, or found its value is not an :atom."
+        raise "Missing `instance` option in EctoTablestore.Repo configuration properly, or found its value is not an :atom."
     end
   end
 
