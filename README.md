@@ -2,6 +2,13 @@
 
 **TODO: Add description**
 
+## Introduce
+
+Alibaba Tablestore product official references:
+
+* [English document](https://www.alibabacloud.com/help/doc-detail/27280.htm)
+* [中文文档](https://help.aliyun.com/document_detail/27280.html)
+
 ## Config
 
 1, Configure `MY` instance(s) information of Alibaba Tablestore product.
