@@ -124,30 +124,24 @@ defmodule Ecto.Adapters.Tablestore do
       end
 
       @doc """
-      Batch get several rows of data from one or more tables, this batch request put multiple queries in one request from client's perspective.
+      Batch get several rows of data from one or more tables, this batch request put multiple get_row in one request from client's perspective.
       """
       @spec batch_get(gets) ::
               {:ok, Keyword.t()} | {:error, term()}
-            when gets:
-                   [
-                     {
+            when gets: [
+                   {
+                     module :: Ecto.Schema.t(),
+                     [{key :: String.t() | atom(), value :: integer | String.t()}],
+                     options :: Keyword.t()
+                   }
+                   | {
                        module :: Ecto.Schema.t(),
-                       [{key :: String.t() | atom(), value :: integer | String.t()}],
-                       options :: Keyword.t()
+                       [{key :: String.t() | atom(), value :: integer | String.t()}]
                      }
-                   ]
-                   | [
-                       {
-                         module :: Ecto.Schema.t(),
-                         [{key :: String.t() | atom(), value :: integer | String.t()}]
-                       }
-                     ]
-                   | [
-                       [schema_entity :: Ecto.Schema.t()]
-                     ]
-                   | [
-                       {[schema_entity :: Ecto.Schema.t()], options :: Keyword.t()}
-                     ]
+                   | schema_entity ::
+                     Ecto.Schema.t()
+                     | {[schema_entity :: Ecto.Schema.t()], options :: Keyword.t()}
+                 ]
       def batch_get(gets) do
         Ecto.Adapters.Tablestore.batch_get(
           get_dynamic_repo(),
@@ -155,6 +149,61 @@ defmodule Ecto.Adapters.Tablestore do
         )
       end
 
+      @doc """
+      Batch write several rows of data from one or more tables, this batch request put multiple put_row/delete_row/update_row in one request from client's perspective.
+      After execute each operation in servers, return results independently and independently consumes capacity units.
+
+      ## Input Example
+
+      The options are similar as `put_row`/`delete_row`/`update_row`, but expect `transaction_id` option.
+
+          batch_write([
+            delete: [
+              schema_entity_a,
+              schema_entity_b
+            ],
+            put: [
+              {%SchemaB{}, condition: condition(:ignore)},
+              {%SchemaA{}, condition: condition(:expect_not_exist)}
+            ],
+            update: [
+              {changeset_schema_a, return_type: :pk},
+              {changeset_schema_b}
+            ]
+          ])
+
+      """
+      @spec batch_write(writes) ::
+              {:ok, Keyword.t()} | {:error, term()}
+            when writes: [
+                   {
+                     operation :: :put,
+                     items :: [
+                       schema_entity ::
+                         Ecto.Schema.t()
+                         | {schema_entity :: Ecto.Schema.t(), options :: Keyword.t()}
+                         | {module :: Ecto.Schema.t(), ids :: list(), attrs :: list(),
+                            options :: Keyword.t()}
+                     ]
+                   }
+                   | {
+                       operation :: :update,
+                       items :: [
+                         changeset ::
+                           Ecto.Changeset.t()
+                           | {changeset :: Ecto.Changeset.t(), options :: Keyword.t()}
+                       ]
+                     }
+                   | {
+                       operation :: :delete,
+                       items :: [
+                         schema_entity ::
+                           Ecto.Schema.t()
+                           | {schema_entity :: Ecto.Schema.t(), options :: Keyword.t()}
+                           | {module :: Ecto.Schema.t(), ids :: list(), options :: Keyword.t()}
+                       ]
+                     }
+                 ]
       def batch_write(writes) do
         Ecto.Adapters.Tablestore.batch_write(
           get_dynamic_repo(),
@@ -400,7 +449,10 @@ defmodule Ecto.Adapters.Tablestore do
 
     case result do
       {:ok, response} ->
-        batch_get_row_response_to_schemas(response.tables, schemas_mapping)
+        {
+          :ok,
+          batch_get_row_response_to_schemas(response.tables, schemas_mapping)
+        }
 
       _error ->
         result
@@ -440,7 +492,10 @@ defmodule Ecto.Adapters.Tablestore do
 
     case result do
       {:ok, response} ->
-        batch_write_row_response_to_schemas(response.tables, input_schema_entities, operations)
+        {
+          :ok,
+          batch_write_row_response_to_schemas(response.tables, input_schema_entities, operations)
+        }
 
       _error ->
         result
@@ -1087,21 +1142,28 @@ defmodule Ecto.Adapters.Tablestore do
         |> Map.get(source, [])
         |> Enum.zip(Enum.zip(table.rows, input_matched_schema_entities))
         |> Enum.reduce([], fn {operation, {write_row_response, input}}, acc ->
-          schema_entity_from_response = row_to_schema(write_row_response.row, schema)
+          return =
+            if write_row_response.is_ok == true do
+              schema_entity_from_response = row_to_schema(write_row_response.row, schema)
 
-          return_schema_entity =
-            if schema_entity_from_response != nil do
-              Map.merge(input, schema_entity_from_response, fn _k, v1, v2 ->
-                if v2 != nil, do: v2, else: v1
-              end)
+              return_schema_entity =
+                if schema_entity_from_response != nil do
+                  Map.merge(input, schema_entity_from_response, fn _k, v1, v2 ->
+                    if v2 != nil, do: v2, else: v1
+                  end)
+                else
+                  input
+                end
+
+              {:ok, return_schema_entity}
             else
-              input
+              {:error, write_row_response}
             end
 
           if Keyword.has_key?(acc, operation) do
-            Keyword.update!(acc, operation, &[return_schema_entity | &1])
+            Keyword.update!(acc, operation, &[return | &1])
           else
-            Keyword.put(acc, operation, [return_schema_entity])
+            Keyword.put(acc, operation, [return])
           end
         end)
 
