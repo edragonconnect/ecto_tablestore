@@ -40,7 +40,9 @@ defmodule EctoTablestoreTest do
              ) == true
     end
 
-    {status, saved_order} = TestRepo.insert(order, condition: condition(:ignore), return_type: :pk)
+    {status, saved_order} =
+      TestRepo.insert(order, condition: condition(:ignore), return_type: :pk)
+
     assert status == :ok
     saved_order_internal_id = saved_order.internal_id
 
@@ -161,7 +163,10 @@ defmodule EctoTablestoreTest do
     saved_orders =
       Enum.map(1..9, fn var ->
         order = %Order{id: "#{var}", desc: "desc#{var}", num: var, price: 20.5 * var}
-        {:ok, saved_order} = TestRepo.insert(order, condition: condition(:ignore), return_type: :pk)
+
+        {:ok, saved_order} =
+          TestRepo.insert(order, condition: condition(:ignore), return_type: :pk)
+
         saved_order
       end)
 
@@ -205,7 +210,9 @@ defmodule EctoTablestoreTest do
     {saved_orders, saved_users} =
       Enum.reduce(1..3, {[], []}, fn var, {cur_orders, cur_users} ->
         order = %Order{id: "#{var}", desc: "desc#{var}", num: var, price: 1.8 * var}
-        {:ok, saved_order} = TestRepo.insert(order, condition: condition(:ignore), return_type: :pk)
+
+        {:ok, saved_order} =
+          TestRepo.insert(order, condition: condition(:ignore), return_type: :pk)
 
         user = %User{id: var, name: "name#{var}", level: var}
 
@@ -347,7 +354,8 @@ defmodule EctoTablestoreTest do
     writes = [
       delete: [
         saved_order2,
-        {Order, [id: "order0", internal_id: saved_order0.internal_id], condition: condition(:ignore)},
+        {Order, [id: "order0", internal_id: saved_order0.internal_id],
+         condition: condition(:ignore)},
         {user2, return_type: :pk}
       ],
       update: [
@@ -365,13 +373,16 @@ defmodule EctoTablestoreTest do
 
     order_batch_write_result = Keyword.get(result, Order)
 
-    {:ok, batch_write_update_order} = Keyword.get(order_batch_write_result, :update) |> List.first()
+    {:ok, batch_write_update_order} =
+      Keyword.get(order_batch_write_result, :update) |> List.first()
+
     assert batch_write_update_order.num == order1_num + 1
     assert batch_write_update_order.id == order1.id
     assert batch_write_update_order.internal_id == saved_order1.internal_id
     assert batch_write_update_order.price == nil
 
-    [{:ok, batch_write_delete_order2}, {:ok, batch_write_delete_order0}] = Keyword.get(order_batch_write_result, :delete)
+    [{:ok, batch_write_delete_order2}, {:ok, batch_write_delete_order0}] =
+      Keyword.get(order_batch_write_result, :delete)
 
     assert batch_write_delete_order2.id == saved_order2.id
     assert batch_write_delete_order2.internal_id == saved_order2.internal_id
@@ -402,8 +413,7 @@ defmodule EctoTablestoreTest do
     assert batch_write_put_user.id == 102
     assert batch_write_put_user.name == "u3"
 
-    changeset_user3 =
-      Changeset.change(batch_write_put_user, level: {:increment, 2})
+    changeset_user3 = Changeset.change(batch_write_put_user, level: {:increment, 2})
 
     # failed case
     writes2 = [
@@ -414,13 +424,19 @@ defmodule EctoTablestoreTest do
         changeset_user3
       ]
     ]
+
     {:ok, result2} = TestRepo.batch_write(writes2)
 
     fail_batch_write_result = Keyword.get(result2, User)
 
-    {:error, batch_write_update_response} = Keyword.get(fail_batch_write_result, :update) |> List.first()
+    {:error, batch_write_update_response} =
+      Keyword.get(fail_batch_write_result, :update) |> List.first()
+
     assert batch_write_update_response.is_ok == false
-    {:error, batch_write_delete_response} = Keyword.get(fail_batch_write_result, :delete) |> List.first()
+
+    {:error, batch_write_delete_response} =
+      Keyword.get(fail_batch_write_result, :delete) |> List.first()
+
     assert batch_write_delete_response.is_ok == false
 
     {:ok, _} = TestRepo.delete(batch_write_put_user, condition: condition(:expect_exist))

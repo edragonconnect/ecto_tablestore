@@ -24,7 +24,7 @@ defmodule EctoTablestore.MixProject do
   defp deps do
     [
       {:ecto, "~> 3.1"},
-      #{:ex_aliyun_ots, path: "../ex_aliyun_ots"},
+      # {:ex_aliyun_ots, path: "../ex_aliyun_ots"},
       {:ex_aliyun_ots, github: "xinz/ex_aliyun_ots", branch: "0.4"},
       {:ex_doc, "~> 0.20", only: :dev, runtime: false}
     ]

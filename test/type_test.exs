@@ -17,5 +17,4 @@ defmodule EctoTablestore.TypeTest do
     assert dump(Integer, "a") == :error
     assert cast(Integer, "a") == :error
   end
-
 end

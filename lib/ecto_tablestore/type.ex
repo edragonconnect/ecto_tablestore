@@ -1,4 +1,5 @@
 defmodule EctoTablestore.Integer do
+  @moduledoc false
   @behaviour Ecto.Type
 
   def type, do: :integer

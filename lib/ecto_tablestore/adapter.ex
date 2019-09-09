@@ -1,4 +1,5 @@
 defmodule Ecto.Adapters.Tablestore do
+  @moduledoc false
   @behaviour Ecto.Adapter
   @behaviour Ecto.Adapter.Schema
 
@@ -29,18 +30,6 @@ defmodule Ecto.Adapters.Tablestore do
     quote do
       ## Query
 
-      @doc """
-      Similar to `get/3` but use schema entity which has been filled the whole primary key(s).
-
-      Notice:
-
-      If there are some attribute column(s) are provided in entity, these fields will be combined within multiple `:==` filtering expressions;
-      If there are some attribute column(s) are provided and meanwhile set `filter` option, they will be merged into a composite filter.
-
-      ## Options
-
-      Please refer `get/3`.
-      """
       @spec one(entity :: Ecto.Schema.t(), options :: Keyword.t()) ::
               Ecto.Schema.t() | {:error, term()} | nil
       def one(%{__meta__: meta} = entity, options \\ []) do
@@ -48,62 +37,14 @@ defmodule Ecto.Adapters.Tablestore do
         get(meta.schema, Ecto.primary_key(entity), options)
       end
 
-      @doc """
-      Fetch a single struct from tablestore where the whole primary key(s) match the given ids.
-
-      ## Options
-
-      * `columns_to_get`, string list, return the specified attribute columns, if not specify this field all attribute columns will be return.
-      * `start_column`, string, used as a starting column for Wide Column read, the return result contains this as starter.
-      * `end_column`, string, used as a ending column for Wide Column read, the return result DON NOT contain this column.
-      * `filter`, used as a filter by condition, support `">"`, `"<"`, `">="`, `"<="`, `"=="`, `"and"`, `"or"` and `"()"` expressions.
-
-          The `ignore_if_missing` can be used for the non-existed attribute column, for example:
-
-          An attribute column does not exist meanwhile set it as `true`, will ignore this match condition in the return result;
-
-          An existed attribute column DOES NOT suit for this usecase, the match condition will always affect the return result, if match condition does not satisfy, they won't be
-          return in result.
-
-          ```elixir
-          filter: filter(("name[ignore_if_missing: true]" == var_name and "age" > 1) or ("class" == "1"))
-          ```
-
-      * `transaction_id`, read under local transaction in a partition key.
-      """
       @spec get(schema :: Ecto.Schema.t(), ids :: list, options :: Keyword.t()) ::
               Ecto.Schema.t() | {:error, term()} | nil
       def get(schema, ids, options \\ []) do
         Ecto.Adapters.Tablestore.get(get_dynamic_repo(), schema, ids, options)
       end
 
-      @doc """
-      Get multiple structs by range from one table, rely on the conjunction of the partition key and other primary key(s). 
-
-      ## Options
-
-        * `direction`, set it as `:forward` to make the order of the query result in ascending by primary key(s), set it as `:backward` to make the order of the query result in descending by primary key(s).
-        * `columns_to_get`, string list, return the specified attribute columns, if not specify this field all attribute columns will be return.
-        * `start_column`, string, used as a starting column for Wide Column read, the return result contains this as starter.
-        * `end_column`, string, used as a ending column for Wide Column read, the return result DON NOT contain this column.
-        * `filter`, used as a filter by condition, support `">"`, `"<"`, `">="`, `"<="`, `"=="`, `"and"`, `"or"` and `"()"` expressions.
-        
-            The `ignore_if_missing` can be used for the non-existed attribute column, for example:
-
-            An attribute column does not exist meanwhile set it as `true`, will ignore this match condition in the return result;
-
-            An existed attribute column DOES NOT suit for this usecase, the match condition will always affect the return result, if match condition does not satisfy, they won't be
-            return in result.
-
-            ```elixir
-            filter: filter(("name[ignore_if_missing: true]" == var_name and "age" > 1) or ("class" == "1"))
-            ```
-
-        * `transaction_id`, read under local transaction in a partition key.
-
-      """
       @spec get_range(
-              schema :: Ecto.Queryable.t(),
+              schema :: Ecto.Schema.t(),
               start_primary_keys :: list | binary(),
               end_primary_keys :: list,
               options :: Keyword.t()
@@ -123,9 +64,6 @@ defmodule Ecto.Adapters.Tablestore do
         )
       end
 
-      @doc """
-      Batch get several rows of data from one or more tables, this batch request put multiple get_row in one request from client's perspective.
-      """
       @spec batch_get(gets) ::
               {:ok, Keyword.t()} | {:error, term()}
             when gets: [
@@ -148,30 +86,6 @@ defmodule Ecto.Adapters.Tablestore do
         )
       end
 
-      @doc """
-      Batch write several rows of data from one or more tables, this batch request put multiple put_row/delete_row/update_row in one request from client's perspective.
-      After execute each operation in servers, return results independently and independently consumes capacity units.
-
-      ## Input Example
-
-      The options are similar as `put_row`/`delete_row`/`update_row`, but expect `transaction_id` option.
-
-          batch_write([
-            delete: [
-              schema_entity_a,
-              schema_entity_b
-            ],
-            put: [
-              {%SchemaB{}, condition: condition(:ignore)},
-              {%SchemaA{}, condition: condition(:expect_not_exist)}
-            ],
-            update: [
-              {changeset_schema_a, return_type: :pk},
-              {changeset_schema_b}
-            ]
-          ])
-
-      """
       @spec batch_write(writes) ::
               {:ok, Keyword.t()} | {:error, term()}
             when writes: [
