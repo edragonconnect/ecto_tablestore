@@ -1,8 +1,8 @@
 defmodule TestHelper do
-  alias EctoTablestore.Repo
+  alias EctoTablestore.TestRepo
 
   def setup_all() do
-    Repo.start_link()
+    TestRepo.start_link()
     :ok
   end
 end

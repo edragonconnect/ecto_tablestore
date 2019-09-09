@@ -22,17 +22,15 @@ config :ex_aliyun_ots,
   
 # config for `ecto_tablestore`
 
-config :ecto_tablestore, EctoTablestore.Repo,
+config :ecto_tablestore, EctoTablestore.YourRepo,
   instance: YourInstance
 
 ```
 
-2, Create the `EctoTablestore.Repo` module mentioned earlier in the configuration, and set its adapter as `Ecto.Adapters.Tablestore`.
+2, Create the `EctoTablestore.YourRepo` module mentioned earlier in the configuration, and `use EctoTablestore.Repo` to finish the setup.
 
 ```elixir
-defmodule EctoTablestore.Repo do
-  use Ecto.Repo,
-    otp_app: :ecto_tablestore,
-    adapter: Ecto.Adapters.Tablestore
+defmodule EctoTablestore.YourRepo do
+  use EctoTablestore.Repo
 end
 ```
