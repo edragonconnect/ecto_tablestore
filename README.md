@@ -22,12 +22,12 @@ config :ex_aliyun_ots,
   
 # config for `ecto_tablestore`
 
-config :my_otp_app, EctoTablestore.YourRepo,
+config :my_otp_app, EctoTablestore.MyRepo,
   instance: MyInstance
 
 ```
 
-2, Create the `EctoTablestore.YourRepo` module mentioned earlier in the configuration, and use `EctoTablestore.Repo` with `:my_otp_app` to finish the setup.
+2, Create the `EctoTablestore.MyRepo` module mentioned earlier in the configuration, and use `EctoTablestore.Repo` with `:my_otp_app` option to finish the setup.
 
 ```elixir
 defmodule EctoTablestore.MyRepo do
