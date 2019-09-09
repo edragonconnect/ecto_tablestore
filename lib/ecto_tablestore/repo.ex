@@ -122,7 +122,20 @@ defmodule EctoTablestore.Repo do
             ) :: {list, nil} | {list, binary()} | {:error, term()}
 
   @doc """
-  Batch get several rows of data from one or more tables, this batch request put multiple get_row in one request from client's perspective.
+  Batch get several rows of data from one or more tables, this batch request put multiple `get_row` in one request from client's perspective.
+  After execute each operation in servers, return results independently and independently consumes capacity units.
+
+  ## Example
+
+      batch_get([
+        {SchemaA, [[ids: ids1], [ids: ids2]]},
+        [%SchemaB{keys: keys1}, %SchemaB{keys: keys2}]
+      ])
+
+      batch_get([
+        {[%SchemaB{keys: keys1}, %SchemaB{keys: keys2}], filter: filter("attr_field" == 1), columns_to_get: ["attr_field", "attr_field2"]}
+      ])
+
   """
   @callback batch_get(gets) ::
               {:ok, Keyword.t()} | {:error, term()}
