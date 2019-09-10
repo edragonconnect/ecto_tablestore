@@ -21,18 +21,6 @@ defmodule EctoTablestore.TypeTest do
     user = %User{id: 1, name: user_name, level: user_level}
     opts = Tablestore.generate_filter_options(user, [])
 
-    #[
-    #  filter: %ExAliyunOts.Var.Filter{
-    #    filter: %ExAliyunOts.Var.CompositeColumnValueFilter{
-    #      combinator: :LO_AND,
-    #      sub_filters: [
-    #        %ExAliyunOts.Var.Filter{filter: %ExAliyunOts.Var.SingleColumnValueFilter{column_name: "name", column_value: "testname", comparator: :CT_EQUAL, ignore_if_missing: false, latest_version_only: true}, filter_type: :FT_SINGLE_COLUMN_VALUE},
-    #        %ExAliyunOts.Var.Filter{filter: %ExAliyunOts.Var.SingleColumnValueFilter{column_name: "level", column_value: 10, comparator: :CT_EQUAL, ignore_if_missing: false, latest_version_only: true}, filter_type: :FT_SINGLE_COLUMN_VALUE}]
-    #    },
-    #    filter_type: :FT_COMPOSITE_COLUMN_VALUE
-    #  }
-    #]
-
     filter = Keyword.get(opts, :filter)
     assert filter.filter_type == FilterType.composite_column
     composite_filter = filter.filter
