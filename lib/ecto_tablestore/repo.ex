@@ -49,7 +49,7 @@ defmodule EctoTablestore.Repo do
   @callback __adapter__ :: Ecto.Adapters.Tablestore.t()
 
   @doc """
-  Similar to `c:get/3` but use schema entity which has been filled the whole primary key(s).
+  Similar to `c:get/3`, please ensure schema entity has been filled with the whole primary key(s).
 
   **NOTICE**:
 
@@ -214,7 +214,7 @@ defmodule EctoTablestore.Repo do
   """
   @callback insert(
               struct_or_changeset :: Ecto.Schema.t() | Ecto.Changeset.t(),
-              opts :: Keyword.t()
+              options :: Keyword.t()
             ) :: {:ok, Ecto.Schema.t()} | {:error, term()}
 
   @doc """
@@ -222,7 +222,7 @@ defmodule EctoTablestore.Repo do
   """
   @callback delete(
               struct_or_changeset :: Ecto.Schema.t() | Ecto.Changeset.t(),
-              opts :: Keyword.t()
+              options :: Keyword.t()
             ) :: {:ok, Ecto.Schema.t()} | {:error, term()}
 
   @doc """
@@ -230,13 +230,13 @@ defmodule EctoTablestore.Repo do
   """
   @callback update(
               changeset :: Ecto.Changeset.t(),
-              opts :: Keyword.t()
+              options :: Keyword.t()
             ) :: {:ok, Ecto.Schema.t()} | {:error, term()}
 
   @doc """
   Please see `c:Ecto.Repo.start_link/2` for details.
   """
-  @callback start_link(opts :: Keyword.t()) ::
+  @callback start_link(options :: Keyword.t()) ::
             {:ok, pid}
             | {:error, {:already_started, pid}}
             | {:error, term}

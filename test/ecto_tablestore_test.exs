@@ -281,13 +281,12 @@ defmodule EctoTablestoreTest do
     assert query3_user.id == 2
     assert query3_user.name == "name2"
 
-    # After update User(id: 1)'s name as `new_name1`, in the next batch get, attribute columns will be used in filter.
-    # 
-    # The following case will only return User(id: 2) in batch get.
-    #
     changeset = Ecto.Changeset.change(%User{id: 1}, name: "new_name1")
     TestRepo.update(changeset, condition: condition(:expect_exist))
 
+    # After update User(id: 1)'s name as `new_name1`, in the next batch get, attribute columns will be used in filter.
+    #
+    # The following case will only return User(id: 2) in batch get.
     requests3_1 = [
       [%User{id: 1, name: "name1"}, %User{id: 2, name: "name2"}]
     ]
