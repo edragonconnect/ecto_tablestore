@@ -33,7 +33,7 @@ defmodule Ecto.Adapters.Tablestore do
       @spec one(entity :: Ecto.Schema.t(), options :: Keyword.t()) ::
               Ecto.Schema.t() | {:error, term()} | nil
       def one(%{__meta__: meta} = entity, options \\ []) do
-        options = Ecto.Adapters.Tablestore.generate_filter_options(entity, :and, options)
+        options = Ecto.Adapters.Tablestore.generate_filter_options(entity, options)
         get(meta.schema, Ecto.primary_key(entity), options)
       end
 
@@ -418,7 +418,7 @@ defmodule Ecto.Adapters.Tablestore do
   def generate_condition_options(%{__meta__: _meta} = entity, options) do
     condition =
       entity
-      |> generate_filter_options(:and, [])
+      |> generate_filter_options([])
       |> do_generate_condition(Keyword.get(options, :condition))
 
     Keyword.put(options, :condition, condition)
@@ -449,13 +449,13 @@ defmodule Ecto.Adapters.Tablestore do
     }
   end
 
-  def generate_filter_options(%{__meta__: _meta} = entity, :and, options) do
+  def generate_filter_options(%{__meta__: _meta} = entity, options) do
     attr_columns = entity_attr_columns(entity)
 
     options =
       attr_columns
       |> generate_filter_ast([])
-      |> do_generate_filter_options(:and, options)
+      |> do_generate_filter_options(options)
 
     columns_to_get_opt = Keyword.get(options, :columns_to_get, [])
 
@@ -486,11 +486,11 @@ defmodule Ecto.Adapters.Tablestore do
     end
   end
 
-  defp do_generate_filter_options(nil, :and, options) do
+  defp do_generate_filter_options(nil, options) do
     options
   end
 
-  defp do_generate_filter_options(ast, :and, options) do
+  defp do_generate_filter_options(ast, options) do
     merged =
       ast
       |> ExAliyunOts.Mixin.expressions_to_filter(binding())
@@ -764,7 +764,7 @@ defmodule Ecto.Adapters.Tablestore do
     {conflict_schemas, filters, columns_to_get} =
       Enum.reduce(schema_entities, {[], [], []}, fn schema_entity,
                                                     {conflict_schemas, filters, columns_to_get} ->
-        opts = generate_filter_options(schema_entity, :and, options)
+        opts = generate_filter_options(schema_entity, options)
 
         prepared_columns_to_get =
           (Keyword.get(opts, :columns_to_get, []) ++ columns_to_get)
