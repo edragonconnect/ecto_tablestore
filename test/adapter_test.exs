@@ -1,4 +1,4 @@
-defmodule EctoTablestore.TypeTest do
+defmodule EctoTablestore.AdapterTest do
   use ExUnit.Case
 
   alias EctoTablestore.TestSchema.User
