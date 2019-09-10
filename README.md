@@ -34,11 +34,28 @@ config :my_otp_app, EctoTablestore.MyRepo,
 
 ```
 
-2, Create the `EctoTablestore.MyRepo` module mentioned earlier in the configuration, and use `EctoTablestore.Repo` with `:my_otp_app` option to finish the setup.
+2, Create the `EctoTablestore.MyRepo` module mentioned earlier in the configuration, use `EctoTablestore.Repo` and set required `otp_app` option with your OTP application's name.
 
 ```elixir
 defmodule EctoTablestore.MyRepo do
   use EctoTablestore.Repo,
     otp_app: :my_otp_app
+end
+```
+
+3, Each repository in Ecto defines a `start_link/0` function that needs to be invoked before using the repository. In general, this function is not called directly, but used as
+part of your application supervision tree.
+
+Add `EctoTablestore.MyRepo` into your application start callback that defines and start your supervisor. You just need to edit `start/2` function to start the repo as a
+supervisor on your application's supervisor:
+
+```elixir
+def start(_type, _args) do
+  children = [
+    {EctoTablestore.MyRep, []}
+  ]
+
+  opts = [strategy: :one_for_one, name: MyApp.Supervisor]
+  Supervisor.start_link(children, opts)
 end
 ```
