@@ -424,31 +424,6 @@ defmodule Ecto.Adapters.Tablestore do
     Keyword.put(options, :condition, condition)
   end
 
-  defp do_generate_condition([filter: filter_from_entity], nil) do
-    %ExAliyunOts.Var.Condition{
-      column_condition: filter_from_entity,
-      row_existence: RowExistence.expect_exist()
-    }
-  end
-
-  defp do_generate_condition([filter: filter_from_entity], %ExAliyunOts.Var.Condition{
-         column_condition: nil
-       }) do
-    %ExAliyunOts.Var.Condition{
-      column_condition: filter_from_entity,
-      row_existence: RowExistence.expect_exist()
-    }
-  end
-
-  defp do_generate_condition([filter: filter_from_entity], %ExAliyunOts.Var.Condition{
-         column_condition: column_condition
-       }) do
-    %ExAliyunOts.Var.Condition{
-      column_condition: do_generate_filter(filter_from_entity, :and, column_condition),
-      row_existence: RowExistence.expect_exist()
-    }
-  end
-
   def generate_filter_options(%{__meta__: _meta} = entity, options) do
     attr_columns = entity_attr_columns(entity)
 
@@ -484,6 +459,39 @@ defmodule Ecto.Adapters.Tablestore do
 
       Keyword.put(options, :columns_to_get, updated_columns_to_get)
     end
+  end
+
+  defp do_generate_condition([], nil) do
+    nil
+  end
+
+  defp do_generate_condition([], %ExAliyunOts.Var.Condition{} = condition_opt) do
+    condition_opt
+  end
+
+  defp do_generate_condition([filter: filter_from_entity], nil) do
+    %ExAliyunOts.Var.Condition{
+      column_condition: filter_from_entity,
+      row_existence: RowExistence.expect_exist()
+    }
+  end
+
+  defp do_generate_condition([filter: filter_from_entity], %ExAliyunOts.Var.Condition{
+         column_condition: nil
+       }) do
+    %ExAliyunOts.Var.Condition{
+      column_condition: filter_from_entity,
+      row_existence: RowExistence.expect_exist()
+    }
+  end
+
+  defp do_generate_condition([filter: filter_from_entity], %ExAliyunOts.Var.Condition{
+         column_condition: column_condition
+       }) do
+    %ExAliyunOts.Var.Condition{
+      column_condition: do_generate_filter(filter_from_entity, :and, column_condition),
+      row_existence: RowExistence.expect_exist()
+    }
   end
 
   defp do_generate_filter_options(nil, options) do
@@ -965,10 +973,7 @@ defmodule Ecto.Adapters.Tablestore do
 
     schema = meta.schema
     fields = ids ++ Map.to_list(changes)
-    IO.puts("schema: #{inspect(schema)}, fields: #{inspect(fields)}")
     schema_entity = struct(schema, fields)
-
-    IO.puts(">>> update changes, schema_entity: #{inspect(schema_entity)}")
 
     {source, format_key_to_str(ids), merge_options(options, update_attrs), schema_entity}
   end
