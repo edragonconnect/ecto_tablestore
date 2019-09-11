@@ -35,6 +35,8 @@ defmodule EctoTablestore.Repo do
   ```
   """
 
+  @type search_result :: %{is_all_succeeded: boolean(), next_token: binary() | nil, schemas: list(), total_hits: integer()}
+
   defmacro __using__(opts) do
     quote bind_quoted: [opts: opts] do
       use Ecto.Repo,
@@ -47,6 +49,31 @@ defmodule EctoTablestore.Repo do
   Returns the adapter tied to the repository.
   """
   @callback __adapter__ :: Ecto.Adapters.Tablestore.t()
+
+  @doc """
+  Provide search index features for the following scenarios:
+
+  * MatchAllQuery
+  * MatchQuery
+  * MatchPhraseQuery
+  * TermQuery
+  * TermsQuery
+  * PrefixQuery
+  * RangeQuery
+  * WildcardQuery
+  * BoolQuery
+  * NestedQuery
+  * ExistsQuery
+
+  Currenlt, not Implemented search index features which are depended by [`ex_aliyun_ots`](https://hex.pm/packages/ex_aliyun_ots)
+
+  * GeoBoundingBoxQuery
+  * GeoDistanceQuery
+  * GeoPolygonQuery
+  """
+  @callback search(schema :: Ecto.Schema.t(), index_name :: String.t(), options :: Keyword.t()) ::
+              {:ok, search_result} | {:error, term()}
+
 
   @doc """
   Similar to `c:get/3`, please ensure schema entity has been filled with the whole primary key(s).

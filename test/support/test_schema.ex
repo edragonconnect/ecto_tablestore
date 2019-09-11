@@ -23,3 +23,19 @@ defmodule EctoTablestore.TestSchema.User do
     field(:level, :integer)
   end
 end
+
+defmodule EctoTablestore.TestSchema.Student do
+  use EctoTablestore.Schema
+
+  tablestore_schema "ecto_ots_test_student" do
+    field(:partition_key, :binary_id, primary_key: true)
+    field(:class, :string)
+    field(:name, :string)
+    field(:age, :integer)
+    field(:score, :float)
+    field(:is_actived, :boolean)
+    field(:comment, :string)
+    field(:content, :string)
+  end
+
+end

@@ -3,7 +3,9 @@ defmodule Ecto.Adapters.Tablestore do
   @behaviour Ecto.Adapter
   @behaviour Ecto.Adapter.Schema
 
-  alias ExAliyunOts.Mixin, as: Tablestore
+  alias __MODULE__
+
+  alias ExAliyunOts.Mixin, as: TablestoreMixin
 
   alias ExAliyunOts.Const.{
     PKType,
@@ -30,17 +32,23 @@ defmodule Ecto.Adapters.Tablestore do
     quote do
       ## Query
 
+      @spec search(schema :: Ecto.Schema.t(), index_name :: String.t(), options :: Keyword.t()) ::
+              {:ok, EctoTablestore.Repo.search_result} | {:error, term()}
+      def search(schema, index_name, options) do
+        Tablestore.search(get_dynamic_repo(), schema, index_name, options)
+      end
+
       @spec one(entity :: Ecto.Schema.t(), options :: Keyword.t()) ::
               Ecto.Schema.t() | {:error, term()} | nil
       def one(%{__meta__: meta} = entity, options \\ []) do
-        options = Ecto.Adapters.Tablestore.generate_filter_options(entity, options)
+        options = Tablestore.generate_filter_options(entity, options)
         get(meta.schema, Ecto.primary_key(entity), options)
       end
 
       @spec get(schema :: Ecto.Schema.t(), ids :: list, options :: Keyword.t()) ::
               Ecto.Schema.t() | {:error, term()} | nil
       def get(schema, ids, options \\ []) do
-        Ecto.Adapters.Tablestore.get(get_dynamic_repo(), schema, ids, options)
+        Tablestore.get(get_dynamic_repo(), schema, ids, options)
       end
 
       @spec get_range(
@@ -55,7 +63,7 @@ defmodule Ecto.Adapters.Tablestore do
             end_primary_keys,
             options \\ [direction: :forward]
           ) do
-        Ecto.Adapters.Tablestore.get_range(
+        Tablestore.get_range(
           get_dynamic_repo(),
           schema,
           start_primary_keys,
@@ -80,7 +88,7 @@ defmodule Ecto.Adapters.Tablestore do
                    | {[schema_entity :: Ecto.Schema.t()], options :: Keyword.t()}
                  ]
       def batch_get(gets) do
-        Ecto.Adapters.Tablestore.batch_get(
+        Tablestore.batch_get(
           get_dynamic_repo(),
           gets
         )
@@ -118,7 +126,7 @@ defmodule Ecto.Adapters.Tablestore do
                      }
                  ]
       def batch_write(writes) do
-        Ecto.Adapters.Tablestore.batch_write(
+        Tablestore.batch_write(
           get_dynamic_repo(),
           writes
         )
@@ -177,7 +185,7 @@ defmodule Ecto.Adapters.Tablestore do
     {pks, attrs, autogenerate_id_name} = pks_and_attrs_to_put_row(schema, fields)
 
     result =
-      Tablestore.execute_put_row(
+      TablestoreMixin.execute_put_row(
         repo.instance,
         schema_meta.source,
         pks,
@@ -217,7 +225,7 @@ defmodule Ecto.Adapters.Tablestore do
     )
 
     result =
-      Tablestore.execute_delete_row(
+      TablestoreMixin.execute_delete_row(
         repo.instance,
         schema_meta.source,
         format_key_to_str(filters),
@@ -254,7 +262,7 @@ defmodule Ecto.Adapters.Tablestore do
     )
 
     result =
-      Tablestore.execute_update_row(
+      TablestoreMixin.execute_update_row(
         repo.instance,
         schema_meta.source,
         format_key_to_str(filters),
@@ -290,11 +298,41 @@ defmodule Ecto.Adapters.Tablestore do
   end
 
   @doc false
+  def search(repo, schema, index_name, options) do
+    {_adapter, meta} = Ecto.Repo.Registry.lookup(repo)
+
+    result =
+      TablestoreMixin.execute_search(
+        meta.instance,
+        schema.__schema__(:source),
+        index_name,
+        options
+      )
+
+    case result do
+      {:ok, response} ->
+        {
+          :ok,
+          %{
+            is_all_succeeded: response.is_all_succeeded,
+            next_token: response.next_token,
+            total_hits: response.total_hits,
+            schemas: Enum.map(response.rows, fn(row) ->
+              row_to_schema(row, schema)
+            end)
+          }
+        }
+      _error ->
+        result
+    end
+  end
+
+  @doc false
   def get(repo, schema, ids, options) do
     {_adapter, meta} = Ecto.Repo.Registry.lookup(repo)
 
     result =
-      Tablestore.execute_get_row(
+      TablestoreMixin.execute_get_row(
         meta.instance,
         schema.__schema__(:source),
         format_key_to_str(ids),
@@ -327,7 +365,7 @@ defmodule Ecto.Adapters.Tablestore do
       end
 
     result =
-      Tablestore.execute_get_range(
+      TablestoreMixin.execute_get_range(
         meta.instance,
         schema.__schema__(:source),
         prepared_start_primary_keys,
@@ -351,6 +389,7 @@ defmodule Ecto.Adapters.Tablestore do
     end
   end
 
+  @doc false
   def batch_get(repo, gets) do
     {_adapter, meta} = Ecto.Repo.Registry.lookup(repo)
 
@@ -358,7 +397,7 @@ defmodule Ecto.Adapters.Tablestore do
 
     prepared_requests = Enum.reverse(requests)
 
-    result = Tablestore.execute_batch_get(meta.instance, prepared_requests)
+    result = TablestoreMixin.execute_batch_get(meta.instance, prepared_requests)
 
     case result do
       {:ok, response} ->
@@ -372,6 +411,7 @@ defmodule Ecto.Adapters.Tablestore do
     end
   end
 
+  @doc false
   def batch_write(repo, writes) do
     {_adapter, meta} = Ecto.Repo.Registry.lookup(repo)
 
@@ -401,7 +441,7 @@ defmodule Ecto.Adapters.Tablestore do
 
     input_schema_entities = reduce_merge_map(schema_entities_map)
 
-    result = Tablestore.execute_batch_write(meta.instance, prepared_requests, [])
+    result = TablestoreMixin.execute_batch_write(meta.instance, prepared_requests, [])
 
     case result do
       {:ok, response} ->
@@ -415,6 +455,7 @@ defmodule Ecto.Adapters.Tablestore do
     end
   end
 
+  @doc false
   def generate_condition_options(%{__meta__: _meta} = entity, options) do
     condition =
       entity
@@ -424,6 +465,7 @@ defmodule Ecto.Adapters.Tablestore do
     Keyword.put(options, :condition, condition)
   end
 
+  @doc false
   def generate_filter_options(%{__meta__: _meta} = entity, options) do
     attr_columns = entity_attr_columns(entity)
 
@@ -817,7 +859,7 @@ defmodule Ecto.Adapters.Tablestore do
     source = schema.__schema__(:source)
 
     request =
-      Tablestore.execute_get(
+      TablestoreMixin.execute_get(
         source,
         ids_groups,
         options
@@ -831,7 +873,7 @@ defmodule Ecto.Adapters.Tablestore do
     source = schema.__schema__(:source)
 
     request =
-      Tablestore.execute_get(
+      TablestoreMixin.execute_get(
         source,
         format_ids_groups(ids_groups),
         options
@@ -851,7 +893,7 @@ defmodule Ecto.Adapters.Tablestore do
   defp map_batch_writes({:delete, deletes}) do
     Enum.reduce(deletes, {%{}, %{}}, fn delete, {delete_acc, schema_entities_acc} ->
       {source, ids, options, schema_entity} = do_map_batch_writes(:delete, delete)
-      write_delete_request = Tablestore.execute_write_delete(ids, options)
+      write_delete_request = TablestoreMixin.execute_write_delete(ids, options)
 
       if Map.has_key?(delete_acc, source) do
         {
@@ -870,7 +912,7 @@ defmodule Ecto.Adapters.Tablestore do
   defp map_batch_writes({:put, puts}) do
     Enum.reduce(puts, {%{}, %{}}, fn put, {puts_acc, schema_entities_acc} ->
       {source, ids, attrs, options, schema_entity} = do_map_batch_writes(:put, put)
-      write_put_request = Tablestore.execute_write_put(ids, attrs, options)
+      write_put_request = TablestoreMixin.execute_write_put(ids, attrs, options)
 
       if Map.has_key?(puts_acc, source) do
         {
@@ -889,7 +931,7 @@ defmodule Ecto.Adapters.Tablestore do
   defp map_batch_writes({:update, updates}) do
     Enum.reduce(updates, {%{}, %{}}, fn update, {update_acc, schema_entities_acc} ->
       {source, ids, options, schema_entity} = do_map_batch_writes(:update, update)
-      write_update_request = Tablestore.execute_write_update(ids, options)
+      write_update_request = TablestoreMixin.execute_write_update(ids, options)
 
       if Map.has_key?(update_acc, source) do
         {
