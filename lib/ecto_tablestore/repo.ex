@@ -65,7 +65,7 @@ defmodule EctoTablestore.Repo do
   * NestedQuery
   * ExistsQuery
 
-  Currenlt, not Implemented search index features which are depended by [`ex_aliyun_ots`](https://hex.pm/packages/ex_aliyun_ots)
+  Currently, not supported search index features which are depended by [`ex_aliyun_ots`](https://hex.pm/packages/ex_aliyun_ots)
 
   * GeoBoundingBoxQuery
   * GeoDistanceQuery
