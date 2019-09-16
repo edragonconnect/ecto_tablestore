@@ -8,7 +8,11 @@ defmodule EctoTablestore.MixProject do
       elixir: "~> 1.7",
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
-      deps: deps()
+      description: description(),
+      package: package(),
+      deps: deps(),
+      docs: docs(),
+      source_url: "https://github.com/edragonconnect/ecto_tablestore"
     ]
   end
 
@@ -24,10 +28,30 @@ defmodule EctoTablestore.MixProject do
   defp deps do
     [
       {:ecto, "~> 3.1"},
-      # {:ex_aliyun_ots, path: "../ex_aliyun_ots"},
-      {:ex_aliyun_ots, github: "xinz/ex_aliyun_ots", branch: "0.4"},
-      {:ex_doc, "~> 0.20", only: :dev, runtime: false}
+      {:ex_aliyun_ots, "~> 0.4"},
+      {:ex_doc, "~> 0.21", only: :dev, runtime: false}
     ]
+  end
+
+  defp description do
+    "Alibaba Tablestore adapter for Ecto"
+  end
+
+  defp package do
+    [
+      files: ["lib", "mix.exs", "README.md", "LICENSE.md"],
+      maintainers: ["Xin Zou"],
+      licenses: ["MIT"],
+      links: %{"GitHub" => "https://github.com/edragonconnect/ecto_tablestore"}
+    ]
+  end
+
+  defp docs do
+    [main: "readme",
+     formatter_opts: [gfm: true],
+     extras: [
+       "README.md"
+     ]]
   end
 
   defp elixirc_paths(:test), do: ["lib", "test/support"]
