@@ -1,17 +1,32 @@
-# EctoTablestore
+# Alibaba Tablestore adapter for Ecto
 
-**TODO: Add description**
+Ecto 3.x adapter for Alibaba Tablestore, this is based on [`ex_aliyun_ots`](https://hex.pm/packages/ex_aliyun_ots) build to implement `Ecto.Adapter` and `Ecto.Adapter.Schema` behaviours.
 
-## Introduce
+Supported features:
 
-Alibaba Tablestore product official references:
+* Compatible `Ecto.Repo` API.
+* Automatically converts the returned original row results into corresponding schema(s).
+* Automatically generate the provided attribute-column field(s) of schema entity into the `filter` expression option of `GetRow` (see `EctoTablestore.Repo.one/2`) and `BatchGet` (see `EctoTablestore.Repo.batch_get/1`).
+* Automatically generate the provided attribute-column field(s) of schema entity into the `condition` expression option of `BatchWrite`.
+* Automatically map changeset's attribute-column field(s) into `UpdateRow` operation when call `EctoTablestore.Repo.update/2`:
+  * Use atomic increment via `{:increment, integer()}` in changeset, and return the increased value in the corrsponding field(s) by default;
+  * Set any attribute(s) of schema changeset as `nil` will `:delete_all` that attribute-column field(s);
+  * Set existed attribute(s) in schema changeset will `:put` to save.
 
-* [English document](https://www.alibabacloud.com/help/doc-detail/27280.htm)
-* [中文文档](https://help.aliyun.com/document_detail/27280.html)
+Implement Tablestore row related functions in `EctoTablestore.Repo` module, please see document for details:
 
-## Config
+* PutRow
+* GetRow
+* UpdateRow
+* DeleteRow
+* GetRange
+* BatchGetRow
+* BatchWriteRow
+* Search
 
-1, Configure `MY` instance(s) information of Alibaba Tablestore product.
+## Usage
+
+1, Configure `My` instance(s) information of Alibaba Tablestore product.
 
 ```elixir
 use Mix.Config
@@ -59,3 +74,10 @@ def start(_type, _args) do
   Supervisor.start_link(children, opts)
 end
 ```
+
+## References
+
+Alibaba Tablestore product official references:
+
+* [English document](https://www.alibabacloud.com/help/doc-detail/27280.htm)
+* [中文文档](https://help.aliyun.com/document_detail/27280.html)
