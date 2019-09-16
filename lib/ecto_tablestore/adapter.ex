@@ -171,15 +171,7 @@ defmodule Ecto.Adapters.Tablestore do
   def autogenerate(:binary_id), do: nil
 
   @impl true
-  def insert(repo, schema_meta, fields, on_conflict, returning, options) do
-    IO.puts(
-      "insert - repo: #{inspect(repo)}, schema_meta: #{inspect(schema_meta)}, fields: #{
-        inspect(fields)
-      }, on_conflict: #{inspect(on_conflict)}, returning: #{inspect(returning)}, options: #{
-        inspect(options)
-      }"
-    )
-
+  def insert(repo, schema_meta, fields, _on_conflict, _returning, options) do
     schema = schema_meta.schema
 
     {pks, attrs, autogenerate_id_name} = pks_and_attrs_to_put_row(schema, fields)
@@ -192,8 +184,6 @@ defmodule Ecto.Adapters.Tablestore do
         attrs,
         options
       )
-
-    IO.puts(">>> result:#{inspect(result)}")
 
     case result do
       {:ok, response} ->
@@ -218,11 +208,6 @@ defmodule Ecto.Adapters.Tablestore do
 
   @impl true
   def delete(repo, schema_meta, filters, options) do
-    IO.puts(
-      "delete - repo: #{inspect(repo)}, meta: #{inspect(schema_meta)}, filters: #{
-        inspect(filters)
-      }, opts: #{inspect(options)}"
-    )
 
     result =
       TablestoreMixin.execute_delete_row(
@@ -231,8 +216,6 @@ defmodule Ecto.Adapters.Tablestore do
         format_key_to_str(filters),
         options
       )
-
-    IO.puts(">>> delete_row result: #{inspect(result)}")
 
     case result do
       {:ok, _response} ->
@@ -252,14 +235,7 @@ defmodule Ecto.Adapters.Tablestore do
   end
 
   @impl true
-  def update(repo, schema_meta, fields, filters, returning, options) do
-    IO.puts(
-      "update - repo: #{inspect(repo)}, schema_meta: #{inspect(schema_meta)}, fields: #{
-        inspect(fields)
-      }, filters: #{inspect(filters)}, returning: #{inspect(returning)}, options: #{
-        inspect(options)
-      }"
-    )
+  def update(repo, schema_meta, fields, filters, _returning, options) do
 
     result =
       TablestoreMixin.execute_update_row(
@@ -268,8 +244,6 @@ defmodule Ecto.Adapters.Tablestore do
         format_key_to_str(filters),
         Keyword.merge(options, map_attrs_to_update(fields))
       )
-
-    IO.puts(">>> update_row result: #{inspect(result)}")
 
     case result do
       {:ok, response} ->
@@ -293,7 +267,7 @@ defmodule Ecto.Adapters.Tablestore do
         inspect(header)
       }, list: #{inspect(list)}, on_conflict: #{inspect(on_conflict)}, returning: #{
         inspect(returning)
-      }, options: #{inspect(options)}"
+      }, options: #{inspect(options)}\nplease use `batch_write` instead this function"
     )
   end
 
@@ -372,8 +346,6 @@ defmodule Ecto.Adapters.Tablestore do
         format_key_to_str(end_primary_keys),
         options
       )
-
-    IO.puts("get_range result: #{inspect(result)}")
 
     case result do
       {:ok, response} ->
@@ -1000,11 +972,6 @@ defmodule Ecto.Adapters.Tablestore do
          :update,
          {%Ecto.Changeset{valid?: true, data: %{__meta__: meta}} = changeset, options}
        ) do
-    IO.puts(
-      ">>> changes: #{inspect(changeset.changes)}, meta: #{inspect(meta)}, schema: #{
-        inspect(meta.schema)
-      }<<<"
-    )
 
     source = meta.schema.__schema__(:source)
     entity = changeset.data

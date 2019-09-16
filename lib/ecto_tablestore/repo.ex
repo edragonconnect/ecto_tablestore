@@ -1,5 +1,5 @@
 defmodule EctoTablestore.Repo do
-  @moduledoc """
+  @moduledoc ~S"""
   Defines a repository for Tablestore.
 
   A repository maps to an underlying data store, controlled by `Ecto.Adapters.Tablestore` adapter.
