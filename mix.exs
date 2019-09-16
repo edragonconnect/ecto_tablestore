@@ -27,7 +27,7 @@ defmodule EctoTablestore.MixProject do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
-      {:ecto, "~> 3.1"},
+      {:ecto, "~> 3.2"},
       {:ex_aliyun_ots, "~> 0.4"},
       {:ex_doc, "~> 0.21", only: :dev, runtime: false}
     ]
