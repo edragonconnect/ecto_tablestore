@@ -159,6 +159,29 @@ defmodule EctoTablestoreTest do
     )
   end
 
+  test "repo - update with timestamps" do
+    user = %User{id: 1, name: "username", level: 10}
+    {:ok, saved_user} = TestRepo.insert(user, condition: condition(:ignore))
+    assert saved_user.updated_at == saved_user.inserted_at
+    assert is_integer(saved_user.updated_at)
+
+    user = TestRepo.get(User, id: 1)
+
+    new_name = "username2"
+
+    changeset = Ecto.Changeset.change(user, name: new_name, level: {:increment, 1})
+ 
+    Process.sleep(1000)
+
+    {:ok, updated_user} = TestRepo.update(changeset, condition: condition(:expect_exist))
+
+    assert updated_user.level == 11
+    assert updated_user.name == new_name
+    assert updated_user.updated_at > updated_user.inserted_at
+
+    TestRepo.delete(user, condition: condition(:expect_exist))
+  end
+
   test "repo - get_range" do
     saved_orders =
       Enum.map(1..9, fn var ->
@@ -443,4 +466,30 @@ defmodule EctoTablestoreTest do
     {:ok, _} = TestRepo.delete(batch_write_put_order, condition: condition(:ignore))
     {:ok, _} = TestRepo.delete(batch_write_update_order, condition: condition(:ignore))
   end
+
+  test "repo - batch_update with timestamps" do
+    for index <- 1..3 do
+      u = %User{id: index, name: "u#{index}", level: index}
+      inserted_user = TestRepo.insert(u, condition: condition(:expect_not_exist))
+    end
+
+    Process.sleep(1000)
+
+    changeset1 = Changeset.change(%User{id: 1}, name: "new_u1")
+    changeset2 = Changeset.change(%User{id: 2}, level: {:increment, 1})
+
+    writes = [
+      update: [
+        {changeset1, condition: condition(:expect_exist)},
+        {changeset2, condition: condition(:expect_exist)}
+      ],
+      put: [
+        {%User{id: 10, name: "new10", level: 10}, condition: condition(:expect_not_exist)},
+        {%User{id: 11, name: "new11", level: 11}, condition: condition(:expect_not_exist)}
+      ]
+    ]
+    result = TestRepo.batch_write(writes)
+    IO.puts "result: #{inspect result}"
+  end
+  
 end

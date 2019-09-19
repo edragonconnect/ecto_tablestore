@@ -19,6 +19,8 @@ defmodule EctoTablestore.TestSchema.User do
     field(:id, :id, primary_key: true)
     field(:name, :string)
     field(:level, :integer)
+
+    timestamps()
   end
 end
 

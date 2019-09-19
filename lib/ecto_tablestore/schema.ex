@@ -15,6 +15,11 @@ defmodule EctoTablestore.Schema do
 
   Since Tablestore is a NoSQL database service, `embedded_schema/1` is not supported so far.
 
+  ## About timestamps
+  
+  Since Tablestore's column does not support `DateTime` type, use UTC timestamp (:integer type)
+  as `timestamps()` macro for the generated `inserted_at` and `updated_at` fields by default.
+
   ## About primary_key
 
   * primary_key supports `:id` (integer()) and `:binary_id` (binary())
@@ -48,7 +53,13 @@ defmodule EctoTablestore.Schema do
       import EctoTablestore.Schema, only: [tablestore_schema: 2]
 
       @primary_key false
+
+      @timestamps_opts [type: :integer, autogenerate: {EctoTablestore.Schema, :__timestamps__, []}]
     end
+  end
+
+  def __timestamps__() do
+    DateTime.utc_now() |> DateTime.to_unix()
   end
 
   defmacro tablestore_schema(source, do: block) do

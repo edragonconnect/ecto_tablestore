@@ -172,6 +172,7 @@ defmodule Ecto.Adapters.Tablestore do
 
   @impl true
   def insert(repo, schema_meta, fields, _on_conflict, _returning, options) do
+
     schema = schema_meta.schema
 
     {pks, attrs, autogenerate_id_name} = pks_and_attrs_to_put_row(schema, fields)
@@ -237,12 +238,14 @@ defmodule Ecto.Adapters.Tablestore do
   @impl true
   def update(repo, schema_meta, fields, filters, _returning, options) do
 
+    schema = schema_meta.schema
+
     result =
       TablestoreMixin.execute_update_row(
         repo.instance,
         schema_meta.source,
         format_key_to_str(filters),
-        Keyword.merge(options, map_attrs_to_update(fields))
+        Keyword.merge(options, map_attrs_to_update(schema, fields))
       )
 
     case result do
@@ -568,19 +571,17 @@ defmodule Ecto.Adapters.Tablestore do
   defp pks_and_attrs_to_put_row(schema, fields) do
     primary_keys = schema.__schema__(:primary_key)
     autogenerate_id = schema.__schema__(:autogenerate_id)
-    map_pks_and_attrs_to_put_row(primary_keys, autogenerate_id, fields, [])
+    map_pks_and_attrs_to_put_row(primary_keys, autogenerate_id, fields, [], schema)
   end
 
   defp map_pks_and_attrs_to_put_row(
          [],
          nil,
          attr_columns,
-         prepared_pks
+         prepared_pks,
+         schema
        ) do
-    attrs =
-      for {attr_key, attr_value} <- attr_columns do
-        {Atom.to_string(attr_key), attr_value}
-      end
+    attrs = map_attrs_to_row(schema, attr_columns)
 
     {
       Enum.reverse(prepared_pks),
@@ -593,12 +594,10 @@ defmodule Ecto.Adapters.Tablestore do
          [],
          {_, autogenerate_id_name, :id},
          attr_columns,
-         prepared_pks
+         prepared_pks,
+         schema
        ) do
-    attrs =
-      for {attr_key, attr_value} <- attr_columns do
-        {Atom.to_string(attr_key), attr_value}
-      end
+    attrs = map_attrs_to_row(schema, attr_columns)
 
     {
       Enum.reverse(prepared_pks),
@@ -611,7 +610,8 @@ defmodule Ecto.Adapters.Tablestore do
          [primary_key | rest_primary_keys],
          nil,
          fields,
-         prepared_pks
+         prepared_pks,
+         schema
        ) do
     {value, updated_fields} = Keyword.pop(fields, primary_key)
 
@@ -619,25 +619,27 @@ defmodule Ecto.Adapters.Tablestore do
       do: raise("Invalid usecase - primary key: `#{primary_key}` can not be nil.")
 
     update = [{Atom.to_string(primary_key), value} | prepared_pks]
-    map_pks_and_attrs_to_put_row(rest_primary_keys, nil, updated_fields, update)
+    map_pks_and_attrs_to_put_row(rest_primary_keys, nil, updated_fields, update, schema)
   end
 
   defp map_pks_and_attrs_to_put_row(
          [primary_key | rest_primary_keys],
          {_, autogenerate_id_name, :id} = autogenerate_id,
          fields,
-         prepared_pks
+         prepared_pks,
+         schema
        )
        when primary_key == autogenerate_id_name do
     update = [{Atom.to_string(autogenerate_id_name), PKType.auto_increment()} | prepared_pks]
-    map_pks_and_attrs_to_put_row(rest_primary_keys, autogenerate_id, fields, update)
+    map_pks_and_attrs_to_put_row(rest_primary_keys, autogenerate_id, fields, update, schema)
   end
 
   defp map_pks_and_attrs_to_put_row(
          [primary_key | rest_primary_keys],
          {_, autogenerate_id_name, :id} = autogenerate_id,
          fields,
-         prepared_pks
+         prepared_pks,
+         schema
        )
        when primary_key != autogenerate_id_name do
     {value, updated_fields} = Keyword.pop(fields, primary_key)
@@ -646,16 +648,38 @@ defmodule Ecto.Adapters.Tablestore do
       do: raise("Invalid usecase - primary key: `#{primary_key}` can not be nil.")
 
     update = [{Atom.to_string(primary_key), value} | prepared_pks]
-    map_pks_and_attrs_to_put_row(rest_primary_keys, autogenerate_id, updated_fields, update)
+    map_pks_and_attrs_to_put_row(rest_primary_keys, autogenerate_id, updated_fields, update, schema)
   end
 
   defp map_pks_and_attrs_to_put_row(
          _,
          {_, _autogenerate_id_name, :binary_id},
          _fields,
-         _prepared_pks
+         _prepared_pks,
+         _schema
        ) do
     raise "Not support autogenerate id as string (`:binary_id`)."
+  end
+
+  defp map_attrs_to_row(schema, attr_columns) do
+    for {field, value} <- attr_columns do
+      field_type = schema.__schema__(:type, field)
+      do_map_attr_to_row_item(field_type, field, value)
+    end
+  end
+
+  defp do_map_attr_to_row_item(type, key, value)
+        when type == :naive_datetime_usec
+        when type == :naive_datetime do
+    {Atom.to_string(key), DateTime.from_naive!(value, "Etc/UTC") |> DateTime.to_unix()}
+  end
+  defp do_map_attr_to_row_item(type, key, value)
+        when type == :utc_datetime
+        when type == :utc_datetime_usec do
+    {Atom.to_string(key), DateTime.to_unix(value)}
+  end
+  defp do_map_attr_to_row_item(_, key, value) do
+    {Atom.to_string(key), value}
   end
 
   defp row_to_schema(nil, _schema) do
@@ -692,38 +716,55 @@ defmodule Ecto.Adapters.Tablestore do
     Keyword.merge(prepared_attrs, prepared_pks)
   end
 
-  defp map_attrs_to_update(attrs) do
-    Enum.reduce(attrs, Keyword.new(), &construct_row_updates/2)
+  defp map_attrs_to_update(schema, attrs) do
+    {_, updates} = Enum.reduce(attrs, {schema, Keyword.new()}, &construct_row_updates/2)
+    updates
   end
 
-  defp construct_row_updates({key, nil}, acc) when is_atom(key) do
+  defp construct_row_updates({field, nil}, {schema, acc}) when is_atom(field) do
     if Keyword.has_key?(acc, :delete_all) do
-      Keyword.update!(acc, :delete_all, &[Atom.to_string(key) | &1])
+      {
+        schema,
+        Keyword.update!(acc, :delete_all, &[Atom.to_string(field) | &1])
+      }
     else
-      Keyword.put(acc, :delete_all, [Atom.to_string(key)])
+      {
+        schema,
+        Keyword.put(acc, :delete_all, [Atom.to_string(field)])
+      }
     end
   end
 
-  defp construct_row_updates({key, {:increment, value}}, acc) when is_integer(value) do
-    key_str = Atom.to_string(key)
+  defp construct_row_updates({field, {:increment, value}}, {schema, acc}) when is_integer(value) do
+    field_str = Atom.to_string(field)
 
-    if Keyword.has_key?(acc, :increment) do
-      acc
-      |> Keyword.update!(:increment, &[{key_str, value} | &1])
-      |> Keyword.update!(:return_columns, &[key_str | &1])
-    else
-      acc
-      |> Keyword.put(:increment, [{key_str, value}])
-      |> Keyword.put(:return_type, ReturnType.after_modify())
-      |> Keyword.put(:return_columns, [key_str])
-    end
+    updated_acc =
+      if Keyword.has_key?(acc, :increment) do
+        acc
+        |> Keyword.update!(:increment, &[{field_str, value} | &1])
+        |> Keyword.update!(:return_columns, &[field_str | &1])
+      else
+        acc
+        |> Keyword.put(:increment, [{field_str, value}])
+        |> Keyword.put(:return_type, ReturnType.after_modify())
+        |> Keyword.put(:return_columns, [field_str])
+      end
+
+    {schema, updated_acc}
   end
 
-  defp construct_row_updates({key, value}, acc) when is_atom(key) do
+  defp construct_row_updates({field, value}, {schema, acc}) when is_atom(field) do
+    field_type = schema.__schema__(:type, field)
     if Keyword.has_key?(acc, :put) do
-      Keyword.update!(acc, :put, &[{Atom.to_string(key), value} | &1])
+      {
+        schema,
+        Keyword.update!(acc, :put, &[do_map_attr_to_row_item(field_type, field, value) | &1])
+      }
     else
-      Keyword.put(acc, :put, [{Atom.to_string(key), value}])
+      {
+        schema,
+        Keyword.put(acc, :put, [do_map_attr_to_row_item(field_type, field, value)])
+      }
     end
   end
 
@@ -884,6 +925,7 @@ defmodule Ecto.Adapters.Tablestore do
   defp map_batch_writes({:put, puts}) do
     Enum.reduce(puts, {%{}, %{}}, fn put, {puts_acc, schema_entities_acc} ->
       {source, ids, attrs, options, schema_entity} = do_map_batch_writes(:put, put)
+
       write_put_request = TablestoreMixin.execute_write_put(ids, attrs, options)
 
       if Map.has_key?(puts_acc, source) do
@@ -903,6 +945,7 @@ defmodule Ecto.Adapters.Tablestore do
   defp map_batch_writes({:update, updates}) do
     Enum.reduce(updates, {%{}, %{}}, fn update, {update_acc, schema_entities_acc} ->
       {source, ids, options, schema_entity} = do_map_batch_writes(:update, update)
+
       write_update_request = TablestoreMixin.execute_write_update(ids, options)
 
       if Map.has_key?(update_acc, source) do
@@ -947,6 +990,7 @@ defmodule Ecto.Adapters.Tablestore do
 
   defp do_map_batch_writes(:put, {%{__meta__: meta} = schema_entity, options}) do
     schema = meta.schema
+    
     source = schema.__schema__(:source)
 
     fields =
@@ -956,14 +1000,23 @@ defmodule Ecto.Adapters.Tablestore do
         if value != nil, do: [{key, value} | acc], else: acc
       end)
 
-    {pks, attrs, _autogenerate_id_name} = pks_and_attrs_to_put_row(schema, fields)
+    autogen_fields = autogen_fields(schema)
+
+    schema_entity =
+      Enum.reduce(autogen_fields, schema_entity, fn({key, value}, acc) ->
+        Map.put(acc, key, value)
+      end)
+
+    {pks, attrs, _autogenerate_id_name} = pks_and_attrs_to_put_row(schema, Keyword.merge(autogen_fields, fields))
     {source, pks, attrs, options, schema_entity}
   end
 
   defp do_map_batch_writes(:put, {schema, ids, attrs, options}) do
     source = schema.__schema__(:source)
-    fields = ids ++ attrs
+    autogen_fields = autogen_fields(schema)
+    fields = Keyword.merge(autogen_fields, ids ++ attrs)
     schema_entity = struct(schema, fields)
+
     {pks, attrs, _autogenerate_id_name} = pks_and_attrs_to_put_row(schema, fields)
     {source, pks, attrs, options, schema_entity}
   end
@@ -973,15 +1026,23 @@ defmodule Ecto.Adapters.Tablestore do
          {%Ecto.Changeset{valid?: true, data: %{__meta__: meta}} = changeset, options}
        ) do
 
-    source = meta.schema.__schema__(:source)
+    schema = meta.schema
+    source = schema.__schema__(:source)
     entity = changeset.data
     ids = Ecto.primary_key(entity)
-    options = generate_condition_options(entity, options)
-    changes = changeset.changes
-    update_attrs = map_attrs_to_update(changes)
 
-    schema = meta.schema
+    options = generate_condition_options(entity, options)
+
+    autoupdate_fields = autoupdate_fields(schema)
+
+    changes = Enum.reduce(autoupdate_fields, changeset.changes, fn({key, value}, acc) ->
+      Map.put(acc, key, value)
+    end)
+
+    update_attrs = map_attrs_to_update(schema, changes)
+
     fields = ids ++ Map.to_list(changes)
+
     schema_entity = struct(schema, fields)
 
     {source, format_key_to_str(ids), merge_options(options, update_attrs), schema_entity}
@@ -1005,6 +1066,26 @@ defmodule Ecto.Adapters.Tablestore do
         do: format_key_to_str(ids_group),
         else: format_key_to_str([ids_group])
     end)
+  end
+
+  defp autogen_fields(schema) do
+    case schema.__schema__(:autogenerate) do
+      [{autogen_fields, {m, f, a}}] ->
+        autogen_value = apply(m, f, a)
+        Enum.map(autogen_fields, fn(f) -> {f, autogen_value} end)
+      _ ->
+        []
+    end
+  end
+
+  defp autoupdate_fields(schema) do
+    case schema.__schema__(:autoupdate) do
+      [{autoupdate_fields, {m, f, a}}] ->
+        autoupdate_value = apply(m, f, a)
+        Enum.map(autoupdate_fields, fn(f) -> {f, autoupdate_value} end)
+      _ ->
+        []
+    end
   end
 
   defp entity_attr_columns(%{__meta__: meta} = entity) do
