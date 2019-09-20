@@ -1185,25 +1185,23 @@ defmodule Ecto.Adapters.Tablestore do
   defp do_map_merge(map, nil, _force_merge) when is_map(map) do
     map
   end
-  defp do_map_merge(map1, map2, force_merge) when is_map(map1) and is_map(map2) do
-    if force_merge do
-      Map.merge(map1, map2)
-    else
-      Map.merge(map1, map2, fn _k, v1, v2 ->
-        if v2 != nil, do: v2, else: v1
-      end)
-    end
+  defp do_map_merge(map1, map2, true) when is_map(map1) and is_map(map2) do
+    Map.merge(map1, map2)
   end
-  defp do_map_merge(map, keyword, force_merge) when is_map(map) and is_list(keyword) do
-    if force_merge do
-      Enum.reduce(keyword, map, fn({key, value}, acc) ->
-        Map.put(acc, key, value)
-      end)
-    else
-      Enum.reduce(keyword, map, fn({key, value}, acc) ->
-        if value != nil, do: Map.put(acc, key, value), else: acc
-      end)
-    end
+  defp do_map_merge(map1, map2, false) when is_map(map1) and is_map(map2) do
+    Map.merge(map1, map2, fn _k, v1, v2 ->
+      if v2 != nil, do: v2, else: v1
+    end)
+  end
+  defp do_map_merge(map, keyword, true) when is_map(map) and is_list(keyword) do
+    Enum.reduce(keyword, map, fn({key, value}, acc) ->
+      Map.put(acc, key, value)
+    end)
+  end
+  defp do_map_merge(map, keyword, false) when is_map(map) and is_list(keyword) do
+    Enum.reduce(keyword, map, fn({key, value}, acc) ->
+      if value != nil, do: Map.put(acc, key, value), else: acc
+    end)
   end
 
 end
