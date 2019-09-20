@@ -255,7 +255,7 @@ defmodule Ecto.Adapters.Tablestore do
             {:ok, []}
 
           _ ->
-            {:ok, extract_as_keyword(response.row)}
+            {:ok, extract_as_keyword(schema, response.row)}
         end
 
       _error ->
@@ -295,7 +295,7 @@ defmodule Ecto.Adapters.Tablestore do
             next_token: response.next_token,
             total_hits: response.total_hits,
             schemas: Enum.map(response.rows, fn(row) ->
-              row_to_schema(row, schema)
+              row_to_schema(schema, row)
             end)
           }
         }
@@ -318,7 +318,7 @@ defmodule Ecto.Adapters.Tablestore do
 
     case result do
       {:ok, response} ->
-        row_to_schema(response.row, schema)
+        row_to_schema(schema, response.row)
 
       _error ->
         result
@@ -354,7 +354,7 @@ defmodule Ecto.Adapters.Tablestore do
       {:ok, response} ->
         records =
           Enum.map(response.rows, fn row ->
-            row_to_schema(row, schema)
+            row_to_schema(schema, row)
           end)
 
         {records, response.next_start_primary_key}
@@ -678,31 +678,44 @@ defmodule Ecto.Adapters.Tablestore do
         when type == :utc_datetime_usec do
     {Atom.to_string(key), DateTime.to_unix(value)}
   end
+  defp do_map_attr_to_row_item(type, key, value)
+        when type == :map
+        when type == :array do
+    {Atom.to_string(key), Jason.encode!(value)}
+  end
+  defp do_map_attr_to_row_item({:array, _}, key, value) do
+    {Atom.to_string(key), Jason.encode!(value)}
+  end
+  defp do_map_attr_to_row_item({:map, _}, key, value) do
+    {Atom.to_string(key), Jason.encode!(value)}
+  end
   defp do_map_attr_to_row_item(_, key, value) do
     {Atom.to_string(key), value}
   end
 
-  defp row_to_schema(nil, _schema) do
+  defp row_to_schema(_schema, nil) do
     nil
   end
 
-  defp row_to_schema(row, schema) do
-    struct(schema, extract_as_keyword(row))
+  defp row_to_schema(schema, row) do
+    struct(schema, extract_as_keyword(schema, row))
   end
 
-  defp extract_as_keyword({nil, attrs}) do
+  defp extract_as_keyword(schema, {nil, attrs}) do
     for {attr_key, attr_value, _ts} <- attrs do
-      {String.to_atom(attr_key), attr_value}
+      field = String.to_atom(attr_key)
+      type = schema.__schema__(:type, field)
+      do_map_row_item_to_attr(type, field, attr_value)
     end
   end
 
-  defp extract_as_keyword({pks, nil}) do
+  defp extract_as_keyword(_schema, {pks, nil}) do
     for {pk_key, pk_value} <- pks do
       {String.to_atom(pk_key), pk_value}
     end
   end
 
-  defp extract_as_keyword({pks, attrs}) do
+  defp extract_as_keyword(schema, {pks, attrs}) do
     prepared_pks =
       for {pk_key, pk_value} <- pks do
         {String.to_atom(pk_key), pk_value}
@@ -710,10 +723,27 @@ defmodule Ecto.Adapters.Tablestore do
 
     prepared_attrs =
       for {attr_key, attr_value, _ts} <- attrs do
-        {String.to_atom(attr_key), attr_value}
+        field = String.to_atom(attr_key)
+        type = schema.__schema__(:type, field)
+        do_map_row_item_to_attr(type, field, attr_value)
       end
 
     Keyword.merge(prepared_attrs, prepared_pks)
+  end
+
+  defp do_map_row_item_to_attr(type, key, value)
+        when type == :map and is_atom(key)
+        when type == :array and is_atom(key) do
+    {key, Jason.decode!(value)}
+  end
+  defp do_map_row_item_to_attr({:array, _}, key, value) when is_atom(key) do
+    {key, Jason.decode!(value)}
+  end
+  defp do_map_row_item_to_attr({:map, _}, key, value) when is_atom(key) do
+    {key, Jason.decode!(value)}
+  end
+  defp do_map_row_item_to_attr(_type, key, value) when is_atom(key) do
+    {key, value}
   end
 
   defp map_attrs_to_update(schema, attrs) do
@@ -1123,7 +1153,7 @@ defmodule Ecto.Adapters.Tablestore do
 
       schemas_data =
         Enum.reduce(table.rows, [], fn row_in_batch, acc ->
-          schema_data = row_to_schema(row_in_batch.row, schema)
+          schema_data = row_to_schema(schema, row_in_batch.row)
           if schema_data == nil, do: acc, else: [schema_data | acc]
         end)
 
@@ -1150,7 +1180,7 @@ defmodule Ecto.Adapters.Tablestore do
         |> Enum.reduce([], fn {operation, {write_row_response, input}}, acc ->
           return =
             if write_row_response.is_ok == true do
-              schema_entity_from_response = row_to_schema(write_row_response.row, schema)
+              schema_entity_from_response = row_to_schema(schema, write_row_response.row)
 
               return_schema_entity = do_map_merge(input, schema_entity_from_response)
 

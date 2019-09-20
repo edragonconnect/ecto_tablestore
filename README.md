@@ -7,6 +7,8 @@ Ecto 3.x adapter for Alibaba Tablestore, this is based on [`ex_aliyun_ots`](http
 Supported features:
 
 * Compatible `Ecto.Repo` API.
+* Support schema's `timestamps()` macro, make `inserted_at` and `updated_at` as an integer UTC timestamps.
+* Support `:map` | `{:map, _}` | `:array` | `{:array, _}` field type, use Jason to encode the field value into :string when save, use Jason to simply decode the field value into `:map` | `:array` when read, the :keys option of Jason's decode always use :string.
 * Automatically converts the returned original row results into corresponding schema(s).
 * Automatically generate the provided attribute-column field(s) of schema entity into the `filter` expression option of `GetRow` (see `c:EctoTablestore.Repo.one/2`) and `BatchGet` (see `c:EctoTablestore.Repo.batch_get/1`).
 * Automatically generate the provided attribute-column field(s) of schema entity into the `condition` expression option of `BatchWrite`.

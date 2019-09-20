@@ -20,6 +20,9 @@ defmodule EctoTablestore.TestSchema.User do
     field(:name, :string)
     field(:level, :integer)
 
+    field(:profile, :map)
+    field(:tags, {:array, :string})
+
     timestamps()
   end
 end

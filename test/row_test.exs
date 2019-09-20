@@ -182,6 +182,32 @@ defmodule EctoTablestoreTest do
     TestRepo.delete(user, condition: condition(:expect_exist))
   end
 
+  test "repo - insert/update with :map and :array field types" do
+    user = %User{id: 1, name: "username", profile: %{"level" => 1, "age" => 20}, tags: ["tag_a", "tag_b"]}
+    {:ok, _saved_user} = TestRepo.insert(user, condition: condition(:ignore))
+
+    get_user = TestRepo.get(User, id: 1)
+    profile = get_user.profile
+
+    assert Map.get(profile, "level") == 1
+    assert Map.get(profile, "age") == 20
+    assert get_user.tags == ["tag_a", "tag_b"]
+
+    changeset = Ecto.Changeset.change(get_user, name: "username2", profile: %{name: 1})
+
+    {:ok, updated_user} = TestRepo.update(changeset, condition: condition(:expect_exist))
+
+    assert updated_user.profile == %{name: 1}
+
+    get_user = TestRepo.get(User, id: 1)
+
+    # Please notice that Jason.decode use :key option as :strings by default, we don't
+    # provide a way to modify this option so far.
+    assert get_user.profile == %{"name" => 1}
+
+    TestRepo.delete(user, condition: condition(:expect_exist))
+  end
+
   test "repo - get_range" do
     saved_orders =
       Enum.map(1..9, fn var ->
