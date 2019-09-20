@@ -1041,9 +1041,7 @@ defmodule Ecto.Adapters.Tablestore do
 
     update_attrs = map_attrs_to_update(schema, changes)
 
-    fields = ids ++ Map.to_list(changes)
-
-    schema_entity = struct(schema, fields)
+    schema_entity = do_map_merge(changeset.data, changes, true)
 
     {source, format_key_to_str(ids), merge_options(options, update_attrs), schema_entity}
   end
@@ -1154,14 +1152,7 @@ defmodule Ecto.Adapters.Tablestore do
             if write_row_response.is_ok == true do
               schema_entity_from_response = row_to_schema(write_row_response.row, schema)
 
-              return_schema_entity =
-                if schema_entity_from_response != nil do
-                  Map.merge(input, schema_entity_from_response, fn _k, v1, v2 ->
-                    if v2 != nil, do: v2, else: v1
-                  end)
-                else
-                  input
-                end
+              return_schema_entity = do_map_merge(input, schema_entity_from_response)
 
               {:ok, return_schema_entity}
             else
@@ -1186,4 +1177,33 @@ defmodule Ecto.Adapters.Tablestore do
       end)
     end)
   end
+
+  defp do_map_merge(map1, map_or_keyword, force_merge \\ false)
+  defp do_map_merge(nil, map, _force_merge) when is_map(map) do
+    map
+  end
+  defp do_map_merge(map, nil, _force_merge) when is_map(map) do
+    map
+  end
+  defp do_map_merge(map1, map2, force_merge) when is_map(map1) and is_map(map2) do
+    if force_merge do
+      Map.merge(map1, map2)
+    else
+      Map.merge(map1, map2, fn _k, v1, v2 ->
+        if v2 != nil, do: v2, else: v1
+      end)
+    end
+  end
+  defp do_map_merge(map, keyword, force_merge) when is_map(map) and is_list(keyword) do
+    if force_merge do
+      Enum.reduce(keyword, map, fn({key, value}, acc) ->
+        Map.put(acc, key, value)
+      end)
+    else
+      Enum.reduce(keyword, map, fn({key, value}, acc) ->
+        if value != nil, do: Map.put(acc, key, value), else: acc
+      end)
+    end
+  end
+
 end

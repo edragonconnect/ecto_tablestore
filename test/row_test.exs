@@ -468,14 +468,22 @@ defmodule EctoTablestoreTest do
   end
 
   test "repo - batch_update with timestamps" do
-    for index <- 1..3 do
-      u = %User{id: index, name: "u#{index}", level: index}
-      inserted_user = TestRepo.insert(u, condition: condition(:expect_not_exist))
-    end
+    inserted_users =
+      for index <- 1..3 do
+        u = %User{id: index, name: "u#{index}", level: index}
+        {:ok, inserted_user} = TestRepo.insert(u, condition: condition(:expect_not_exist))
+        assert inserted_user.inserted_at == inserted_user.updated_at
+        inserted_user
+      end
+
+    user1 = List.first(inserted_users)
 
     Process.sleep(1000)
 
-    changeset1 = Changeset.change(%User{id: 1}, name: "new_u1")
+    new_user1_name = "new_u1"
+
+    changeset1 = Changeset.change(user1, name: new_user1_name, level: nil)
+
     changeset2 = Changeset.change(%User{id: 2}, level: {:increment, 1})
 
     writes = [
@@ -488,8 +496,42 @@ defmodule EctoTablestoreTest do
         {%User{id: 11, name: "new11", level: 11}, condition: condition(:expect_not_exist)}
       ]
     ]
-    result = TestRepo.batch_write(writes)
-    IO.puts "result: #{inspect result}"
+
+    {:ok, result} = TestRepo.batch_write(writes)
+
+    user_writes = Keyword.get(result, User)
+    put_opers = Keyword.get(user_writes, :put)
+
+    for {:ok, put_user} <- put_opers do
+      assert put_user.inserted_at == put_user.updated_at
+    end
+
+    update_opers = Keyword.get(user_writes, :update)
+
+    for {:ok, update_user} <- update_opers do
+      case update_user.id do
+        1 ->
+          update_updated_at = update_user.updated_at
+          update_inserted_at = update_user.inserted_at
+          user1_inserted_at = user1.inserted_at
+
+          assert (update_updated_at > user1_inserted_at) and (update_updated_at > update_inserted_at) and (update_inserted_at == user1_inserted_at)
+          assert update_user.level == nil
+          assert update_user.name == new_user1_name
+        2 ->
+          updated_at = update_user.updated_at
+          assert updated_at != nil and is_integer(updated_at)
+          assert update_user.level == 3
+          assert update_user.name == nil
+      end
+    end
+
+    TestRepo.delete(%User{id: 1}, condition: condition(:expect_exist))
+    TestRepo.delete(%User{id: 2}, condition: condition(:expect_exist))
+    TestRepo.delete(%User{id: 3}, condition: condition(:expect_exist))
+    TestRepo.delete(%User{id: 10}, condition: condition(:expect_exist))
+    TestRepo.delete(%User{id: 11}, condition: condition(:expect_exist))
+
   end
   
 end
