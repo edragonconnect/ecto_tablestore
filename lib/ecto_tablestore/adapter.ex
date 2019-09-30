@@ -5,6 +5,7 @@ defmodule Ecto.Adapters.Tablestore do
 
   alias __MODULE__
 
+  alias EctoTablestore.Sequence
   alias ExAliyunOts.Mixin, as: TablestoreMixin
 
   alias ExAliyunOts.Const.{
@@ -94,6 +95,8 @@ defmodule Ecto.Adapters.Tablestore do
         )
       end
 
+      ## Addition
+
       @spec batch_write(writes) ::
               {:ok, Keyword.t()} | {:error, term()}
             when writes: [
@@ -131,6 +134,7 @@ defmodule Ecto.Adapters.Tablestore do
           writes
         )
       end
+
     end
   end
 
@@ -175,7 +179,7 @@ defmodule Ecto.Adapters.Tablestore do
 
     schema = schema_meta.schema
 
-    {pks, attrs, autogenerate_id_name} = pks_and_attrs_to_put_row(schema, fields)
+    {pks, attrs, autogenerate_id_name} = pks_and_attrs_to_put_row(repo, schema, fields)
 
     result =
       TablestoreMixin.execute_put_row(
@@ -392,7 +396,7 @@ defmodule Ecto.Adapters.Tablestore do
 
     {var_write_requests, schema_entities_map} =
       writes
-      |> Enum.map(&map_batch_writes/1)
+      |> Enum.map(&map_batch_writes(repo, &1))
       |> Enum.unzip()
 
     {prepared_requests, operations} =
@@ -476,6 +480,18 @@ defmodule Ecto.Adapters.Tablestore do
 
       Keyword.put(options, :columns_to_get, updated_columns_to_get)
     end
+  end
+
+  @doc false
+  def execute_ddl(repo, definition) do
+    repo
+    |> Ecto.Adapter.lookup_meta()
+    |> do_execute_ddl(definition)
+  end
+
+  @doc false
+  def table_sequence_name(table_name) do
+    "#{table_name}_seq"
   end
 
   defp do_generate_condition([], nil) do
@@ -568,10 +584,10 @@ defmodule Ecto.Adapters.Tablestore do
     generate_filter_ast(rest, [{:and, [], [ast | prepared]}])
   end
 
-  defp pks_and_attrs_to_put_row(schema, fields) do
+  defp pks_and_attrs_to_put_row(repo, schema, fields) do
     primary_keys = schema.__schema__(:primary_key)
     autogenerate_id = schema.__schema__(:autogenerate_id)
-    map_pks_and_attrs_to_put_row(primary_keys, autogenerate_id, fields, [], schema)
+    map_pks_and_attrs_to_put_row(primary_keys, autogenerate_id, fields, [], repo, schema)
   end
 
   defp map_pks_and_attrs_to_put_row(
@@ -579,6 +595,7 @@ defmodule Ecto.Adapters.Tablestore do
          nil,
          attr_columns,
          prepared_pks,
+         _repo,
          schema
        ) do
     attrs = map_attrs_to_row(schema, attr_columns)
@@ -595,6 +612,7 @@ defmodule Ecto.Adapters.Tablestore do
          {_, autogenerate_id_name, :id},
          attr_columns,
          prepared_pks,
+         _repo,
          schema
        ) do
     attrs = map_attrs_to_row(schema, attr_columns)
@@ -611,15 +629,16 @@ defmodule Ecto.Adapters.Tablestore do
          nil,
          fields,
          prepared_pks,
+         repo,
          schema
        ) do
-    {value, updated_fields} = Keyword.pop(fields, primary_key)
 
+    {value, updated_fields} = Keyword.pop(fields, primary_key)
     if value == nil,
       do: raise("Invalid usecase - primary key: `#{primary_key}` can not be nil.")
 
     update = [{Atom.to_string(primary_key), value} | prepared_pks]
-    map_pks_and_attrs_to_put_row(rest_primary_keys, nil, updated_fields, update, schema)
+    map_pks_and_attrs_to_put_row(rest_primary_keys, nil, updated_fields, update, repo, schema)
   end
 
   defp map_pks_and_attrs_to_put_row(
@@ -627,11 +646,32 @@ defmodule Ecto.Adapters.Tablestore do
          {_, autogenerate_id_name, :id} = autogenerate_id,
          fields,
          prepared_pks,
+         repo,
+         schema
+       )
+       when primary_key == autogenerate_id_name and prepared_pks == [] do
+    # Set partition_key as auto-generated, use sequence for this usecase
+
+    source = schema.__schema__(:source)
+    field_name_str = Atom.to_string(autogenerate_id_name)
+
+    next_value = Sequence.next_value(repo.instance, seq_name_to_tab(source), field_name_str)
+
+    update = [{field_name_str, next_value} | prepared_pks]
+    map_pks_and_attrs_to_put_row(rest_primary_keys, autogenerate_id, fields, update, repo, schema)
+  end
+
+  defp map_pks_and_attrs_to_put_row(
+         [primary_key | rest_primary_keys],
+         {_, autogenerate_id_name, :id} = autogenerate_id,
+         fields,
+         prepared_pks,
+         repo,
          schema
        )
        when primary_key == autogenerate_id_name do
     update = [{Atom.to_string(autogenerate_id_name), PKType.auto_increment()} | prepared_pks]
-    map_pks_and_attrs_to_put_row(rest_primary_keys, autogenerate_id, fields, update, schema)
+    map_pks_and_attrs_to_put_row(rest_primary_keys, autogenerate_id, fields, update, repo, schema)
   end
 
   defp map_pks_and_attrs_to_put_row(
@@ -639,16 +679,20 @@ defmodule Ecto.Adapters.Tablestore do
          {_, autogenerate_id_name, :id} = autogenerate_id,
          fields,
          prepared_pks,
+         repo,
          schema
        )
        when primary_key != autogenerate_id_name do
+
     {value, updated_fields} = Keyword.pop(fields, primary_key)
 
+    IO.puts "fields: #{inspect fields}, primary_key: #{inspect primary_key}, autogenerate_id_name: #{autogenerate_id_name}"
+
     if value == nil,
-      do: raise("Invalid usecase - primary key: `#{primary_key}` can not be nil.")
+      do: raise("Invalid usecase - autogenerate primary key: `#{primary_key}` can not be nil.")
 
     update = [{Atom.to_string(primary_key), value} | prepared_pks]
-    map_pks_and_attrs_to_put_row(rest_primary_keys, autogenerate_id, updated_fields, update, schema)
+    map_pks_and_attrs_to_put_row(rest_primary_keys, autogenerate_id, updated_fields, update, repo, schema)
   end
 
   defp map_pks_and_attrs_to_put_row(
@@ -656,6 +700,7 @@ defmodule Ecto.Adapters.Tablestore do
          {_, _autogenerate_id_name, :binary_id},
          _fields,
          _prepared_pks,
+         _repo,
          _schema
        ) do
     raise "Not support autogenerate id as string (`:binary_id`)."
@@ -933,7 +978,7 @@ defmodule Ecto.Adapters.Tablestore do
     raise("Invalid usecase - input invalid batch get request: #{inspect(request)}")
   end
 
-  defp map_batch_writes({:delete, deletes}) do
+  defp map_batch_writes(_repo, {:delete, deletes}) do
     Enum.reduce(deletes, {%{}, %{}}, fn delete, {delete_acc, schema_entities_acc} ->
       {source, ids, options, schema_entity} = do_map_batch_writes(:delete, delete)
       write_delete_request = TablestoreMixin.execute_write_delete(ids, options)
@@ -952,9 +997,9 @@ defmodule Ecto.Adapters.Tablestore do
     end)
   end
 
-  defp map_batch_writes({:put, puts}) do
+  defp map_batch_writes(repo, {:put, puts}) do
     Enum.reduce(puts, {%{}, %{}}, fn put, {puts_acc, schema_entities_acc} ->
-      {source, ids, attrs, options, schema_entity} = do_map_batch_writes(:put, put)
+      {source, ids, attrs, options, schema_entity} = do_map_batch_writes(:put, {repo, put})
 
       write_put_request = TablestoreMixin.execute_write_put(ids, attrs, options)
 
@@ -972,7 +1017,7 @@ defmodule Ecto.Adapters.Tablestore do
     end)
   end
 
-  defp map_batch_writes({:update, updates}) do
+  defp map_batch_writes(_repo, {:update, updates}) do
     Enum.reduce(updates, {%{}, %{}}, fn update, {update_acc, schema_entities_acc} ->
       {source, ids, options, schema_entity} = do_map_batch_writes(:update, update)
 
@@ -992,7 +1037,7 @@ defmodule Ecto.Adapters.Tablestore do
     end)
   end
 
-  defp map_batch_writes(item) do
+  defp map_batch_writes(_repo, item) do
     raise("Invalid usecase - batch write with item: #{inspect(item)}")
   end
 
@@ -1014,11 +1059,11 @@ defmodule Ecto.Adapters.Tablestore do
     {source, ids, options, schema_entity}
   end
 
-  defp do_map_batch_writes(:put, %{__meta__: _meta} = schema_entity) do
-    do_map_batch_writes(:put, {schema_entity, []})
+  defp do_map_batch_writes(:put, {repo, %{__meta__: _meta} = schema_entity}) do
+    do_map_batch_writes(:put, {repo, {schema_entity, []}})
   end
 
-  defp do_map_batch_writes(:put, {%{__meta__: meta} = schema_entity, options}) do
+  defp do_map_batch_writes(:put, {repo, {%{__meta__: meta} = schema_entity, options}}) do
     schema = meta.schema
     
     source = schema.__schema__(:source)
@@ -1037,17 +1082,17 @@ defmodule Ecto.Adapters.Tablestore do
         Map.put(acc, key, value)
       end)
 
-    {pks, attrs, _autogenerate_id_name} = pks_and_attrs_to_put_row(schema, Keyword.merge(autogen_fields, fields))
+    {pks, attrs, _autogenerate_id_name} = pks_and_attrs_to_put_row(repo, schema, Keyword.merge(autogen_fields, fields))
     {source, pks, attrs, options, schema_entity}
   end
 
-  defp do_map_batch_writes(:put, {schema, ids, attrs, options}) do
+  defp do_map_batch_writes(:put, {repo, {schema, ids, attrs, options}}) do
     source = schema.__schema__(:source)
     autogen_fields = autogen_fields(schema)
     fields = Keyword.merge(autogen_fields, ids ++ attrs)
     schema_entity = struct(schema, fields)
 
-    {pks, attrs, _autogenerate_id_name} = pks_and_attrs_to_put_row(schema, fields)
+    {pks, attrs, _autogenerate_id_name} = pks_and_attrs_to_put_row(repo, schema, fields)
     {source, pks, attrs, options, schema_entity}
   end
 
@@ -1232,6 +1277,82 @@ defmodule Ecto.Adapters.Tablestore do
     Enum.reduce(keyword, map, fn({key, value}, acc) ->
       if value != nil, do: Map.put(acc, key, value), else: acc
     end)
+  end
+
+  ## Migration
+
+  defp seq_name_to_tab(table_name) do
+    "#{table_name}_seq"
+  end
+
+  defp do_execute_ddl(meta, {:create, table, columns}) do
+    {table_name, primary_keys, create_seq?} = Enum.reduce(columns, {table.name, [], false}, &do_execute_ddl_add_column/2)
+
+    Logger.info ">> table_name: #{table_name}, primary_keys: #{inspect primary_keys}, create_seq?: #{create_seq?}"
+
+    instance = meta.instance
+
+    result =
+      TablestoreMixin.execute_create_table(
+        meta.instance,
+        table_name,
+        primary_keys,
+        Keyword.put(table.meta, :max_versions, 1)
+      )
+
+    Logger.info "create a table: #{table_name} result: #{inspect result}"
+
+    if result == :ok and create_seq? do
+      Sequence.create(instance, seq_name_to_tab(table_name))
+    end
+  end
+
+  defp do_execute_ddl_add_column({:add, field_name, :integer, options}, {source, prepared_columns, create_seq?}) when is_atom(field_name) do
+
+    partition_key? = Keyword.get(options, :partition_key, false)
+    auto_increment? = Keyword.get(options, :auto_increment, false)
+
+    {prepared_column, create_seq?} =
+      cond do
+        partition_key? == true and auto_increment? == true ->
+          {
+            {Atom.to_string(field_name), PKType.integer},
+            true
+          }
+        create_seq? and auto_increment? == true ->
+          raise Ecto.MigrationError, message:
+            "the `auto_increment: true` option only allows binding of one primary key, but find the duplicated `#{field_name}` field with options: #{inspect options}"
+        auto_increment? == true ->
+          {
+            {Atom.to_string(field_name), PKType.integer, PKType.auto_increment},
+            create_seq?
+          }
+        true ->
+          {
+            {Atom.to_string(field_name), PKType.integer},
+            create_seq?
+          }
+      end
+
+    {
+      source,
+      prepared_columns ++ [prepared_column],
+      create_seq?
+    }
+  end
+  defp do_execute_ddl_add_column({:add, field_name, :string, _options}, {source, prepared_columns, create_seq?}) when is_atom(field_name) do
+    {
+      source,
+      prepared_columns ++ [{Atom.to_string(field_name), PKType.string}],
+      create_seq?
+    }
+  end
+  defp do_execute_ddl_add_column({:add, field_name, :binary, _options}, {source, prepared_columns, create_seq?}) when is_atom(field_name) do
+    {
+      source,
+      prepared_columns ++ [{Atom.to_string(field_name), PKType.binary}],
+      create_seq?
+    }
   end
 
 end

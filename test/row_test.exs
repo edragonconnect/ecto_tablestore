@@ -1,4 +1,4 @@
-defmodule EctoTablestoreTest do
+defmodule EctoTablestore.RowTest do
   use ExUnit.Case
 
   alias EctoTablestore.TestSchema.{Order, User}

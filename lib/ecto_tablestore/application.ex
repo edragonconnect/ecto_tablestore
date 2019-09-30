@@ -4,7 +4,9 @@ defmodule EctoTablestore.Application do
   use Application
 
   def start(_type, _args) do
-    children = []
+    children = [
+      {DynamicSupervisor, strategy: :one_for_one, name: EctoTablestore.MigratorSupervisor}
+    ]
     opts = [strategy: :one_for_one, name: EctoTablestore.Supervisor]
     Supervisor.start_link(children, opts)
   end

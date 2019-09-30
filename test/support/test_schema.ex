@@ -42,3 +42,15 @@ defmodule EctoTablestore.TestSchema.Student do
   end
 
 end
+
+defmodule EctoTablestore.TestSchema.Page do
+  use EctoTablestore.Schema
+
+  tablestore_schema "ecto_ots_test_page" do
+    field(:pid, :id, primary_key: true, autogenerate: true)
+    field(:name, :string, primary_key: true)
+    field(:content, :string)
+    field(:age, :integer)
+  end
+
+end

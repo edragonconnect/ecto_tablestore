@@ -49,11 +49,9 @@ defmodule EctoTablestore.Schema do
   defmacro __using__(_) do
     quote do
       use Ecto.Schema
-
       import EctoTablestore.Schema, only: [tablestore_schema: 2]
 
       @primary_key false
-
       @timestamps_opts [type: :integer, autogenerate: {EctoTablestore.Schema, :__timestamps__, []}]
     end
   end
@@ -96,20 +94,26 @@ defmodule EctoTablestore.Schema do
   end
 
   defp supplement_fields(
-         [{defined_macro, field_line, [field_name, :integer, opts]} | rest_fields],
+         [{defined_macro, field_line, [field_name, :integer, opts]} = field | rest_fields],
          prepared
        ) do
-    update = {
-      defined_macro,
-      field_line,
-      [
-        field_name,
-        {:__aliases__, field_line, [:EctoTablestore, :Integer]},
-        Keyword.put(opts, :read_after_writes, true)
-      ]
-    }
 
-    supplement_fields(rest_fields, [update | prepared])
+    field =
+      if Keyword.get(opts, :primary_key, false) do
+        field
+      else
+        {
+          defined_macro,
+          field_line,
+          [
+            field_name,
+            {:__aliases__, field_line, [:EctoTablestore, :Integer]},
+            Keyword.put(opts, :read_after_writes, true)
+          ]
+        }
+      end
+
+    supplement_fields(rest_fields, [field | prepared])
   end
 
   defp supplement_fields(
@@ -132,22 +136,28 @@ defmodule EctoTablestore.Schema do
   defp supplement_fields(
          [
            {defined_macro, field_line,
-            [field_name, {:__aliases__, line, [:EctoTablestore, :Integer]}, opts]}
+            [field_name, {:__aliases__, line, [:EctoTablestore, :Integer]}, opts]} = field
            | rest_fields
          ],
          prepared
        ) do
-    update = {
-      defined_macro,
-      field_line,
-      [
-        field_name,
-        {:__aliases__, line, [:EctoTablestore, :Integer]},
-        Keyword.put(opts, :read_after_writes, true)
-      ]
-    }
 
-    supplement_fields(rest_fields, [update | prepared])
+    field =
+      if Keyword.get(opts, :primary_key, false) do
+        field
+      else
+        {
+          defined_macro,
+          field_line,
+          [
+            field_name,
+            {:__aliases__, line, [:EctoTablestore, :Integer]},
+            Keyword.put(opts, :read_after_writes, true)
+          ]
+        }
+      end
+
+    supplement_fields(rest_fields, [field | prepared])
   end
 
   defp supplement_fields([{defined_macro, field_line, field_info} | rest_fields], prepared) do
