@@ -1,8 +1,44 @@
 defmodule EctoTablestore.Migration do
+  @moduledoc """
+  Migrations are used to create your tables.
+
+  Support the partition key is autoincrementing based on this library's wrapper, for this usecase,
+  we can use the migration to automatically create an another separated table to generate the serial value
+  when `:insert` (viz `PutRow`) or `:batch_write` with `:put` option (viz `BatchWriteRow`).
+
+  In practice, we don't create migration files by hand either, we typically use `mix ecto.ots.gen.migration` to
+  generate the file with the proper timestamp and then we just fill in its contents:
+
+      $ mix ecto.ots.gen.migration create_posts_table
+
+  And then we can fill the table definition details:
+
+      defmodule EctoTablestore.TestRepo.Migrations.CreatePostsTable do
+        use EctoTablestore.Migration
+
+        def change do
+          create table("ecto_ots_test_posts") do
+            add :post_id, :integer, partition_key: true, auto_increment: true
+          end
+        end
+      end
+
+
+  After we filled the above migration content, you can run the migration above by going to the root of your project
+  and typing:
+
+      $ mix ecto.ots.migrate
+
+  Finally, we successfully create the "ecto_ots_test_posts" table, since the above definition added an autoincrementing
+  column for the partition key, there will automatically create an "ecto_ots_test_posts_seq" table to generate a serial integer
+  for `:post_id` field when insert a new record.
+  """
 
   alias EctoTablestore.Migration.Runner
 
   defmodule Table do
+    @moduledoc false
+
     defstruct name: nil, prefix: nil, partition_key: true, meta: []
     @type t :: %__MODULE__{name: String.t, prefix: atom | nil, partition_key: boolean(), meta: Keyword.t()}
   end
@@ -24,6 +60,29 @@ defmodule EctoTablestore.Migration do
     end
   end
 
+  @doc """
+  Define the primary key(s) of the table to create.
+
+  By default, the table will also include an `:id` primary key field (it is also partition key)
+  that has a type of `:integer` which is an autoincrementing column. Check the `table/2` docs for
+  more information.
+
+  There are up to 4 primary key(s) can be added when creation.
+
+  ## Example
+
+      create table("posts") do
+        add :title, :string
+      end
+
+      # The above is equivalent to
+
+      create table("posts") do
+        add :id, :integer, partition_key: true, auto_increment: true
+        add :title, :string
+      end
+
+  """
   defmacro create(object, do: block) do
     expand_create(object, :create, block)
   end
@@ -57,7 +116,7 @@ defmodule EctoTablestore.Migration do
   Returns a table struct that can be given to `create/2`.
 
   Since Tablestore is a NoSQL service, there are up to 4 primary key(s) can be
-  set when create table, the first added key is partition key when set `partition_key`
+  added when creation, the first added key is partition key when set `partition_key`
   option as false.
 
   ## Examples

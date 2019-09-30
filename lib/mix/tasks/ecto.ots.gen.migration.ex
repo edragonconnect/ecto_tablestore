@@ -6,7 +6,7 @@ defmodule Mix.Tasks.Ecto.Ots.Gen.Migration do
   import Mix.Ecto
   import Mix.EctoTablestore
 
-  @shortdoc "Generate a migration to create tablestore table"
+  @shortdoc "Generate a migration to create a table of tablestore"
 
   @aliases [
     r: :repo
@@ -18,6 +18,38 @@ defmodule Mix.Tasks.Ecto.Ots.Gen.Migration do
   ]
 
   @moduledoc """
+  Generate a migration to create a table of tablestore.
+
+  The repository must be set under `:ecto_repos` in the current app configuration,
+  or given via the `-r` option:
+
+  ## Example 1
+
+    1, Add configuration:
+
+      config :your_app, ecto_repos: [EctoTablestore.TestRepo]
+
+    2, Run:
+
+      mix ecto.ots.gen.migration create_posts
+
+  ## Example 2
+
+    1, Run:
+
+      mix ecto.ots.gen.migration create_posts -r EctoTablestore.TestRepo
+
+  The generated migration filename will be prefixed with the current timestamp in UTC
+  which is used for versioning and ordering.
+
+  By default, the migration will be generated to the
+  "priv/tablestore/YOUR_REPO/migrations" directory of the current application
+  but it can be configured to be any subdirectory of `priv` by
+  specifying the `:priv` key under the repository configuration.
+
+  ## Command line options
+
+    * `-r`, `--repo` - the repo to generate migration for
   """
 
   @doc false

@@ -19,6 +19,33 @@ defmodule Mix.Tasks.Ecto.Ots.Migrate do
     repo: [:keep, :string]
   ]
 
+  @moduledoc """
+  Runs the all migration for the given repository.
+
+  Migrations are expected at "priv/tablestore/YOUR_REPO/migrations" directory
+  of the current application, where "YOUR_REPO" is the last segment in your
+  repository name. For example, the repository `MyApp.Repo` will use
+  "priv/tablestore/repo/migrations", the repository `Whatever.MyRepo` will
+  use "priv/tablestore/my_repo/migrations".
+
+  Alibaba Tablestore is a cloud service product, there will not do any local storage,
+  meanwhile it is a NoSQL data storage, the migrations mainly responsible for the
+  creation of the table primary key(s).
+
+  Currently, run migrations will execute the all defined tasks, once Tablestore's
+  primary key(s) are created, the primary keys(s) cannot be modified, failed to create
+  an existing table, we can ignore it.
+
+  ## Example
+
+      mix ecto.migrate
+      mix ecto.migrate -r EctoTablestore.TestRepo
+
+  ## Command line options
+
+    * `-r`, `--repo` - the repo to migrate
+  """
+
   @impl true
   def run(args) do
 
