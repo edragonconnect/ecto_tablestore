@@ -7,6 +7,7 @@ defmodule Ecto.Adapters.Tablestore do
 
   alias EctoTablestore.Sequence
   alias ExAliyunOts.Mixin, as: TablestoreMixin
+  alias ExAliyunOts.Error
 
   alias ExAliyunOts.Const.{
     PKType,
@@ -26,7 +27,7 @@ defmodule Ecto.Adapters.Tablestore do
 
   require Logger
 
-  @error_condition_check_fail ~r/ConditionCheckFail/
+  @ots_condition_check_fail "OTSConditionCheckFail"
 
   @impl true
   defmacro __before_compile__(_env) do
@@ -153,8 +154,6 @@ defmodule Ecto.Adapters.Tablestore do
 
   @impl true
   def init(config) do
-    Logger.info("init with config: #{inspect(config)}")
-
     case Keyword.get(config, :instance, nil) do
       tablestore_instance when is_atom(tablestore_instance) ->
         {
@@ -206,8 +205,8 @@ defmodule Ecto.Adapters.Tablestore do
         end
 
       {:error, error} ->
-        Logger.error("ecto_tablestore insert - occur error: #{inspect(error)}")
-        {:invalid, [{:error, error}]}
+        Logger.error(fn -> "ecto_tablestore insert operation occur error: #{inspect(error)}" end)
+        {:invalid, [{:error, error_to_string(error)}]}
     end
   end
 
@@ -226,15 +225,14 @@ defmodule Ecto.Adapters.Tablestore do
       {:ok, _response} ->
         {:ok, []}
 
-      _error ->
-        {:error, message} = result
+      {:error, error} ->
+        Logger.error(fn -> "ecto_tablestore delete operation occur error: #{inspect(error)}" end)
 
-        cond do
-          String.match?(message, @error_condition_check_fail) ->
+        case error do
+          %Error{code: code} when code == @ots_condition_check_fail ->
             {:error, :stale}
-
-          true ->
-            {:invalid, [result]}
+          _ ->
+            {:invalid, [{:error, error_to_string(error)}]}
         end
     end
   end
@@ -262,8 +260,9 @@ defmodule Ecto.Adapters.Tablestore do
             {:ok, extract_as_keyword(schema, response.row)}
         end
 
-      _error ->
-        {:invalid, [result]}
+      {:error, error} ->
+        Logger.error(fn -> "ecto_tablestore update operation occur error: #{inspect(error)}" end)
+        {:invalid, [{:error, error_to_string(error)}]}
     end
   end
 
@@ -1288,7 +1287,9 @@ defmodule Ecto.Adapters.Tablestore do
   defp do_execute_ddl(meta, {:create, table, columns}) do
     {table_name, primary_keys, create_seq?} = Enum.reduce(columns, {table.name, [], false}, &do_execute_ddl_add_column/2)
 
-    Logger.info ">> table_name: #{table_name}, primary_keys: #{inspect primary_keys}, create_seq?: #{create_seq?}"
+    Logger.info(fn ->
+      ">> table_name: #{table_name}, primary_keys: #{inspect primary_keys}, create_seq?: #{create_seq?}"
+    end)
 
     instance = meta.instance
 
@@ -1300,7 +1301,9 @@ defmodule Ecto.Adapters.Tablestore do
         Keyword.put(table.meta, :max_versions, 1)
       )
 
-    Logger.info "create a table: #{table_name} result: #{inspect result}"
+    Logger.info(fn ->
+      "create a table: #{table_name} result: #{inspect result}"
+    end)
 
     if result == :ok and create_seq? do
       Sequence.create(instance, seq_name_to_tab(table_name))
@@ -1353,6 +1356,10 @@ defmodule Ecto.Adapters.Tablestore do
       prepared_columns ++ [{Atom.to_string(field_name), PKType.binary}],
       create_seq?
     }
+  end
+
+  defp error_to_string(error) do
+    "code: #{error.code} - message: #{error.message} - request_id: #{error.request_id} - http_status_code: #{error.http_status_code} - datetime: #{error.datetime}"
   end
 
 end
