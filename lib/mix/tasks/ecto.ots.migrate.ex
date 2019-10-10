@@ -38,8 +38,8 @@ defmodule Mix.Tasks.Ecto.Ots.Migrate do
 
   ## Example
 
-      mix ecto.migrate
-      mix ecto.migrate -r EctoTablestore.TestRepo
+      mix ecto.ots.migrate
+      mix ecto.ots.migrate -r EctoTablestore.TestRepo
 
   ## Command line options
 
