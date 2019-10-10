@@ -29,15 +29,7 @@ defmodule EctoTablestore.RowTest do
     }
 
     assert_raise Ecto.ConstraintError, fn ->
-      {insert_result, message} =
-        TestRepo.insert(order, condition: condition(:expect_not_exist), return_type: :pk)
-
-      assert insert_result == :error
-
-      assert String.contains?(
-               message,
-               "Invalid expect:EXPECT_NOT_EXIST when modify row with pk auto increment"
-             ) == true
+      TestRepo.insert(order, condition: condition(:expect_not_exist), return_type: :pk)
     end
 
     {status, saved_order} =
