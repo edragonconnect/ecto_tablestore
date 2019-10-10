@@ -1,7 +1,7 @@
 defmodule EctoTablestore.RowTest do
   use ExUnit.Case
 
-  alias EctoTablestore.TestSchema.{Order, User}
+  alias EctoTablestore.TestSchema.{Order, User, User2}
   alias EctoTablestore.TestRepo
   alias Ecto.Changeset
 
@@ -10,6 +10,7 @@ defmodule EctoTablestore.RowTest do
   setup_all do
     TestHelper.setup_all()
   end
+
 
   test "repo - insert/get/delete" do
     input_id = "1"
@@ -552,4 +553,11 @@ defmodule EctoTablestore.RowTest do
 
   end
   
+  test "repo - at least one attribute column" do
+    u = %User2{id: "1"}
+    assert_raise Ecto.ConstraintError, fn ->
+      TestRepo.insert(u, condition: condition(:expect_not_exist))
+    end
+  end
+
 end

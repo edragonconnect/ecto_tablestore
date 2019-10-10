@@ -54,3 +54,12 @@ defmodule EctoTablestore.TestSchema.Page do
   end
 
 end
+
+defmodule EctoTablestore.TestSchema.User2 do
+  use EctoTablestore.Schema
+
+  tablestore_schema "ecto_ots_test_user2" do
+    field(:id, :string, primary_key: true)
+  end
+
+end

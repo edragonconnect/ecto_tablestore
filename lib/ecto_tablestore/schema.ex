@@ -71,6 +71,9 @@ defmodule EctoTablestore.Schema do
   defp check_block({:__block__, info, fields}) do
     {:__block__, info, supplement_fields(fields, [])}
   end
+  defp check_block(block) do
+    block
+  end
 
   defp supplement_fields([], prepared) do
     Enum.reverse(prepared)
