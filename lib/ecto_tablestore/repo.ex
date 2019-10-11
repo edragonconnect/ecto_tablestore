@@ -146,7 +146,7 @@ defmodule EctoTablestore.Repo do
               start_primary_keys :: list | binary(),
               end_primary_keys :: list,
               options :: Keyword.t()
-            ) :: {list, nil} | {list, binary()} | {:error, term()}
+            ) :: {nil, nil} | {list, nil} | {list, binary()} | {:error, term()}
 
   @doc """
   Batch get several rows of data from one or more tables, this batch request put multiple `get_row` in one request from client's perspective.
