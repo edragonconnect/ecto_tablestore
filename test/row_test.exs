@@ -560,4 +560,50 @@ defmodule EctoTablestore.RowTest do
     end
   end
 
+  test "repo - get/one/get_range/batch_get with not matched filter" do
+
+    input_id = "10001"
+    input_desc = "order_desc"
+    input_num = 1
+    input_order_name = "order_name"
+    input_success = true
+    input_price = 100.09
+
+    order = %Order{
+      id: input_id,
+      name: input_order_name,
+      desc: input_desc,
+      num: input_num,
+      success?: input_success,
+      price: input_price
+    }
+
+    {status, saved_order} =
+      TestRepo.insert(order, condition: condition(:ignore), return_type: :pk)
+
+    start_pks = [{"id", input_id}, {"internal_id", :inf_min}]
+    end_pks = [{"id", "100010"}, {"internal_id", :inf_max}]
+
+    get_result = TestRepo.get(Order, [id: input_id, internal_id: saved_order.internal_id], filter: filter("num" == 1000))
+
+    assert get_result == nil
+
+    one_result = TestRepo.one(%Order{id: input_id, internal_id: saved_order.internal_id}, filter: filter("num" > 10))
+
+    assert one_result == nil
+
+    {records, next} = TestRepo.get_range(Order, start_pks, end_pks, filter: filter("num" == 100))
+    assert records == nil and next == nil
+
+    requests = [
+      {Order, [{"id", input_id}, {"internal_id", saved_order.internal_id}], filter: filter("num" == 100)}
+    ]
+    {:ok, [{Order, batch_get_result}]} = TestRepo.batch_get(requests)
+
+    assert batch_get_result == nil
+
+    TestRepo.delete(%Order{id: input_id, internal_id: saved_order.internal_id},
+      condition: condition(:expect_exist)
+    )
+  end
 end

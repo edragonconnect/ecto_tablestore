@@ -58,7 +58,7 @@ defmodule Ecto.Adapters.Tablestore do
               start_primary_keys :: list | binary(),
               end_primary_keys :: list,
               options :: Keyword.t()
-            ) :: {list, nil} | {list, binary()} | {:error, term()}
+            ) :: {nil, nil} | {list, nil} | {list, binary()} | {:error, term()}
       def get_range(
             schema,
             start_primary_keys,
@@ -356,12 +356,15 @@ defmodule Ecto.Adapters.Tablestore do
     case result do
       {:ok, response} ->
         records =
-          Enum.map(response.rows, fn row ->
-            row_to_schema(schema, row)
-          end)
-
+          case response.rows do
+            nil ->
+              nil
+            rows when is_list(rows) ->
+              Enum.map(response.rows, fn row ->
+                row_to_schema(schema, row)
+              end)
+          end
         {records, response.next_start_primary_key}
-
       _error ->
         result
     end
@@ -684,8 +687,6 @@ defmodule Ecto.Adapters.Tablestore do
        when primary_key != autogenerate_id_name do
 
     {value, updated_fields} = Keyword.pop(fields, primary_key)
-
-    IO.puts "fields: #{inspect fields}, primary_key: #{inspect primary_key}, autogenerate_id_name: #{autogenerate_id_name}"
 
     if value == nil,
       do: raise("Invalid usecase - autogenerate primary key: `#{primary_key}` can not be nil.")
@@ -1131,13 +1132,16 @@ defmodule Ecto.Adapters.Tablestore do
     raise "Using invalid changeset: #{inspect(changeset)} in batch writes"
   end
 
-  defp format_ids_groups(ids_groups) do
+  defp format_ids_groups([ids] = ids_groups) when is_list(ids) do
     ids_groups
     |> Enum.map(fn ids_group ->
       if is_list(ids_group),
         do: format_key_to_str(ids_group),
         else: format_key_to_str([ids_group])
     end)
+  end
+  defp format_ids_groups(ids_groups) when is_list(ids_groups) do
+    format_ids_groups([ids_groups])
   end
 
   defp autogen_fields(schema) do
