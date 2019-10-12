@@ -1131,6 +1131,9 @@ defmodule Ecto.Adapters.Tablestore do
   defp do_map_batch_writes(:update, %Ecto.Changeset{valid?: false} = changeset) do
     raise "Using invalid changeset: #{inspect(changeset)} in batch writes"
   end
+  defp do_map_batch_writes(:update, {%Ecto.Changeset{valid?: false} = changeset, _options}) do
+    raise "Using invalid changeset: #{inspect(changeset)} in batch writes"
+  end
 
   defp format_ids_groups([ids] = ids_groups) when is_list(ids) do
     ids_groups
