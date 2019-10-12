@@ -117,13 +117,24 @@ defmodule EctoTablestore.RowTest do
   test "repo - update" do
     input_id = "1001"
     input_desc = "order_desc"
-    input_num = 100
+    input_num = 10
     increment = 1
     input_price = 99.9
     order = %Order{id: input_id, desc: input_desc, num: input_num, price: input_price}
     {:ok, saved_order} = TestRepo.insert(order, condition: condition(:ignore), return_type: :pk)
 
     assert saved_order.price == input_price
+
+    new_input_num = 100
+
+    changeset = Order.test_changeset(saved_order, %{name: "new_name1", num: new_input_num, price: 88.8})
+
+    {:ok, updated_order0} = TestRepo.update(changeset, condition: condition(:expect_exist), return_type: :pk)
+
+    # since the above `test_changeset` don't update price
+    assert updated_order0.price == input_price
+    assert updated_order0.name == "new_name1"
+    assert updated_order0.num == 100
 
     # 1, atom increment `num` field
     # 2, delete `desc` field
@@ -138,13 +149,13 @@ defmodule EctoTablestore.RowTest do
     {:ok, updated_order} = TestRepo.update(changeset, condition: condition(:expect_exist))
 
     assert updated_order.desc == nil
-    assert updated_order.num == input_num + increment
+    assert updated_order.num == new_input_num + increment
     assert updated_order.name == updated_order_name
 
     order = TestRepo.get(Order, id: input_id, internal_id: saved_order.internal_id)
 
     assert order.desc == nil
-    assert order.num == input_num + increment
+    assert order.num == new_input_num + increment
     assert order.name == updated_order_name
 
     TestRepo.delete(%Order{id: input_id, internal_id: saved_order.internal_id},
@@ -176,9 +187,14 @@ defmodule EctoTablestore.RowTest do
   end
 
   test "repo - insert/update with :map and :array field types" do
+
+    assert_raise Ecto.ConstraintError, ~r/OTSConditionCheckFail/, fn ->
+      user = %User{id: 2, name: "username2", profile: %{"level" => 1, "age" => 20}, tags: ["tag_a", "tag_b"]}
+      {:ok, _saved_user} = TestRepo.insert(user, condition: condition(:expect_exist))
+    end
+
     user = %User{id: 1, name: "username", profile: %{"level" => 1, "age" => 20}, tags: ["tag_a", "tag_b"]}
     {:ok, _saved_user} = TestRepo.insert(user, condition: condition(:ignore))
-
     get_user = TestRepo.get(User, id: 1)
     profile = get_user.profile
 

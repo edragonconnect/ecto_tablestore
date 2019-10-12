@@ -242,12 +242,17 @@ defmodule Ecto.Adapters.Tablestore do
 
     schema = schema_meta.schema
 
+    options =
+      options
+      |> Keyword.take([:condition, :transaction_id])
+      |> Keyword.merge(map_attrs_to_update(schema, fields))
+
     result =
       TablestoreMixin.execute_update_row(
         repo.instance,
         schema_meta.source,
         format_key_to_str(filters),
-        Keyword.merge(options, map_attrs_to_update(schema, fields))
+        options
       )
 
     case result do

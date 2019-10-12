@@ -1,5 +1,6 @@
 defmodule EctoTablestore.TestSchema.Order do
   use EctoTablestore.Schema
+  import Ecto.Changeset
 
   tablestore_schema "ecto_ots_test_order" do
     field(:id, :binary_id, primary_key: true, autogenerate: false)
@@ -9,6 +10,12 @@ defmodule EctoTablestore.TestSchema.Order do
     field(:num, :integer)
     field(:success?, :boolean)
     field(:price, :float)
+  end
+
+  def test_changeset(order, params \\ %{}) do
+    order
+    |> cast(params, [:name, :num])
+    |> validate_required([:name, :num])
   end
 end
 
