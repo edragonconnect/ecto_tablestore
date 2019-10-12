@@ -95,10 +95,10 @@ defmodule EctoTablestore.Repo do
 
   ## Options
 
-  * `columns_to_get`, string list, return the specified attribute columns, if not specify this option field, will try to return all attribute columns together.
-  * `start_column`, string, used as a starting column for Wide Column read, the return result contains this as starter.
-  * `end_column`, string, used as a ending column for Wide Column read, the return result DON NOT contain this column.
-  * `filter`, used as a filter by condition, support `">"`, `"<"`, `">="`, `"<="`, `"=="`, `"and"`, `"or"` and `"()"` expressions.
+  * `:columns_to_get`, string list, return the specified attribute columns, if not specify this option field, will try to return all attribute columns together.
+  * `:start_column`, string, used as a starting column for Wide Column read, the return result contains this as starter.
+  * `:end_column`, string, used as a ending column for Wide Column read, the return result DON NOT contain this column.
+  * `:filter`, used as a filter by condition, support `">"`, `"<"`, `">="`, `"<="`, `"=="`, `"and"`, `"or"` and `"()"` expressions.
 
       The `ignore_if_missing` can be used for the non-existed attribute column, for example:
 
@@ -110,8 +110,7 @@ defmodule EctoTablestore.Repo do
       ```elixir
       filter: filter(("name[ignore_if_missing: true]" == var_name and "age" > 1) or ("class" == "1"))
       ```
-
-  * `transaction_id`, read under local transaction in a partition key.
+  * `:transaction_id`, read under local transaction in a partition key.
   """
   @callback get(schema :: Ecto.Schema.t(), ids :: list, options :: Keyword.t()) ::
               Ecto.Schema.t() | {:error, term()} | nil
@@ -121,24 +120,23 @@ defmodule EctoTablestore.Repo do
 
   ## Options
 
-    * `direction`, set it as `:forward` to make the order of the query result in ascending by primary key(s), set it as `:backward` to make the order of the query result in descending by primary key(s).
-    * `columns_to_get`, string list, return the specified attribute columns, if not specify this field all attribute columns will be return.
-    * `start_column`, string, used as a starting column for Wide Column read, the return result contains this as starter.
-    * `end_column`, string, used as a ending column for Wide Column read, the return result DON NOT contain this column.
-    * `filter`, used as a filter by condition, support `">"`, `"<"`, `">="`, `"<="`, `"=="`, `"and"`, `"or"` and `"()"` expressions.
+  * `:direction`, set it as `:forward` to make the order of the query result in ascending by primary key(s), set it as `:backward` to make the order of the query result in descending by primary key(s).
+  * `:columns_to_get`, string list, return the specified attribute columns, if not specify this field all attribute columns will be return.
+  * `:start_column`, string, used as a starting column for Wide Column read, the return result contains this as starter.
+  * `:end_column`, string, used as a ending column for Wide Column read, the return result DON NOT contain this column.
+  * `:filter`, used as a filter by condition, support `">"`, `"<"`, `">="`, `"<="`, `"=="`, `"and"`, `"or"` and `"()"` expressions.
 
-        The `ignore_if_missing` can be used for the non-existed attribute column, for example:
+      The `ignore_if_missing` can be used for the non-existed attribute column, for example:
 
-        An attribute column does not exist meanwhile set it as `true`, will ignore this match condition in the return result;
+      An attribute column does not exist meanwhile set it as `true`, will ignore this match condition in the return result;
 
-        An existed attribute column DOES NOT suit for this usecase, the match condition will always affect the return result, if match condition does not satisfy, they won't be
-        return in result.
+      An existed attribute column DOES NOT suit for this usecase, the match condition will always affect the return result, if match condition does not satisfy, they won't be
+      return in result.
 
-        ```elixir
-        filter: filter(("name[ignore_if_missing: true]" == var_name and "age" > 1) or ("class" == "1"))
-        ```
-
-    * `transaction_id`, read under local transaction in a partition key.
+      ```elixir
+      filter: filter(("name[ignore_if_missing: true]" == var_name and "age" > 1) or ("class" == "1"))
+      ```
+  * `:transaction_id`, read under local transaction in a partition key.
 
   """
   @callback get_range(
@@ -237,7 +235,20 @@ defmodule EctoTablestore.Repo do
                  ]
 
   @doc """
-  Please see `c:Ecto.Repo.insert/2` for details.
+  Inserts a struct defined via EctoTablestore.Schema or a changeset.
+
+  ## Options
+
+  * `:condition`, this option is required, whether to add conditional judgment before date insert.
+
+    Two kinds of insert condition types as below:
+
+    As `condition(:ignore)` means DO NOT do any condition validation before insert, if the schema non-partitioned primary key
+    is auto increment, we can only use `condition(:ignore)` option.
+
+    As `condition(:expect_not_exist)` means the primary key(s) are NOT existed before insert.
+  * `:transaction_id`, insert under local transaction in a partition key.
+
   """
   @callback insert(
               struct_or_changeset :: Ecto.Schema.t() | Ecto.Changeset.t(),
@@ -253,7 +264,24 @@ defmodule EctoTablestore.Repo do
             ) :: {:ok, Ecto.Schema.t()} | {:error, term()}
 
   @doc """
-  Please see `c:Ecto.Repo.update/2` for details.
+  Updates a changeset using its primary key.
+
+  ## Options
+
+  * `:condition`, this option is required, whether to add conditional judgment before data update.
+
+    Two kinds of update condition types as below:
+
+      As `condition(:expect_exist)` means the primary key(s) can match a row to update, we also can add
+      some compare expressions for the attribute columns, e.g.
+
+        1. condition(:expect_exist, "attr1" == value1 and "attr2" > 1)
+        2. condition(:expect_exist, "attr1" != value1)
+        3. condition(:expect_exist, "attr1" > 100 or "attr2" < 1000)
+
+      As `condition(:ignore)` means DO NOT do any condition validation before update.
+  * `:transaction_id`, update under local transaction in a partition key.
+
   """
   @callback update(
               changeset :: Ecto.Changeset.t(),
