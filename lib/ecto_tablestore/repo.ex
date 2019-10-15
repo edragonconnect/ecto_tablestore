@@ -197,7 +197,8 @@ defmodule EctoTablestore.Repo do
         ],
         put: [
           {%SchemaB{}, condition: condition(:ignore)},
-          {%SchemaA{}, condition: condition(:expect_not_exist)}
+          {%SchemaA{}, condition: condition(:expect_not_exist)},
+          {changeset_schema_a, condition: condition(:ignore)}
         ],
         update: [
           {changeset_schema_a, return_type: :pk},
@@ -212,11 +213,11 @@ defmodule EctoTablestore.Repo do
                    {
                      operation :: :put,
                      items :: [
-                       schema_entity ::
-                         Ecto.Schema.t()
-                         | {schema_entity :: Ecto.Schema.t(), options :: Keyword.t()}
+                       item ::
+                         {schema_entity :: Ecto.Schema.t(), options :: Keyword.t()}
                          | {module :: Ecto.Schema.t(), ids :: list(), attrs :: list(),
                             options :: Keyword.t()}
+                         | {changeset :: Ecto.Changeset.t(), operation :: Keyword.t()}
                      ]
                    }
                    | {
