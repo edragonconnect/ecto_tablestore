@@ -11,7 +11,6 @@ defmodule EctoTablestore.RowTest do
     TestHelper.setup_all()
   end
 
-
   test "repo - insert/get/delete" do
     input_id = "1"
     input_desc = "order_desc"
@@ -127,9 +126,11 @@ defmodule EctoTablestore.RowTest do
 
     new_input_num = 100
 
-    changeset = Order.test_changeset(saved_order, %{name: "new_name1", num: new_input_num, price: 88.8})
+    changeset =
+      Order.test_changeset(saved_order, %{name: "new_name1", num: new_input_num, price: 88.8})
 
-    {:ok, updated_order0} = TestRepo.update(changeset, condition: condition(:expect_exist), return_type: :pk)
+    {:ok, updated_order0} =
+      TestRepo.update(changeset, condition: condition(:expect_exist), return_type: :pk)
 
     # since the above `test_changeset` don't update price
     assert updated_order0.price == input_price
@@ -174,7 +175,7 @@ defmodule EctoTablestore.RowTest do
     new_name = "username2"
 
     changeset = Ecto.Changeset.change(user, name: new_name, level: {:increment, 1})
- 
+
     Process.sleep(1000)
 
     {:ok, updated_user} = TestRepo.update(changeset, condition: condition(:expect_exist))
@@ -187,13 +188,24 @@ defmodule EctoTablestore.RowTest do
   end
 
   test "repo - insert/update with :map and :array field types" do
-
     assert_raise Ecto.ConstraintError, ~r/OTSConditionCheckFail/, fn ->
-      user = %User{id: 2, name: "username2", profile: %{"level" => 1, "age" => 20}, tags: ["tag_a", "tag_b"]}
+      user = %User{
+        id: 2,
+        name: "username2",
+        profile: %{"level" => 1, "age" => 20},
+        tags: ["tag_a", "tag_b"]
+      }
+
       {:ok, _saved_user} = TestRepo.insert(user, condition: condition(:expect_exist))
     end
 
-    user = %User{id: 1, name: "username", profile: %{"level" => 1, "age" => 20}, tags: ["tag_a", "tag_b"]}
+    user = %User{
+      id: 1,
+      name: "username",
+      profile: %{"level" => 1, "age" => 20},
+      tags: ["tag_a", "tag_b"]
+    }
+
     {:ok, _saved_user} = TestRepo.insert(user, condition: condition(:ignore))
     get_user = TestRepo.get(User, id: 1)
     profile = get_user.profile
@@ -550,9 +562,12 @@ defmodule EctoTablestore.RowTest do
           update_inserted_at = update_user.inserted_at
           user1_inserted_at = user1.inserted_at
 
-          assert (update_updated_at > user1_inserted_at) and (update_updated_at > update_inserted_at) and (update_inserted_at == user1_inserted_at)
+          assert update_updated_at > user1_inserted_at and update_updated_at > update_inserted_at and
+                   update_inserted_at == user1_inserted_at
+
           assert update_user.level == nil
           assert update_user.name == new_user1_name
+
         2 ->
           updated_at = update_user.updated_at
           assert updated_at != nil and is_integer(updated_at)
@@ -566,18 +581,17 @@ defmodule EctoTablestore.RowTest do
     TestRepo.delete(%User{id: 3}, condition: condition(:expect_exist))
     TestRepo.delete(%User{id: 10}, condition: condition(:expect_exist))
     TestRepo.delete(%User{id: 11}, condition: condition(:expect_exist))
-
   end
-  
+
   test "repo - at least one attribute column" do
     u = %User2{id: "1"}
+
     assert_raise Ecto.ConstraintError, fn ->
       TestRepo.insert(u, condition: condition(:expect_not_exist))
     end
   end
 
   test "repo - get/one/get_range/batch_get with not matched filter" do
-
     input_id = "10001"
     input_desc = "order_desc"
     input_num = 1
@@ -600,11 +614,17 @@ defmodule EctoTablestore.RowTest do
     start_pks = [{"id", input_id}, {"internal_id", :inf_min}]
     end_pks = [{"id", "100010"}, {"internal_id", :inf_max}]
 
-    get_result = TestRepo.get(Order, [id: input_id, internal_id: saved_order.internal_id], filter: filter("num" == 1000))
+    get_result =
+      TestRepo.get(Order, [id: input_id, internal_id: saved_order.internal_id],
+        filter: filter("num" == 1000)
+      )
 
     assert get_result == nil
 
-    one_result = TestRepo.one(%Order{id: input_id, internal_id: saved_order.internal_id}, filter: filter("num" > 10))
+    one_result =
+      TestRepo.one(%Order{id: input_id, internal_id: saved_order.internal_id},
+        filter: filter("num" > 10)
+      )
 
     assert one_result == nil
 
@@ -612,8 +632,10 @@ defmodule EctoTablestore.RowTest do
     assert records == nil and next == nil
 
     requests = [
-      {Order, [{"id", input_id}, {"internal_id", saved_order.internal_id}], filter: filter("num" == 100)}
+      {Order, [{"id", input_id}, {"internal_id", saved_order.internal_id}],
+       filter: filter("num" == 100)}
     ]
+
     {:ok, [{Order, batch_get_result}]} = TestRepo.batch_get(requests)
 
     assert batch_get_result == nil
@@ -660,7 +682,7 @@ defmodule EctoTablestore.RowTest do
 
     writes = [
       put: [
-        {changeset4, condition: condition(:ignore), return_type: :pk},
+        {changeset4, condition: condition(:ignore), return_type: :pk}
       ]
     ]
 
@@ -673,10 +695,8 @@ defmodule EctoTablestore.RowTest do
 
     {orders, _next} = TestRepo.get_range(Order, start_pks, end_pks)
 
-    Enum.map(orders, fn(order) ->
+    Enum.map(orders, fn order ->
       TestRepo.delete(order, condition: condition(:expect_exist))
     end)
-
   end
-
 end

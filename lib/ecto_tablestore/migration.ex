@@ -40,7 +40,13 @@ defmodule EctoTablestore.Migration do
     @moduledoc false
 
     defstruct name: nil, prefix: nil, partition_key: true, meta: []
-    @type t :: %__MODULE__{name: String.t, prefix: atom | nil, partition_key: boolean(), meta: Keyword.t()}
+
+    @type t :: %__MODULE__{
+            name: String.t(),
+            prefix: atom | nil,
+            partition_key: boolean(),
+            meta: Keyword.t()
+          }
   end
 
   @doc false
@@ -94,6 +100,7 @@ defmodule EctoTablestore.Migration do
 
       if table.partition_key do
         opts = Runner.repo_config(:migration_primary_key, [])
+
         opts =
           opts
           |> Keyword.put(:partition_key, true)
@@ -107,7 +114,7 @@ defmodule EctoTablestore.Migration do
 
       unquote(block)
 
-      Runner.end_command
+      Runner.end_command()
       table
     end
   end
@@ -245,23 +252,27 @@ defmodule EctoTablestore.Migration do
       is_nil(prefix) ->
         prefix = runner_prefix || Runner.repo_config(:migration_default_prefix, nil)
         %{table | prefix: prefix}
+
       is_nil(runner_prefix) or runner_prefix == to_string(prefix) ->
         table
+
       true ->
-        raise Ecto.MigrationError, message:
-          "the :prefix option `#{prefix}` does match the migrator prefix `#{runner_prefix}`"
+        raise Ecto.MigrationError,
+          message:
+            "the :prefix option `#{prefix}` does match the migrator prefix `#{runner_prefix}`"
     end
   end
 
   defp validate_type!(type)
-    when type == :integer
-    when type == :string
-    when type == :binary do
+       when type == :integer
+       when type == :string
+       when type == :binary do
     :ok
   end
+
   defp validate_type!(type) do
     raise ArgumentError,
-      "#{inspect type} is not a valid primary key type, " <>
-      "please use an atom as :integer | :string | :binary ."
+          "#{inspect(type)} is not a valid primary key type, " <>
+            "please use an atom as :integer | :string | :binary ."
   end
 end

@@ -21,5 +21,4 @@ defmodule EctoTablestore.AutoIncSequenceTest do
     {:ok, page} = TestRepo.insert(page, condition: condition(:expect_not_exist), return_type: :pk)
     assert page.pid != nil
   end
-
 end

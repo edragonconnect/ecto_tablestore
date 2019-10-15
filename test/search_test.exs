@@ -16,7 +16,6 @@ defmodule EctoTablestore.SearchTest do
   @indexes ["test_search_index", "test_search_index2"]
 
   setup_all do
-
     TestHelper.setup_all()
 
     TestSupportSearch.initialize(@indexes)
@@ -33,17 +32,17 @@ defmodule EctoTablestore.SearchTest do
 
     {:ok, result} =
       TestRepo.search(Student, index_name,
-        columns_to_get: {ColumnReturnType.specified, ["class", "name"]},
+        columns_to_get: {ColumnReturnType.specified(), ["class", "name"]},
         search_query: [
           query: [
-            type: QueryType.match,
+            type: QueryType.match(),
             field_name: "age",
             text: "28"
           ],
           limit: 1
         ]
       )
-    
+
     assert result.total_hits == 2
     student = List.first(result.schemas)
     assert student.partition_key == "a2"
@@ -59,7 +58,7 @@ defmodule EctoTablestore.SearchTest do
       TestRepo.search(Student, index_name,
         search_query: [
           query: [
-            type: QueryType.term,
+            type: QueryType.term(),
             field_name: "age",
             term: 28
           ]
@@ -68,6 +67,7 @@ defmodule EctoTablestore.SearchTest do
 
     assert result.total_hits == 2
     assert length(result.schemas) == 2
+
     for student <- result.schemas do
       assert student.class != nil
       assert is_integer(student.age) == true
@@ -83,13 +83,13 @@ defmodule EctoTablestore.SearchTest do
       TestRepo.search(Student, index_name,
         search_query: [
           query: [
-            type: QueryType.terms,
+            type: QueryType.terms(),
             field_name: "age",
             terms: [26, 27, 22]
           ],
           sort: [
-            [type: SortType.field, field_name: "age", order: SortOrder.asc],
-            [type: SortType.field, field_name: "name", order: SortOrder.asc]
+            [type: SortType.field(), field_name: "age", order: SortOrder.asc()],
+            [type: SortType.field(), field_name: "name", order: SortOrder.asc()]
           ]
         ]
       )
@@ -111,13 +111,13 @@ defmodule EctoTablestore.SearchTest do
       TestRepo.search(Student, index_name,
         search_query: [
           query: [
-            type: QueryType.prefix,
+            type: QueryType.prefix(),
             field_name: "name",
             prefix: "n"
           ],
           sort: [
-            [type: SortType.field, field_name: "age", order: SortOrder.asc],
-            [type: SortType.field, field_name: "name", order: SortOrder.asc]
+            [type: SortType.field(), field_name: "age", order: SortOrder.asc()],
+            [type: SortType.field(), field_name: "name", order: SortOrder.asc()]
           ]
         ]
       )
@@ -128,21 +128,21 @@ defmodule EctoTablestore.SearchTest do
 
   test "wildcard query" do
     index_name = "test_search_index"
-    
+
     {:ok, result} =
       TestRepo.search(Student, index_name,
         search_query: [
           query: [
-            type: QueryType.wildcard,
+            type: QueryType.wildcard(),
             field_name: "name",
             value: "n*"
           ],
           sort: [
-            [type: SortType.field, field_name: "age", order: SortOrder.asc],
-            [type: SortType.field, field_name: "name", order: SortOrder.asc]
+            [type: SortType.field(), field_name: "age", order: SortOrder.asc()],
+            [type: SortType.field(), field_name: "name", order: SortOrder.asc()]
           ]
         ],
-        columns_to_get: ColumnReturnType.all
+        columns_to_get: ColumnReturnType.all()
       )
 
     assert result.total_hits == 9
@@ -156,7 +156,7 @@ defmodule EctoTablestore.SearchTest do
       TestRepo.search(Student, index_name,
         search_query: [
           query: [
-            type: QueryType.range,
+            type: QueryType.range(),
             field_name: "score",
             from: 60,
             to: 80,
@@ -164,8 +164,8 @@ defmodule EctoTablestore.SearchTest do
             include_lower: false
           ],
           sort: [
-            [type: SortType.field, field_name: "age", order: SortOrder.desc],
-            [type: SortType.field, field_name: "name", order: SortOrder.asc]
+            [type: SortType.field(), field_name: "age", order: SortOrder.desc()],
+            [type: SortType.field(), field_name: "name", order: SortOrder.asc()]
           ]
         ]
       )
@@ -173,7 +173,7 @@ defmodule EctoTablestore.SearchTest do
     assert result.total_hits == 2
 
     schema_pks =
-      Enum.map(result.schemas, fn(schema) ->
+      Enum.map(result.schemas, fn schema ->
         schema.partition_key
       end)
 
@@ -187,17 +187,17 @@ defmodule EctoTablestore.SearchTest do
       TestRepo.search(Student, index_name,
         search_query: [
           query: [
-            type: QueryType.bool,
+            type: QueryType.bool(),
             must: [
-              [type: QueryType.range, field_name: "age", from: 20, to: 32]
+              [type: QueryType.range(), field_name: "age", from: 20, to: 32]
             ],
             must_not: [
-              [type: QueryType.term, field_name: "age", term: 28]
+              [type: QueryType.term(), field_name: "age", term: 28]
             ]
           ],
           sort: [
-            [type: SortType.field, field_name: "age", order: SortOrder.desc],
-            [type: SortType.field, field_name: "name", order: SortOrder.asc]
+            [type: SortType.field(), field_name: "age", order: SortOrder.desc()],
+            [type: SortType.field(), field_name: "name", order: SortOrder.asc()]
           ]
         ]
       )
@@ -205,9 +205,10 @@ defmodule EctoTablestore.SearchTest do
     assert result.total_hits == 7
     assert length(result.schemas) == 7
 
-    ages = Enum.map(result.schemas, fn(schema) ->
-      schema.age
-    end)
+    ages =
+      Enum.map(result.schemas, fn schema ->
+        schema.age
+      end)
 
     assert Enum.sort(ages, &(&1 >= &2)) == ages
     assert 28 not in ages
@@ -220,16 +221,16 @@ defmodule EctoTablestore.SearchTest do
       TestRepo.search(Student, index_name,
         search_query: [
           query: [
-            type: QueryType.bool,
+            type: QueryType.bool(),
             should: [
-              [type: QueryType.range, field_name: "age", from: 20, to: 32],
-              [type: QueryType.term, field_name: "score", term: 66.78]
+              [type: QueryType.range(), field_name: "age", from: 20, to: 32],
+              [type: QueryType.term(), field_name: "score", term: 66.78]
             ],
             minimum_should_match: 2
           ],
           sort: [
-            [type: SortType.field, field_name: "age", order: SortOrder.desc],
-            [type: SortType.field, field_name: "name", order: SortOrder.asc]
+            [type: SortType.field(), field_name: "age", order: SortOrder.desc()],
+            [type: SortType.field(), field_name: "name", order: SortOrder.asc()]
           ]
         ]
       )
@@ -246,10 +247,12 @@ defmodule EctoTablestore.SearchTest do
       TestRepo.search(Student, index_name,
         search_query: [
           query: [
-            type: QueryType.nested,
+            type: QueryType.nested(),
             path: "content",
             query: [
-              type: QueryType.term, field_name: "content.header", term: "header1"
+              type: QueryType.term(),
+              field_name: "content.header",
+              term: "header1"
             ]
           ]
         ]
@@ -272,7 +275,7 @@ defmodule EctoTablestore.SearchTest do
       TestRepo.search(Student, index_name,
         search_query: [
           query: [
-            type: QueryType.exists,
+            type: QueryType.exists(),
             field_name: "comment"
           ]
         ]
@@ -285,9 +288,9 @@ defmodule EctoTablestore.SearchTest do
       TestRepo.search(Student, index_name,
         search_query: [
           query: [
-            type: QueryType.bool,
+            type: QueryType.bool(),
             must_not: [
-              [type: QueryType.exists, field_name: "comment"]
+              [type: QueryType.exists(), field_name: "comment"]
             ]
           ],
           limit: 100
@@ -297,5 +300,4 @@ defmodule EctoTablestore.SearchTest do
     assert result.next_token == nil
     assert length(result.schemas) == 10
   end
-
 end

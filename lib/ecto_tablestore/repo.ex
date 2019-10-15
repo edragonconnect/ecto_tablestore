@@ -35,7 +35,12 @@ defmodule EctoTablestore.Repo do
   ```
   """
 
-  @type search_result :: %{is_all_succeeded: boolean(), next_token: binary() | nil, schemas: list(), total_hits: integer()}
+  @type search_result :: %{
+          is_all_succeeded: boolean(),
+          next_token: binary() | nil,
+          schemas: list(),
+          total_hits: integer()
+        }
 
   defmacro __using__(opts) do
     quote bind_quoted: [opts: opts] do
@@ -73,7 +78,6 @@ defmodule EctoTablestore.Repo do
   """
   @callback search(schema :: Ecto.Schema.t(), index_name :: String.t(), options :: Keyword.t()) ::
               {:ok, search_result} | {:error, term()}
-
 
   @doc """
   Similar to `c:get/3`, please ensure schema entity has been filled with the whole primary key(s).
@@ -292,7 +296,7 @@ defmodule EctoTablestore.Repo do
   Please see `c:Ecto.Repo.start_link/2` for details.
   """
   @callback start_link(options :: Keyword.t()) ::
-            {:ok, pid}
-            | {:error, {:already_started, pid}}
-            | {:error, term}
+              {:ok, pid}
+              | {:error, {:already_started, pid}}
+              | {:error, term}
 end

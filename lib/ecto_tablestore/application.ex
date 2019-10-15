@@ -7,6 +7,7 @@ defmodule EctoTablestore.Application do
     children = [
       {DynamicSupervisor, strategy: :one_for_one, name: EctoTablestore.MigratorSupervisor}
     ]
+
     opts = [strategy: :one_for_one, name: EctoTablestore.Supervisor]
     Supervisor.start_link(children, opts)
   end

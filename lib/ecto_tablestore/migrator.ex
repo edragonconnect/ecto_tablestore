@@ -7,7 +7,7 @@ defmodule EctoTablestore.Migrator do
     migration_source
     |> migrations_for()
     |> Enum.map(&load_migration!/1)
-    |> Enum.map(fn({version, migration_module}) ->
+    |> Enum.map(fn {version, migration_module} ->
       attempt(repo, version, migration_module, :change, opts)
     end)
   end
@@ -83,7 +83,8 @@ defmodule EctoTablestore.Migrator do
     if mod = Enum.find(loaded_modules, &migration?/1) do
       {version, mod}
     else
-      raise Ecto.MigrationError, "file #{Path.relative_to_cwd(file)} does not define an EctoTablestore.Migration"
+      raise Ecto.MigrationError,
+            "file #{Path.relative_to_cwd(file)} does not define an EctoTablestore.Migration"
     end
   end
 
@@ -97,5 +98,4 @@ defmodule EctoTablestore.Migrator do
       :ok
     end
   end
-
 end

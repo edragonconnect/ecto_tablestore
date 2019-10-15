@@ -48,12 +48,12 @@ defmodule Mix.Tasks.Ecto.Ots.Migrate do
 
   @impl true
   def run(args) do
-
     repos = parse_repo(args)
 
-    {opts, _} = OptionParser.parse! args, strict: @switches, aliases: @aliases
+    {opts, _} = OptionParser.parse!(args, strict: @switches, aliases: @aliases)
 
-    opts = if opts[:to] || opts[:step] || opts[:all], do: opts, else: Keyword.put(opts, :all, true)
+    opts =
+      if opts[:to] || opts[:step] || opts[:all], do: opts, else: Keyword.put(opts, :all, true)
 
     {:ok, _} = Application.ensure_all_started(:ecto_tablestore)
 
@@ -65,11 +65,12 @@ defmodule Mix.Tasks.Ecto.Ots.Migrate do
       fun = &migrator.(&1, path, opts)
 
       case EctoTablestore.Migrator.with_repo(repo, fun, [mode: :temporary] ++ opts) do
-        {:ok, _migrated, _apps} -> :ok
-        {:error, error} -> Mix.raise "Could not start repo #{inspect repo}, error: #{inspect error}"
+        {:ok, _migrated, _apps} ->
+          :ok
+
+        {:error, error} ->
+          Mix.raise("Could not start repo #{inspect(repo)}, error: #{inspect(error)}")
       end
     end
-
   end
-
 end

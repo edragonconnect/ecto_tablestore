@@ -3,7 +3,7 @@ defmodule EctoTablestore.Migration.Runner do
   use Agent, restart: :temporary
 
   alias EctoTablestore.Migration.Table
-  
+
   require Logger
 
   def run(repo, version, module, operation, opts) do
@@ -11,10 +11,12 @@ defmodule EctoTablestore.Migration.Runner do
     log = %{level: level}
     args = {self(), repo, module, log}
 
-    {:ok, runner} = DynamicSupervisor.start_child(EctoTablestore.MigratorSupervisor, {__MODULE__, args})
+    {:ok, runner} =
+      DynamicSupervisor.start_child(EctoTablestore.MigratorSupervisor, {__MODULE__, args})
+
     metadata(runner, opts)
 
-    log(level, "== Running #{version} #{inspect module}.#{operation}/0")
+    log(level, "== Running #{version} #{inspect(module)}.#{operation}/0")
     {time, _} = :timer.tc(fn -> perform_operation(module, operation) end)
     log(level, "== Migrated #{version} in #{inspect(div(time, 100_000) / 10)}s")
 
@@ -38,11 +40,11 @@ defmodule EctoTablestore.Migration.Runner do
   end
 
   def end_command do
-    Agent.update runner(), fn state ->
+    Agent.update(runner(), fn state ->
       {operation, object} = state.command
       command = {operation, object, Enum.reverse(state.subcommands)}
       %{state | command: nil, subcommands: [], commands: [command | state.commands]}
-    end
+    end)
   end
 
   def subcommand(subcommand) do
@@ -50,13 +52,15 @@ defmodule EctoTablestore.Migration.Runner do
       Agent.get_and_update(runner(), fn
         %{command: nil} = state ->
           {:error, state}
+
         state ->
-          {:ok, update_in(state.subcommands, &[subcommand|&1])}
+          {:ok, update_in(state.subcommands, &[subcommand | &1])}
       end)
 
     case reply do
       :ok ->
         :ok
+
       :error ->
         raise Ecto.MigrationError, message: "cannot execute command outside of block"
     end
@@ -67,6 +71,7 @@ defmodule EctoTablestore.Migration.Runner do
       Agent.get_and_update(runner(), fn
         %{command: nil} = state ->
           {:ok, %{state | subcommands: [], commands: [command | state.commands]}}
+
         %{command: _} = state ->
           {:error, %{state | command: nil}}
       end)
@@ -74,6 +79,7 @@ defmodule EctoTablestore.Migration.Runner do
     case reply do
       :ok ->
         :ok
+
       :error ->
         raise Ecto.MigrationError, "cannot execute nested commands"
     end
@@ -84,6 +90,7 @@ defmodule EctoTablestore.Migration.Runner do
       Agent.get_and_update(runner(), fn
         %{command: nil} = state ->
           {:ok, %{state | command: command}}
+
         %{command: _} = state ->
           {:error, %{state | command: command}}
       end)
@@ -91,6 +98,7 @@ defmodule EctoTablestore.Migration.Runner do
     case reply do
       :ok ->
         :ok
+
       :error ->
         raise Ecto.MigrationError, "cannot execute nested commands"
     end
@@ -103,7 +111,7 @@ defmodule EctoTablestore.Migration.Runner do
   def prefix do
     case Process.get(:ecto_tablestore_migration) do
       %{prefix: prefix} -> prefix
-      _ -> "could not find migration runner process for #{inspect self()}"
+      _ -> "could not find migration runner process for #{inspect(self())}"
     end
   end
 
@@ -123,6 +131,7 @@ defmodule EctoTablestore.Migration.Runner do
 
   defp metadata(runner, opts) do
     prefix = opts[:prefix]
+
     Process.put(:ecto_tablestore_migration, %{runner: runner, prefix: prefix && to_string(prefix)})
   end
 
@@ -132,7 +141,7 @@ defmodule EctoTablestore.Migration.Runner do
   defp runner do
     case Process.get(:ecto_tablestore_migration) do
       %{runner: runner} -> runner
-      _ -> raise "could not find migration runner process for #{inspect self()}"
+      _ -> raise "could not find migration runner process for #{inspect(self())}"
     end
   end
 
@@ -145,18 +154,27 @@ defmodule EctoTablestore.Migration.Runner do
     end
   end
 
-  defp do_execute(repo, {:create, %Table{} = _table, columns} = command) when length(columns) <= 4 do
+  defp do_execute(repo, {:create, %Table{} = _table, columns} = command)
+       when length(columns) <= 4 do
     command = verify_command_to_table(command)
     repo.__adapter__.execute_ddl(repo, command)
   end
+
   defp do_execute(_repo, {:create, _table, columns}) do
-    raise Ecto.MigrationError, message: "can only have up to 4 primary keys, but get #{length(columns)} primary keys: #{inspect columns}"
+    raise Ecto.MigrationError,
+      message:
+        "can only have up to 4 primary keys, but get #{length(columns)} primary keys: #{
+          inspect(columns)
+        }"
   end
 
-  defp verify_command_to_table({:create, %Table{partition_key: true} = _table, columns} = command) when length(columns) == 1 do
+  defp verify_command_to_table({:create, %Table{partition_key: true} = _table, columns} = command)
+       when length(columns) == 1 do
     command
   end
-  defp verify_command_to_table({:create, %Table{partition_key: true} = table, columns} = command) when length(columns) > 1 do
+
+  defp verify_command_to_table({:create, %Table{partition_key: true} = table, columns} = command)
+       when length(columns) > 1 do
     [_auto_generated_id_col, {_, _field_name, _field_type, opts} | _] = columns
     # Use defined partition key to instead of the auto generated.
     if Keyword.get(opts, :partition_key, false) do
@@ -165,8 +183,10 @@ defmodule EctoTablestore.Migration.Runner do
       command
     end
   end
-  defp verify_command_to_table({:create, %Table{partition_key: false} = _table, _columns} = command) do
+
+  defp verify_command_to_table(
+         {:create, %Table{partition_key: false} = _table, _columns} = command
+       ) do
     command
   end
-
 end
