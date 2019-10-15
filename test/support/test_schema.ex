@@ -14,8 +14,8 @@ defmodule EctoTablestore.TestSchema.Order do
 
   def test_changeset(order, params \\ %{}) do
     order
-    |> cast(params, [:name, :num])
-    |> validate_required([:name, :num])
+    |> cast(params, [:id, :name, :num])
+    |> validate_required([:id, :name, :num])
   end
 end
 

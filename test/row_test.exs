@@ -622,4 +622,61 @@ defmodule EctoTablestore.RowTest do
       condition: condition(:expect_exist)
     )
   end
+
+  test "repo - insert/batch_write:put with changeset" do
+    id = "1001"
+    changeset = Order.test_changeset(%Order{}, %{id: id, name: "test_name", num: 100})
+    {:ok, new_order} = TestRepo.insert(changeset, condition: condition(:ignore))
+    assert new_order.id == id and new_order.name == "test_name" and new_order.num == 100
+
+    id2 = "1002"
+    changeset2 = Order.test_changeset(%Order{}, %{id: id2, name: "test_name2", num: 102})
+    id3 = "1003"
+    changeset3 = Order.test_changeset(%Order{}, %{id: id3, name: "test_name2", num: 102})
+
+    writes = [
+      put: [
+        {changeset2, condition: condition(:ignore), return_type: :pk},
+        {changeset3, condition: condition(:ignore)}
+      ]
+    ]
+
+    {:ok, batch_writes_result} = TestRepo.batch_write(writes)
+
+    [{Order, [put: result_items]}] = batch_writes_result
+
+    [{:ok, result1}, {:ok, result2}] = result_items
+
+    assert result1.internal_id != nil and result1.id == "1002"
+    # since the second item does not require return pk
+    assert result2.internal_id == nil and result2.id == "1003"
+
+    id4 = "1004"
+    changeset4 = Order.test_changeset(%Order{}, %{id: id4, name: "test_name2"})
+
+    {:error, changeset} = TestRepo.insert(changeset4, condition: condition(:ignore))
+
+    assert changeset.valid? == false
+
+    writes = [
+      put: [
+        {changeset4, condition: condition(:ignore), return_type: :pk},
+      ]
+    ]
+
+    assert_raise RuntimeError, ~r/Using invalid changeset/, fn ->
+      TestRepo.batch_write(writes)
+    end
+
+    start_pks = [{"id", "1001"}, {"internal_id", :inf_min}]
+    end_pks = [{"id", "1003"}, {"internal_id", :inf_max}]
+
+    {orders, _next} = TestRepo.get_range(Order, start_pks, end_pks)
+
+    Enum.map(orders, fn(order) ->
+      TestRepo.delete(order, condition: condition(:expect_exist))
+    end)
+
+  end
+
 end

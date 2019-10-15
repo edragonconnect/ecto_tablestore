@@ -1102,10 +1102,44 @@ defmodule Ecto.Adapters.Tablestore do
   end
 
   defp do_map_batch_writes(
+         :put,
+         {repo, {%Ecto.Changeset{valid?: true, data: %{__meta__: meta}} = changeset, options}}
+       ) do
+    schema = meta.schema
+    source = schema.__schema__(:source)
+    autogen_fields = autogen_fields(schema)
+    fields = Keyword.merge(autogen_fields, Map.to_list(changeset.changes))
+    schema_entity = struct(schema, fields)
+
+    {pks, attrs, _autogenerate_id_name} = pks_and_attrs_to_put_row(repo, schema, fields)
+    {source, pks, attrs, options, schema_entity}
+  end
+
+  defp do_map_batch_writes(
+         :put,
+         {repo, %Ecto.Changeset{valid?: true} = changeset}
+       ) do
+    do_map_batch_writes(:put, {repo, {changeset, []}})
+  end
+
+  defp do_map_batch_writes(
+         :put,
+         {_repo, {%Ecto.Changeset{valid?: false} = changeset, _options}}
+       ) do
+    raise "Using invalid changeset: #{inspect(changeset)} in batch writes"
+  end
+
+  defp do_map_batch_writes(
+         :put,
+         {_repo, %Ecto.Changeset{valid?: false} = changeset}
+       ) do
+    raise "Using invalid changeset: #{inspect(changeset)} in batch writes"
+  end
+
+  defp do_map_batch_writes(
          :update,
          {%Ecto.Changeset{valid?: true, data: %{__meta__: meta}} = changeset, options}
        ) do
-
     schema = meta.schema
     source = schema.__schema__(:source)
     entity = changeset.data
