@@ -261,7 +261,27 @@ defmodule EctoTablestore.Repo do
             ) :: {:ok, Ecto.Schema.t()} | {:error, term()}
 
   @doc """
-  Please see `c:Ecto.Repo.delete/2` for details.
+  Delete a struct using its primary key.
+
+  ## Options
+
+  * `:condition`, this option is required, whether to add conditional judgment before data delete.
+
+    Two kinds of update condition types as below:
+
+      As `condition(:expect_exist)` means the primary key(s) can match a row to delete, we also can add
+      some compare expressions for the attribute columns, e.g.
+
+        1. condition(:expect_exist, "attr1" == value1 and "attr2" > 1)
+        2. condition(:expect_exist, "attr1" != value1)
+        3. condition(:expect_exist, "attr1" > 100 or "attr2" < 1000)
+
+      As `condition(:ignore)` means DO NOT do any condition validation before delete.
+  * `:transaction_id`, delete under local transaction in a partition key.
+  * `:stale_error_field` - The field where stale errors will be added in the returning changeset.
+    This option can be used to avoid raising `Ecto.StaleEntryError`.
+  * `:stale_error_message` - The message to add to the configured `:stale_error_field` when stale
+    errors happen, defaults to "is stale".
   """
   @callback delete(
               struct_or_changeset :: Ecto.Schema.t() | Ecto.Changeset.t(),
@@ -286,7 +306,10 @@ defmodule EctoTablestore.Repo do
 
       As `condition(:ignore)` means DO NOT do any condition validation before update.
   * `:transaction_id`, update under local transaction in a partition key.
-
+  * `:stale_error_field` - The field where stale errors will be added in the returning changeset.
+    This option can be used to avoid raising `Ecto.StaleEntryError`.
+  * `:stale_error_message` - The message to add to the configured `:stale_error_field` when stale
+    errors happen, defaults to "is stale".
   """
   @callback update(
               changeset :: Ecto.Changeset.t(),

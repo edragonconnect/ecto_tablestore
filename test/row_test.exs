@@ -699,4 +699,46 @@ defmodule EctoTablestore.RowTest do
       TestRepo.delete(order, condition: condition(:expect_exist))
     end)
   end
+
+  test "repo - check stale_error" do
+    input_id = "10001"
+    input_desc = "order_desc"
+    input_num = 10
+    increment = 1
+    input_price = 99.9
+    order = %Order{id: input_id, desc: input_desc, num: input_num, price: input_price}
+    {:ok, saved_order} = TestRepo.insert(order, condition: condition(:ignore), return_type: :pk)
+
+    changeset =
+      saved_order
+      |> Ecto.Changeset.change(num: {:increment, increment}, desc: nil)
+
+    # `stale_error_field` can be any value of atom.
+    stale_error_field = :num
+    stale_error_message = "check num condition failed"
+
+    {:error, invalid_changeset} = TestRepo.update(changeset, condition: condition(:expect_exist, "num" > 1000), stale_error_field: stale_error_field, stale_error_message: stale_error_message)
+
+    {^stale_error_message, error} = Keyword.get(invalid_changeset.errors, stale_error_field)
+    assert error == [stale: true]
+
+    {:ok, _} = TestRepo.delete(saved_order, condition: condition(:expect_exist))
+  end
+
+  test "repo - check_constraint" do
+    check_constraint_field = :condition
+    check_constraint_name = "OTSConditionCheckFail"
+    check_constraint_message = "ots condition check fail"
+
+    user =
+      %User2{id: "100"}
+      |> Ecto.Changeset.change(name: "name2")
+      |> Ecto.Changeset.check_constraint(check_constraint_field, name: check_constraint_name, message: check_constraint_message)
+
+    {:error, invalid_changeset} = TestRepo.insert(user, condition: condition(:expect_exist), return_type: :pk)
+    {^check_constraint_message, error_constraint} = Keyword.get(invalid_changeset.errors, check_constraint_field)
+    error_constraint_name = Keyword.get(error_constraint, :constraint_name)
+    # Use ots's error code as check_constraint_name.
+    assert error_constraint_name == check_constraint_name
+  end
 end

@@ -65,5 +65,6 @@ defmodule EctoTablestore.TestSchema.User2 do
 
   tablestore_schema "ecto_ots_test_user2" do
     field(:id, :string, primary_key: true)
+    field(:name, :string)
   end
 end

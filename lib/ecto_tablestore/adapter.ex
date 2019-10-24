@@ -204,18 +204,19 @@ defmodule Ecto.Adapters.Tablestore do
 
       {:error, error} ->
         Logger.error(fn -> "ecto_tablestore insert operation occur error: #{inspect(error)}" end)
-        {:invalid, [{:error, error_to_string(error)}]}
+        {:invalid, [{:check, error.code}]}
     end
   end
 
   @impl true
   def delete(repo, schema_meta, filters, options) do
+
     result =
       TablestoreMixin.execute_delete_row(
         repo.instance,
         schema_meta.source,
         format_key_to_str(filters),
-        options
+        Keyword.take(options, [:condition, :transaction_id])
       )
 
     case result do
@@ -228,9 +229,8 @@ defmodule Ecto.Adapters.Tablestore do
         case error do
           %Error{code: code} when code == @ots_condition_check_fail ->
             {:error, :stale}
-
           _ ->
-            {:invalid, [{:error, error_to_string(error)}]}
+            {:invalid, [{:check, error.code}]}
         end
     end
   end
@@ -264,7 +264,13 @@ defmodule Ecto.Adapters.Tablestore do
 
       {:error, error} ->
         Logger.error(fn -> "ecto_tablestore update operation occur error: #{inspect(error)}" end)
-        {:invalid, [{:error, error_to_string(error)}]}
+
+        case error do
+          %Error{code: code} when code == @ots_condition_check_fail ->
+            {:error, :stale}
+          _ ->
+            {:invalid, [{:check, error.code}]}
+        end
     end
   end
 
@@ -1458,9 +1464,4 @@ defmodule Ecto.Adapters.Tablestore do
     }
   end
 
-  defp error_to_string(error) do
-    "code: #{error.code} - message: #{error.message} - request_id: #{error.request_id} - http_status_code: #{
-      error.http_status_code
-    } - datetime: #{error.datetime}"
-  end
 end
