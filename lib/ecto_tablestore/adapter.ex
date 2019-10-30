@@ -215,7 +215,7 @@ defmodule Ecto.Adapters.Tablestore do
       TablestoreMixin.execute_delete_row(
         repo.instance,
         schema_meta.source,
-        format_key_to_str(filters),
+        prepare_primary_keys_by_order(schema_meta.schema, filters),
         Keyword.take(options, [:condition, :transaction_id])
       )
 
@@ -237,6 +237,7 @@ defmodule Ecto.Adapters.Tablestore do
 
   @impl true
   def update(repo, schema_meta, fields, filters, _returning, options) do
+
     schema = schema_meta.schema
 
     options =
@@ -248,7 +249,7 @@ defmodule Ecto.Adapters.Tablestore do
       TablestoreMixin.execute_update_row(
         repo.instance,
         schema_meta.source,
-        format_key_to_str(filters),
+        prepare_primary_keys_by_order(schema, filters),
         options
       )
 
@@ -325,7 +326,7 @@ defmodule Ecto.Adapters.Tablestore do
       TablestoreMixin.execute_get_row(
         meta.instance,
         schema.__schema__(:source),
-        format_key_to_str(ids),
+        prepare_primary_keys_by_order(schema, ids),
         options
       )
 
@@ -345,7 +346,7 @@ defmodule Ecto.Adapters.Tablestore do
     prepared_start_primary_keys =
       cond do
         is_list(start_primary_keys) ->
-          format_key_to_str(start_primary_keys)
+          prepare_primary_keys_by_order(schema, start_primary_keys)
 
         is_binary(start_primary_keys) ->
           start_primary_keys
@@ -359,7 +360,7 @@ defmodule Ecto.Adapters.Tablestore do
         meta.instance,
         schema.__schema__(:source),
         prepared_start_primary_keys,
-        format_key_to_str(end_primary_keys),
+        prepare_primary_keys_by_order(schema, end_primary_keys),
         options
       )
 
@@ -873,32 +874,36 @@ defmodule Ecto.Adapters.Tablestore do
     end
   end
 
-  defp format_key_to_str(items) do
-    format_key_to_str(items, [])
+  defp prepare_primary_keys_by_order(schema_entity) do
+    schema_entity
+    |> Ecto.primary_key()
+    |> Enum.map(fn({key, value}) ->
+      {Atom.to_string(key), map_key_value(value)}
+    end)
   end
 
-  defp format_key_to_str([], prepared) when is_list(prepared) do
-    Enum.reverse(prepared)
-  end
+  defp prepare_primary_keys_by_order(schema, input_primary_keys) when is_list(input_primary_keys) do
+    struct(schema)
+    |> Ecto.primary_key()
+    |> Enum.map(fn({key, _}) ->
+      key_str = Atom.to_string(key)
 
-  defp format_key_to_str([{_key, nil} | rest], prepared) when is_list(prepared) do
-    format_key_to_str(rest, prepared)
-  end
+      value =
+        input_primary_keys
+        |> Enum.find_value(fn({input_k, input_v}) ->
+          cond do
+            is_atom(input_k) and input_k == key ->
+              input_v
+            is_bitstring(input_k) and input_k == key_str ->
+              input_v
+            true ->
+              nil
+          end
+        end)
+        |> map_key_value()
 
-  defp format_key_to_str([{key, value} | rest], prepared)
-       when is_atom(key) and is_list(prepared) do
-    update = [{Atom.to_string(key), map_key_value(value)} | prepared]
-    format_key_to_str(rest, update)
-  end
-
-  defp format_key_to_str([{key, value} | rest], prepared)
-       when is_bitstring(key) and is_list(prepared) do
-    update = [{key, map_key_value(value)} | prepared]
-    format_key_to_str(rest, update)
-  end
-
-  defp format_key_to_str([item | _rest], _prepared) do
-    raise "Invalid key item: #{inspect(item)}, expect its key as `:string` or `:atom`"
+      {key_str, value}
+    end)
   end
 
   defp map_key_value(:inf_min), do: PKType.inf_min()
@@ -917,7 +922,7 @@ defmodule Ecto.Adapters.Tablestore do
         MapSet.new([]),
         fn %{__meta__: meta} = schema_entity, acc ->
           {
-            format_key_to_str(Ecto.primary_key(schema_entity)),
+            prepare_primary_keys_by_order(schema_entity),
             MapSet.put(acc, meta.schema)
           }
         end
@@ -993,7 +998,7 @@ defmodule Ecto.Adapters.Tablestore do
     request =
       TablestoreMixin.execute_get(
         source,
-        format_ids_groups(ids_groups),
+        format_ids_groups(schema, ids_groups),
         options
       )
 
@@ -1077,7 +1082,7 @@ defmodule Ecto.Adapters.Tablestore do
 
   defp do_map_batch_writes(:delete, {%{__meta__: meta} = schema_entity, options}) do
     source = meta.schema.__schema__(:source)
-    ids = Ecto.primary_key(schema_entity) |> format_key_to_str()
+    ids = prepare_primary_keys_by_order(schema_entity)
     options = generate_condition_options(schema_entity, options)
     {source, ids, options, schema_entity}
   end
@@ -1085,7 +1090,7 @@ defmodule Ecto.Adapters.Tablestore do
   defp do_map_batch_writes(:delete, {schema, ids, options}) do
     source = schema.__schema__(:source)
     schema_entity = struct(schema, ids)
-    ids = format_key_to_str(ids)
+    ids = prepare_primary_keys_by_order(schema_entity)
     {source, ids, options, schema_entity}
   end
 
@@ -1170,7 +1175,6 @@ defmodule Ecto.Adapters.Tablestore do
     schema = meta.schema
     source = schema.__schema__(:source)
     entity = changeset.data
-    ids = Ecto.primary_key(entity)
 
     options = generate_condition_options(entity, options)
 
@@ -1185,7 +1189,7 @@ defmodule Ecto.Adapters.Tablestore do
 
     schema_entity = do_map_merge(changeset.data, changes, true)
 
-    {source, format_key_to_str(ids), merge_options(options, update_attrs), schema_entity}
+    {source, prepare_primary_keys_by_order(entity), merge_options(options, update_attrs), schema_entity}
   end
 
   defp do_map_batch_writes(
@@ -1203,17 +1207,17 @@ defmodule Ecto.Adapters.Tablestore do
     raise "Using invalid changeset: #{inspect(changeset)} in batch writes"
   end
 
-  defp format_ids_groups([ids] = ids_groups) when is_list(ids) do
+  defp format_ids_groups(schema, [ids] = ids_groups) when is_list(ids) do
     ids_groups
     |> Enum.map(fn ids_group ->
       if is_list(ids_group),
-        do: format_key_to_str(ids_group),
-        else: format_key_to_str([ids_group])
+        do: prepare_primary_keys_by_order(schema, ids_group),
+        else: prepare_primary_keys_by_order(schema, [ids_group])
     end)
   end
 
-  defp format_ids_groups(ids_groups) when is_list(ids_groups) do
-    format_ids_groups([ids_groups])
+  defp format_ids_groups(schema, ids_groups) when is_list(ids_groups) do
+    format_ids_groups(schema, [ids_groups])
   end
 
   defp autogen_fields(schema) do

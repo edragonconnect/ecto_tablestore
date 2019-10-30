@@ -75,7 +75,7 @@ defmodule EctoTablestore.RowTest do
     assert query_result_by_get == query_result_by_one
 
     query_result2_by_get =
-      TestRepo.get(Order, [id: input_id, internal_id: saved_order_internal_id],
+      TestRepo.get(Order, [internal_id: saved_order_internal_id, id: input_id],
         columns_to_get: ["num", "desc"]
       )
 
@@ -103,7 +103,7 @@ defmodule EctoTablestore.RowTest do
       TestRepo.delete(%Order{id: input_id})
     end
 
-    order = %Order{id: input_id, internal_id: saved_order_internal_id}
+    order = %Order{internal_id: saved_order_internal_id, id: input_id}
 
     assert_raise Ecto.StaleEntryError, fn ->
       TestRepo.delete(order, condition: condition(:expect_exist, "num" == "invalid_num"))
@@ -153,7 +153,7 @@ defmodule EctoTablestore.RowTest do
     assert updated_order.num == new_input_num + increment
     assert updated_order.name == updated_order_name
 
-    order = TestRepo.get(Order, id: input_id, internal_id: saved_order.internal_id)
+    order = TestRepo.get(Order, internal_id: saved_order.internal_id, id: input_id)
 
     assert order.desc == nil
     assert order.num == new_input_num + increment
@@ -165,7 +165,7 @@ defmodule EctoTablestore.RowTest do
   end
 
   test "repo - update with timestamps" do
-    user = %User{id: 1, name: "username", level: 10}
+    user = %User{name: "username", level: 10, id: 1}
     {:ok, saved_user} = TestRepo.insert(user, condition: condition(:ignore))
     assert saved_user.updated_at == saved_user.inserted_at
     assert is_integer(saved_user.updated_at)
@@ -190,10 +190,10 @@ defmodule EctoTablestore.RowTest do
   test "repo - insert/update with :map and :array field types" do
     assert_raise Ecto.ConstraintError, ~r/OTSConditionCheckFail/, fn ->
       user = %User{
-        id: 2,
         name: "username2",
         profile: %{"level" => 1, "age" => 20},
-        tags: ["tag_a", "tag_b"]
+        tags: ["tag_a", "tag_b"],
+        id: 2
       }
 
       {:ok, _saved_user} = TestRepo.insert(user, condition: condition(:expect_exist))
@@ -240,8 +240,8 @@ defmodule EctoTablestore.RowTest do
         saved_order
       end)
 
-    start_pks = [{"id", "1"}, {"internal_id", :inf_min}]
-    end_pks = [{"id", "3"}, {"internal_id", :inf_max}]
+    start_pks = [{"id", "1"}, {"internal_id", :inf_min}, {"id", "1"}]
+    end_pks = [{"id", "3"}, {"internal_id", :inf_max}, {"id", "3"}]
     {orders, next_start_primary_key} = TestRepo.get_range(Order, start_pks, end_pks)
     assert next_start_primary_key == nil
     assert length(orders) == 3
@@ -710,7 +710,7 @@ defmodule EctoTablestore.RowTest do
     {:ok, saved_order} = TestRepo.insert(order, condition: condition(:ignore), return_type: :pk)
 
     changeset =
-      saved_order
+      %Order{internal_id: saved_order.internal_id, id: saved_order.id}
       |> Ecto.Changeset.change(num: {:increment, increment}, desc: nil)
 
     # `stale_error_field` can be any value of atom.
@@ -741,4 +741,5 @@ defmodule EctoTablestore.RowTest do
     # Use ots's error code as check_constraint_name.
     assert error_constraint_name == check_constraint_name
   end
+
 end
