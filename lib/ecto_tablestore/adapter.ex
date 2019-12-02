@@ -203,7 +203,6 @@ defmodule Ecto.Adapters.Tablestore do
         end
 
       {:error, error} ->
-        Logger.error(fn -> "ecto_tablestore insert operation occur error: #{inspect(error)}" end)
         {:invalid, [{:check, error.code}]}
     end
   end
@@ -224,8 +223,6 @@ defmodule Ecto.Adapters.Tablestore do
         {:ok, []}
 
       {:error, error} ->
-        Logger.error(fn -> "ecto_tablestore delete operation occur error: #{inspect(error)}" end)
-
         case error do
           %Error{code: code} when code == @ots_condition_check_fail ->
             {:error, :stale}
@@ -264,8 +261,6 @@ defmodule Ecto.Adapters.Tablestore do
         end
 
       {:error, error} ->
-        Logger.error(fn -> "ecto_tablestore update operation occur error: #{inspect(error)}" end)
-
         case error do
           %Error{code: code} when code == @ots_condition_check_fail ->
             {:error, :stale}
