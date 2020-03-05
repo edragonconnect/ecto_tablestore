@@ -29,7 +29,7 @@ defmodule EctoTablestore.SearchTest do
       TestRepo.search(Student, index_name,
         columns_to_get: ["class", "name"],
         search_query: [
-          query: match_query("age", "28")
+          query: match_query("age", "28"),
           limit: 1
         ]
       )
