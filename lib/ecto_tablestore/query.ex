@@ -1,12 +1,10 @@
 defmodule EctoTablestore.Query do
   @moduledoc false
 
-  import ExAliyunOts.Mixin, only: [condition: 1, condition: 2, filter: 1]
+  import ExAliyunOts, only: [condition: 2, filter: 1]
 
-  defmacro condition(existence) do
-    quote do
-      condition(unquote(existence))
-    end
+  def condition(existence) do
+    ExAliyunOts.condition(existence)
   end
 
   defmacro condition(existence, expr) do

@@ -6,12 +6,7 @@ defmodule EctoTablestore.SearchTest do
   alias EctoTablestore.TestRepo
   alias EctoTablestore.TestSchema.Student
 
-  alias ExAliyunOts.Const.Search.{ColumnReturnType, QueryType, SortType, SortOrder}
-
-  require ColumnReturnType
-  require QueryType
-  require SortType
-  require SortOrder
+  import ExAliyunOts.Search
 
   @indexes ["test_search_index", "test_search_index2"]
 
@@ -32,13 +27,9 @@ defmodule EctoTablestore.SearchTest do
 
     {:ok, result} =
       TestRepo.search(Student, index_name,
-        columns_to_get: {ColumnReturnType.specified(), ["class", "name"]},
+        columns_to_get: ["class", "name"],
         search_query: [
-          query: [
-            type: QueryType.match(),
-            field_name: "age",
-            text: "28"
-          ],
+          query: match_query("age", "28")
           limit: 1
         ]
       )
@@ -57,11 +48,7 @@ defmodule EctoTablestore.SearchTest do
     {:ok, result} =
       TestRepo.search(Student, index_name,
         search_query: [
-          query: [
-            type: QueryType.term(),
-            field_name: "age",
-            term: 28
-          ]
+          query: term_query("age", 28)
         ]
       )
 
@@ -82,14 +69,10 @@ defmodule EctoTablestore.SearchTest do
     {:ok, result} =
       TestRepo.search(Student, index_name,
         search_query: [
-          query: [
-            type: QueryType.terms(),
-            field_name: "age",
-            terms: [26, 27, 22]
-          ],
+          query: terms_query("age", [26, 27, 22]),
           sort: [
-            [type: SortType.field(), field_name: "age", order: SortOrder.asc()],
-            [type: SortType.field(), field_name: "name", order: SortOrder.asc()]
+            field_sort("age", order: :asc),
+            field_sort("name", order: :asc)
           ]
         ]
       )
@@ -110,14 +93,10 @@ defmodule EctoTablestore.SearchTest do
     {:ok, result} =
       TestRepo.search(Student, index_name,
         search_query: [
-          query: [
-            type: QueryType.prefix(),
-            field_name: "name",
-            prefix: "n"
-          ],
+          query: prefix_query("name", "n"),
           sort: [
-            [type: SortType.field(), field_name: "age", order: SortOrder.asc()],
-            [type: SortType.field(), field_name: "name", order: SortOrder.asc()]
+            field_sort("age", order: :asc),
+            field_sort("name", order: :asc)
           ]
         ]
       )
@@ -132,17 +111,13 @@ defmodule EctoTablestore.SearchTest do
     {:ok, result} =
       TestRepo.search(Student, index_name,
         search_query: [
-          query: [
-            type: QueryType.wildcard(),
-            field_name: "name",
-            value: "n*"
-          ],
+          query: wildcard_query("name", "n*"),
           sort: [
-            [type: SortType.field(), field_name: "age", order: SortOrder.asc()],
-            [type: SortType.field(), field_name: "name", order: SortOrder.asc()]
+            field_sort("age", order: :asc),
+            field_sort("name", order: :asc)
           ]
         ],
-        columns_to_get: ColumnReturnType.all()
+        columns_to_get: :all
       )
 
     assert result.total_hits == 9
@@ -155,17 +130,15 @@ defmodule EctoTablestore.SearchTest do
     {:ok, result} =
       TestRepo.search(Student, index_name,
         search_query: [
-          query: [
-            type: QueryType.range(),
-            field_name: "score",
+          query: range_query("score",
             from: 60,
             to: 80,
             include_upper: false,
             include_lower: false
-          ],
+          ),
           sort: [
-            [type: SortType.field(), field_name: "age", order: SortOrder.desc()],
-            [type: SortType.field(), field_name: "name", order: SortOrder.asc()]
+            field_sort("age", order: :desc),
+            field_sort("name", order: :asc)
           ]
         ]
       )
@@ -186,18 +159,13 @@ defmodule EctoTablestore.SearchTest do
     {:ok, result} =
       TestRepo.search(Student, index_name,
         search_query: [
-          query: [
-            type: QueryType.bool(),
-            must: [
-              [type: QueryType.range(), field_name: "age", from: 20, to: 32]
-            ],
-            must_not: [
-              [type: QueryType.term(), field_name: "age", term: 28]
-            ]
-          ],
+          query: bool_query(
+            must: range_query("age", from: 20, to: 32),
+            must_not: term_query("age", 28)
+          ),
           sort: [
-            [type: SortType.field(), field_name: "age", order: SortOrder.desc()],
-            [type: SortType.field(), field_name: "name", order: SortOrder.asc()]
+            field_sort("age", order: :desc),
+            field_sort("name", order: :asc),
           ]
         ]
       )
@@ -220,17 +188,16 @@ defmodule EctoTablestore.SearchTest do
     {:ok, result} =
       TestRepo.search(Student, index_name,
         search_query: [
-          query: [
-            type: QueryType.bool(),
+          query: bool_query(
             should: [
-              [type: QueryType.range(), field_name: "age", from: 20, to: 32],
-              [type: QueryType.term(), field_name: "score", term: 66.78]
+              range_query("age", from: 20, to: 32),
+              term_query("score", 66.78)
             ],
             minimum_should_match: 2
-          ],
+          ),
           sort: [
-            [type: SortType.field(), field_name: "age", order: SortOrder.desc()],
-            [type: SortType.field(), field_name: "name", order: SortOrder.asc()]
+            field_sort("age", order: :desc),
+            field_sort("name", order: :asc),
           ]
         ]
       )
@@ -246,15 +213,10 @@ defmodule EctoTablestore.SearchTest do
     {:ok, result} =
       TestRepo.search(Student, index_name,
         search_query: [
-          query: [
-            type: QueryType.nested(),
-            path: "content",
-            query: [
-              type: QueryType.term(),
-              field_name: "content.header",
-              term: "header1"
-            ]
-          ]
+          query: nested_query(
+            "content",
+            term_query("content.header", "header1")
+          )
         ]
       )
 
@@ -274,10 +236,7 @@ defmodule EctoTablestore.SearchTest do
     {:ok, result} =
       TestRepo.search(Student, index_name,
         search_query: [
-          query: [
-            type: QueryType.exists(),
-            field_name: "comment"
-          ]
+          query: exists_query("comment")
         ]
       )
 
@@ -287,12 +246,9 @@ defmodule EctoTablestore.SearchTest do
     {:ok, result} =
       TestRepo.search(Student, index_name,
         search_query: [
-          query: [
-            type: QueryType.bool(),
-            must_not: [
-              [type: QueryType.exists(), field_name: "comment"]
-            ]
-          ],
+          query: bool_query(
+            must_not: exists_query("comment")
+          ),
           limit: 100
         ]
       )

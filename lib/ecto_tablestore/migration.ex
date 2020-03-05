@@ -4,7 +4,7 @@ defmodule EctoTablestore.Migration do
 
   Support the partition key is autoincrementing based on this library's wrapper, for this usecase,
   we can use the migration to automatically create an another separated table to generate the serial value
-  when `:insert` (viz `PutRow`) or `:batch_write` with `:put` option (viz `BatchWriteRow`).
+  when `:insert` (viz `ExAliyunOts.put_row/5`) or `:batch_write` (viz `ExAliyunOts.batch_write/3`) with `:put` option.
 
   In practice, we don't create migration files by hand either, we typically use `mix ecto.ots.gen.migration` to
   generate the file with the proper timestamp and then we just fill in its contents:

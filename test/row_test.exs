@@ -9,6 +9,18 @@ defmodule EctoTablestore.RowTest do
 
   setup_all do
     TestHelper.setup_all()
+
+    EctoTablestore.Support.Table.create_order()
+    EctoTablestore.Support.Table.create_user()
+    EctoTablestore.Support.Table.create_user2()
+
+    on_exit(fn ->
+      EctoTablestore.Support.Table.delete_order()
+      EctoTablestore.Support.Table.delete_user()
+      EctoTablestore.Support.Table.delete_user2()
+    end)
+
+    Process.sleep(3_000)
   end
 
   test "repo - insert/get/delete" do

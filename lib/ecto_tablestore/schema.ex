@@ -20,13 +20,17 @@ defmodule EctoTablestore.Schema do
   Since Tablestore's column does not support `DateTime` type, use UTC timestamp (:integer type)
   as `timestamps()` macro for the generated `inserted_at` and `updated_at` fields by default.
 
-  ## About primary_key
+  ## About primary key
 
-  * primary_key supports `:id` (integer()) and `:binary_id` (binary())
-  * `@primary_key` default to `false`
-  * the first defined primary key is partition key
-  * up to 4 primary key(s) (Tablestore product required)
-  * up to 1 primary key with `autogenerate: true` option (Tablestore product required)
+  * The primary key supports `:id` (integer()) and `:binary_id` (binary()).
+  * By default the `:primary_key` option is `false`.
+  * The first defined primary key by the written order in the `tablestore_schema` is the partition key.
+  * Up to 4 primary key(s), it is limited by TableStore product server side.
+  * Up to 1 primary key with `autogenerate: true` option, it is limited by TableStore product server side.
+  * The primary key set with `autogenerate: true` will use the TableStore product server's AUTO_INCREMENT feature.
+  * If the partition key set as `autogenerate: true` is not allowed to take advantage of the AUTO_INCREMENT feature which it
+  is limited by server, but there is a built-in implement to use the `Sequence` to achieve the same atomic increment operation
+  in `ecto_tablestore` library.
 
   ## Example
 

@@ -8,6 +8,12 @@ defmodule EctoTablestore.AutoIncSequenceTest do
 
   setup_all do
     TestHelper.setup_all()
+
+    EctoTablestore.Support.Table.create_page()
+
+    on_exit(fn ->
+      EctoTablestore.Support.Table.delete_page()
+    end)
   end
 
   test "insert" do

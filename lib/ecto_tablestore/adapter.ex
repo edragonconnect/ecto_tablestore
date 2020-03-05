@@ -6,7 +6,6 @@ defmodule Ecto.Adapters.Tablestore do
   alias __MODULE__
 
   alias EctoTablestore.Sequence
-  alias ExAliyunOts.Mixin, as: TablestoreMixin
   alias ExAliyunOts.Error
 
   alias ExAliyunOts.Const.{
@@ -179,7 +178,7 @@ defmodule Ecto.Adapters.Tablestore do
     {pks, attrs, autogenerate_id_name} = pks_and_attrs_to_put_row(repo, schema, fields)
 
     result =
-      TablestoreMixin.execute_put_row(
+      ExAliyunOts.put_row(
         repo.instance,
         schema_meta.source,
         pks,
@@ -211,7 +210,7 @@ defmodule Ecto.Adapters.Tablestore do
   def delete(repo, schema_meta, filters, options) do
 
     result =
-      TablestoreMixin.execute_delete_row(
+      ExAliyunOts.delete_row(
         repo.instance,
         schema_meta.source,
         prepare_primary_keys_by_order(schema_meta.schema, filters),
@@ -243,7 +242,7 @@ defmodule Ecto.Adapters.Tablestore do
       |> Keyword.merge(map_attrs_to_update(schema, fields))
 
     result =
-      TablestoreMixin.execute_update_row(
+      ExAliyunOts.update_row(
         repo.instance,
         schema_meta.source,
         prepare_primary_keys_by_order(schema, filters),
@@ -286,7 +285,7 @@ defmodule Ecto.Adapters.Tablestore do
     {_adapter, meta} = Ecto.Repo.Registry.lookup(repo)
 
     result =
-      TablestoreMixin.execute_search(
+      ExAliyunOts.search(
         meta.instance,
         schema.__schema__(:source),
         index_name,
@@ -318,7 +317,7 @@ defmodule Ecto.Adapters.Tablestore do
     {_adapter, meta} = Ecto.Repo.Registry.lookup(repo)
 
     result =
-      TablestoreMixin.execute_get_row(
+      ExAliyunOts.get_row(
         meta.instance,
         schema.__schema__(:source),
         prepare_primary_keys_by_order(schema, ids),
@@ -351,7 +350,7 @@ defmodule Ecto.Adapters.Tablestore do
       end
 
     result =
-      TablestoreMixin.execute_get_range(
+      ExAliyunOts.get_range(
         meta.instance,
         schema.__schema__(:source),
         prepared_start_primary_keys,
@@ -387,7 +386,7 @@ defmodule Ecto.Adapters.Tablestore do
 
     prepared_requests = Enum.reverse(requests)
 
-    result = TablestoreMixin.execute_batch_get(meta.instance, prepared_requests)
+    result = ExAliyunOts.batch_get(meta.instance, prepared_requests)
 
     case result do
       {:ok, response} ->
@@ -431,7 +430,7 @@ defmodule Ecto.Adapters.Tablestore do
 
     input_schema_entities = reduce_merge_map(schema_entities_map)
 
-    result = TablestoreMixin.execute_batch_write(meta.instance, prepared_requests, [])
+    result = ExAliyunOts.batch_write(meta.instance, prepared_requests, [])
 
     case result do
       {:ok, response} ->
@@ -501,7 +500,7 @@ defmodule Ecto.Adapters.Tablestore do
   end
 
   @doc false
-  def table_sequence_name(table_name) do
+  def bound_sequence_table_name(table_name) do
     "#{table_name}_seq"
   end
 
@@ -545,7 +544,7 @@ defmodule Ecto.Adapters.Tablestore do
   defp do_generate_filter_options(ast, options) do
     merged =
       ast
-      |> ExAliyunOts.Mixin.expressions_to_filter(binding())
+      |> ExAliyunOts.expressions_to_filter(binding())
       |> do_generate_filter(:and, Keyword.get(options, :filter))
 
     Keyword.put(options, :filter, merged)
@@ -666,7 +665,7 @@ defmodule Ecto.Adapters.Tablestore do
     source = schema.__schema__(:source)
     field_name_str = Atom.to_string(autogenerate_id_name)
 
-    next_value = Sequence.next_value(repo.instance, seq_name_to_tab(source), field_name_str)
+    next_value = Sequence.next_value(repo.instance, bound_sequence_table_name(source), field_name_str)
 
     update = [{field_name_str, next_value} | prepared_pks]
     map_pks_and_attrs_to_put_row(rest_primary_keys, autogenerate_id, fields, update, repo, schema)
@@ -977,7 +976,7 @@ defmodule Ecto.Adapters.Tablestore do
     source = schema.__schema__(:source)
 
     request =
-      TablestoreMixin.execute_get(
+      ExAliyunOts.get(
         source,
         ids_groups,
         options
@@ -991,7 +990,7 @@ defmodule Ecto.Adapters.Tablestore do
     source = schema.__schema__(:source)
 
     request =
-      TablestoreMixin.execute_get(
+      ExAliyunOts.get(
         source,
         format_ids_groups(schema, ids_groups),
         options
@@ -1011,7 +1010,7 @@ defmodule Ecto.Adapters.Tablestore do
   defp map_batch_writes(_repo, {:delete, deletes}) do
     Enum.reduce(deletes, {%{}, %{}}, fn delete, {delete_acc, schema_entities_acc} ->
       {source, ids, options, schema_entity} = do_map_batch_writes(:delete, delete)
-      write_delete_request = TablestoreMixin.execute_write_delete(ids, options)
+      write_delete_request = ExAliyunOts.write_delete(ids, options)
 
       if Map.has_key?(delete_acc, source) do
         {
@@ -1031,7 +1030,7 @@ defmodule Ecto.Adapters.Tablestore do
     Enum.reduce(puts, {%{}, %{}}, fn put, {puts_acc, schema_entities_acc} ->
       {source, ids, attrs, options, schema_entity} = do_map_batch_writes(:put, {repo, put})
 
-      write_put_request = TablestoreMixin.execute_write_put(ids, attrs, options)
+      write_put_request = ExAliyunOts.write_put(ids, attrs, options)
 
       if Map.has_key?(puts_acc, source) do
         {
@@ -1051,7 +1050,7 @@ defmodule Ecto.Adapters.Tablestore do
     Enum.reduce(updates, {%{}, %{}}, fn update, {update_acc, schema_entities_acc} ->
       {source, ids, options, schema_entity} = do_map_batch_writes(:update, update)
 
-      write_update_request = TablestoreMixin.execute_write_update(ids, options)
+      write_update_request = ExAliyunOts.write_update(ids, options)
 
       if Map.has_key?(update_acc, source) do
         {
@@ -1363,10 +1362,6 @@ defmodule Ecto.Adapters.Tablestore do
 
   ## Migration
 
-  defp seq_name_to_tab(table_name) do
-    "#{table_name}_seq"
-  end
-
   defp do_execute_ddl(meta, {:create, table, columns}) do
     {table_name, primary_keys, create_seq?} =
       Enum.reduce(columns, {table.name, [], false}, &do_execute_ddl_add_column/2)
@@ -1380,7 +1375,7 @@ defmodule Ecto.Adapters.Tablestore do
     instance = meta.instance
 
     result =
-      TablestoreMixin.execute_create_table(
+      ExAliyunOts.create_table(
         meta.instance,
         table_name,
         primary_keys,
@@ -1392,7 +1387,7 @@ defmodule Ecto.Adapters.Tablestore do
     end)
 
     if result == :ok and create_seq? do
-      Sequence.create(instance, seq_name_to_tab(table_name))
+      Sequence.create(instance, bound_sequence_table_name(table_name))
     end
   end
 

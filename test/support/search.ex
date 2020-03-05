@@ -1,60 +1,49 @@
 defmodule EctoTablestore.Support.Search do
   require Logger
 
-  alias ExAliyunOts.{Var, Client}
-  alias ExAliyunOts.Var.Search
-  alias ExAliyunOts.Const.PKType
-  alias ExAliyunOts.Const.Search.FieldType
-  require PKType
-  require FieldType
-
   alias EctoTablestore.TestSchema.Student
+
   alias EctoTablestore.TestRepo
 
   import EctoTablestore.Query, only: [condition: 1]
 
+  import ExAliyunOts.Search, only: [field_schema_keyword: 1, field_schema_integer: 1, field_schema_float: 1, field_schema_boolean: 1, field_schema_nested: 2]
+
+  @instance EDCEXTestInstance
+
   def initialize(index_names) do
-    instance_key = EDCEXTestInstance
+    @instance = EDCEXTestInstance
+
     table = Student.__schema__(:source)
 
-    create_table(instance_key, table)
+    create_table(@instance, table)
 
-    create_index(instance_key, table, index_names)
+    create_index(@instance, table, index_names)
 
     inseart_test_data()
   end
 
   def clean(useless_index_names) do
-    instance_key = EDCEXTestInstance
+    @instance = EDCEXTestInstance
     table = Student.__schema__(:source)
 
     Enum.map(useless_index_names, fn index_name ->
-      var_request = %Search.DeleteSearchIndexRequest{
-        table_name: table,
-        index_name: index_name
-      }
-
-      {:ok, _response} = Client.delete_search_index(instance_key, var_request)
+      {:ok, _response} = ExAliyunOts.delete_search_index(@instance, table, index_name)
     end)
 
-    ExAliyunOts.Client.delete_table(instance_key, table)
+    ExAliyunOts.delete_table(@instance, table)
     Logger.info("clean search_indexes and delete table")
   end
 
-  defp create_table(instance_key, table) do
-    var_create_table = %Var.CreateTable{
-      table_name: table,
-      primary_keys: [{"partition_key", PKType.string()}]
-    }
-
-    :ok = Client.create_table(instance_key, var_create_table)
+  defp create_table(@instance, table) do
+    :ok = ExAliyunOts.create_table(@instance, table, [{"partition_key", :string}])
     Logger.info("initialized table")
     Process.sleep(5_000)
   end
 
-  defp create_index(instance_key, table, [index1, index2]) do
-    create_search_index(instance_key, table, index1)
-    create_search_index2(instance_key, table, index2)
+  defp create_index(@instance, table, [index1, index2]) do
+    create_search_index(@instance, table, index1)
+    create_search_index2(@instance, table, index2)
     Process.sleep(5_000)
   end
 
@@ -156,68 +145,33 @@ defmodule EctoTablestore.Support.Search do
     Process.sleep(25_000)
   end
 
-  defp create_search_index(instance_key, table, index_name) do
-    var_request = %Search.CreateSearchIndexRequest{
-      table_name: table,
-      index_name: index_name,
-      index_schema: %Search.IndexSchema{
+  defp create_search_index(@instance, table, index_name) do
+    result =
+      ExAliyunOts.create_search_index(
+        @instance, table, index_name,
         field_schemas: [
-          %Search.FieldSchema{
-            field_name: "name"
-            # field_type: FieldType.keyword, # using as `keyword` field type by default
-          },
-          %Search.FieldSchema{
-            field_name: "age",
-            field_type: FieldType.long()
-          },
-          %Search.FieldSchema{
-            field_name: "score",
-            field_type: FieldType.double()
-          },
-          %Search.FieldSchema{
-            field_name: "is_actived",
-            field_type: FieldType.boolean()
-          },
-          %Search.FieldSchema{
-            field_name: "comment"
-          }
-        ]
-      }
-    }
-
-    result = Client.create_search_index(instance_key, var_request)
+          field_schema_keyword("name"),
+          field_schema_integer("age"),
+          field_schema_float("score"),
+          field_schema_boolean("is_actived"),
+          field_schema_keyword("comment"),
+        ])
     Logger.info("create_search_index: #{inspect(result)}")
   end
 
-  defp create_search_index2(instance_key, table, index_name) do
-    sub_nested1 = %Search.FieldSchema{
-      field_name: "header",
-      field_type: FieldType.keyword()
-    }
-
-    sub_nested2 = %Search.FieldSchema{
-      field_name: "body",
-      field_type: FieldType.keyword()
-    }
-
-    var_request = %Search.CreateSearchIndexRequest{
-      table_name: table,
-      index_name: index_name,
-      index_schema: %Search.IndexSchema{
+  defp create_search_index2(@instance, table, index_name) do
+    result =
+      ExAliyunOts.create_search_index(
+        @instance, table, index_name,
         field_schemas: [
-          %Search.FieldSchema{
-            field_name: "content",
-            field_type: FieldType.nested(),
+          field_schema_nested(
+            "content",
             field_schemas: [
-              sub_nested1,
-              sub_nested2
+              field_schema_keyword("header"),
+              field_schema_keyword("body")
             ]
-          }
-        ]
-      }
-    }
-
-    result = Client.create_search_index(instance_key, var_request)
+          )
+        ])
     Logger.info("create_search_index2: #{inspect(result)}")
   end
 end
