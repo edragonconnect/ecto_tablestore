@@ -175,11 +175,13 @@ defmodule Ecto.Adapters.Tablestore do
   def insert(repo, schema_meta, fields, _on_conflict, _returning, options) do
     schema = schema_meta.schema
 
-    {pks, attrs, autogenerate_id_name} = pks_and_attrs_to_put_row(repo, schema, fields)
+    instance = repo.instance
+
+    {pks, attrs, autogenerate_id_name} = pks_and_attrs_to_put_row(instance, schema, fields)
 
     result =
       ExAliyunOts.put_row(
-        repo.instance,
+        instance,
         schema_meta.source,
         pks,
         attrs,
@@ -404,9 +406,11 @@ defmodule Ecto.Adapters.Tablestore do
   def batch_write(repo, writes) do
     {_adapter, meta} = Ecto.Repo.Registry.lookup(repo)
 
+    instance = meta.instance
+
     {var_write_requests, schema_entities_map} =
       writes
-      |> Enum.map(&map_batch_writes(repo, &1))
+      |> Enum.map(&map_batch_writes(instance, &1))
       |> Enum.unzip()
 
     {prepared_requests, operations} =
@@ -430,7 +434,7 @@ defmodule Ecto.Adapters.Tablestore do
 
     input_schema_entities = reduce_merge_map(schema_entities_map)
 
-    result = ExAliyunOts.batch_write(meta.instance, prepared_requests, [])
+    result = ExAliyunOts.batch_write(instance, prepared_requests, [])
 
     case result do
       {:ok, response} ->
@@ -594,10 +598,10 @@ defmodule Ecto.Adapters.Tablestore do
     generate_filter_ast(rest, [{:and, [], [ast | prepared]}])
   end
 
-  defp pks_and_attrs_to_put_row(repo, schema, fields) do
+  defp pks_and_attrs_to_put_row(instance, schema, fields) do
     primary_keys = schema.__schema__(:primary_key)
     autogenerate_id = schema.__schema__(:autogenerate_id)
-    map_pks_and_attrs_to_put_row(primary_keys, autogenerate_id, fields, [], repo, schema)
+    map_pks_and_attrs_to_put_row(primary_keys, autogenerate_id, fields, [], instance, schema)
   end
 
   defp map_pks_and_attrs_to_put_row(
@@ -605,7 +609,7 @@ defmodule Ecto.Adapters.Tablestore do
          nil,
          attr_columns,
          prepared_pks,
-         _repo,
+         _instance,
          schema
        ) do
     attrs = map_attrs_to_row(schema, attr_columns)
@@ -622,7 +626,7 @@ defmodule Ecto.Adapters.Tablestore do
          {_, autogenerate_id_name, :id},
          attr_columns,
          prepared_pks,
-         _repo,
+         _instance,
          schema
        ) do
     attrs = map_attrs_to_row(schema, attr_columns)
@@ -639,7 +643,7 @@ defmodule Ecto.Adapters.Tablestore do
          nil,
          fields,
          prepared_pks,
-         repo,
+         instance,
          schema
        ) do
     {value, updated_fields} = Keyword.pop(fields, primary_key)
@@ -648,7 +652,7 @@ defmodule Ecto.Adapters.Tablestore do
       do: raise("Invalid usecase - primary key: `#{primary_key}` can not be nil.")
 
     update = [{Atom.to_string(primary_key), value} | prepared_pks]
-    map_pks_and_attrs_to_put_row(rest_primary_keys, nil, updated_fields, update, repo, schema)
+    map_pks_and_attrs_to_put_row(rest_primary_keys, nil, updated_fields, update, instance, schema)
   end
 
   defp map_pks_and_attrs_to_put_row(
@@ -656,19 +660,21 @@ defmodule Ecto.Adapters.Tablestore do
          {_, autogenerate_id_name, :id} = autogenerate_id,
          fields,
          prepared_pks,
-         repo,
+         instance,
          schema
        )
        when primary_key == autogenerate_id_name and prepared_pks == [] do
     # Set partition_key as auto-generated, use sequence for this usecase
 
     source = schema.__schema__(:source)
+
     field_name_str = Atom.to_string(autogenerate_id_name)
 
-    next_value = Sequence.next_value(repo.instance, bound_sequence_table_name(source), field_name_str)
+    next_value = Sequence.next_value(instance, bound_sequence_table_name(source), field_name_str)
 
     update = [{field_name_str, next_value} | prepared_pks]
-    map_pks_and_attrs_to_put_row(rest_primary_keys, autogenerate_id, fields, update, repo, schema)
+
+    map_pks_and_attrs_to_put_row(rest_primary_keys, autogenerate_id, fields, update, instance, schema)
   end
 
   defp map_pks_and_attrs_to_put_row(
@@ -676,12 +682,12 @@ defmodule Ecto.Adapters.Tablestore do
          {_, autogenerate_id_name, :id} = autogenerate_id,
          fields,
          prepared_pks,
-         repo,
+         instance,
          schema
        )
        when primary_key == autogenerate_id_name do
     update = [{Atom.to_string(autogenerate_id_name), PKType.auto_increment()} | prepared_pks]
-    map_pks_and_attrs_to_put_row(rest_primary_keys, autogenerate_id, fields, update, repo, schema)
+    map_pks_and_attrs_to_put_row(rest_primary_keys, autogenerate_id, fields, update, instance, schema)
   end
 
   defp map_pks_and_attrs_to_put_row(
@@ -689,7 +695,7 @@ defmodule Ecto.Adapters.Tablestore do
          {_, autogenerate_id_name, :id} = autogenerate_id,
          fields,
          prepared_pks,
-         repo,
+         instance,
          schema
        )
        when primary_key != autogenerate_id_name do
@@ -705,7 +711,7 @@ defmodule Ecto.Adapters.Tablestore do
       autogenerate_id,
       updated_fields,
       update,
-      repo,
+      instance,
       schema
     )
   end
@@ -715,7 +721,7 @@ defmodule Ecto.Adapters.Tablestore do
          {_, _autogenerate_id_name, :binary_id},
          _fields,
          _prepared_pks,
-         _repo,
+         _instance,
          _schema
        ) do
     raise "Not support autogenerate id as string (`:binary_id`)."
@@ -1007,7 +1013,7 @@ defmodule Ecto.Adapters.Tablestore do
     raise("Invalid usecase - input invalid batch get request: #{inspect(request)}")
   end
 
-  defp map_batch_writes(_repo, {:delete, deletes}) do
+  defp map_batch_writes(_instance, {:delete, deletes}) do
     Enum.reduce(deletes, {%{}, %{}}, fn delete, {delete_acc, schema_entities_acc} ->
       {source, ids, options, schema_entity} = do_map_batch_writes(:delete, delete)
       write_delete_request = ExAliyunOts.write_delete(ids, options)
@@ -1026,9 +1032,9 @@ defmodule Ecto.Adapters.Tablestore do
     end)
   end
 
-  defp map_batch_writes(repo, {:put, puts}) do
+  defp map_batch_writes(instance, {:put, puts}) do
     Enum.reduce(puts, {%{}, %{}}, fn put, {puts_acc, schema_entities_acc} ->
-      {source, ids, attrs, options, schema_entity} = do_map_batch_writes(:put, {repo, put})
+      {source, ids, attrs, options, schema_entity} = do_map_batch_writes(:put, {instance, put})
 
       write_put_request = ExAliyunOts.write_put(ids, attrs, options)
 
@@ -1046,7 +1052,7 @@ defmodule Ecto.Adapters.Tablestore do
     end)
   end
 
-  defp map_batch_writes(_repo, {:update, updates}) do
+  defp map_batch_writes(_instance, {:update, updates}) do
     Enum.reduce(updates, {%{}, %{}}, fn update, {update_acc, schema_entities_acc} ->
       {source, ids, options, schema_entity} = do_map_batch_writes(:update, update)
 
@@ -1066,7 +1072,7 @@ defmodule Ecto.Adapters.Tablestore do
     end)
   end
 
-  defp map_batch_writes(_repo, item) do
+  defp map_batch_writes(_instance, item) do
     raise("Invalid usecase - batch write with item: #{inspect(item)}")
   end
 
@@ -1088,11 +1094,11 @@ defmodule Ecto.Adapters.Tablestore do
     {source, ids, options, schema_entity}
   end
 
-  defp do_map_batch_writes(:put, {repo, %{__meta__: _meta} = schema_entity}) do
-    do_map_batch_writes(:put, {repo, {schema_entity, []}})
+  defp do_map_batch_writes(:put, {instance, %{__meta__: _meta} = schema_entity}) do
+    do_map_batch_writes(:put, {instance, {schema_entity, []}})
   end
 
-  defp do_map_batch_writes(:put, {repo, {%{__meta__: meta} = schema_entity, options}}) do
+  defp do_map_batch_writes(:put, {instance, {%{__meta__: meta} = schema_entity, options}}) do
     schema = meta.schema
 
     source = schema.__schema__(:source)
@@ -1112,24 +1118,24 @@ defmodule Ecto.Adapters.Tablestore do
       end)
 
     {pks, attrs, _autogenerate_id_name} =
-      pks_and_attrs_to_put_row(repo, schema, Keyword.merge(autogen_fields, fields))
+      pks_and_attrs_to_put_row(instance, schema, Keyword.merge(autogen_fields, fields))
 
     {source, pks, attrs, options, schema_entity}
   end
 
-  defp do_map_batch_writes(:put, {repo, {schema, ids, attrs, options}}) do
+  defp do_map_batch_writes(:put, {instance, {schema, ids, attrs, options}}) do
     source = schema.__schema__(:source)
     autogen_fields = autogen_fields(schema)
     fields = Keyword.merge(autogen_fields, ids ++ attrs)
     schema_entity = struct(schema, fields)
 
-    {pks, attrs, _autogenerate_id_name} = pks_and_attrs_to_put_row(repo, schema, fields)
+    {pks, attrs, _autogenerate_id_name} = pks_and_attrs_to_put_row(instance, schema, fields)
     {source, pks, attrs, options, schema_entity}
   end
 
   defp do_map_batch_writes(
          :put,
-         {repo, {%Ecto.Changeset{valid?: true, data: %{__meta__: meta}} = changeset, options}}
+         {instance, {%Ecto.Changeset{valid?: true, data: %{__meta__: meta}} = changeset, options}}
        ) do
     schema = meta.schema
     source = schema.__schema__(:source)
@@ -1137,27 +1143,27 @@ defmodule Ecto.Adapters.Tablestore do
     fields = Keyword.merge(autogen_fields, Map.to_list(changeset.changes))
     schema_entity = struct(schema, fields)
 
-    {pks, attrs, _autogenerate_id_name} = pks_and_attrs_to_put_row(repo, schema, fields)
+    {pks, attrs, _autogenerate_id_name} = pks_and_attrs_to_put_row(instance, schema, fields)
     {source, pks, attrs, options, schema_entity}
   end
 
   defp do_map_batch_writes(
          :put,
-         {repo, %Ecto.Changeset{valid?: true} = changeset}
+         {instance, %Ecto.Changeset{valid?: true} = changeset}
        ) do
-    do_map_batch_writes(:put, {repo, {changeset, []}})
+    do_map_batch_writes(:put, {instance, {changeset, []}})
   end
 
   defp do_map_batch_writes(
          :put,
-         {_repo, {%Ecto.Changeset{valid?: false} = changeset, _options}}
+         {_instance, {%Ecto.Changeset{valid?: false} = changeset, _options}}
        ) do
     raise "Using invalid changeset: #{inspect(changeset)} in batch writes"
   end
 
   defp do_map_batch_writes(
          :put,
-         {_repo, %Ecto.Changeset{valid?: false} = changeset}
+         {_instance, %Ecto.Changeset{valid?: false} = changeset}
        ) do
     raise "Using invalid changeset: #{inspect(changeset)} in batch writes"
   end
