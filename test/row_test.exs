@@ -413,7 +413,10 @@ defmodule EctoTablestore.RowTest do
 
     order3 = %Order{id: "order3", desc: "desc3", num: 10, price: 55.67}
 
+    order4_changeset = Changeset.cast(%Order{id: "order4_1", desc: "desc3"}, %{num: 40}, [:num])
+
     user1_lv = 8
+
     user1 = %User{id: 100, name: "u1", level: user1_lv}
     {:ok, _} = TestRepo.insert(user1, condition: condition(:expect_not_exist))
 
@@ -445,12 +448,12 @@ defmodule EctoTablestore.RowTest do
       ],
       put: [
         {order3, condition: condition(:ignore), return_type: :pk},
+        {order4_changeset, condition: condition(:ignore), return_type: :pk},
         {user3, condition: condition(:expect_not_exist), return_type: :pk}
       ]
     ]
 
     {:ok, result} = TestRepo.batch_write(writes)
-    IO.puts("** batch_write result: #{inspect(result)} **")
 
     order_batch_write_result = Keyword.get(result, Order)
 
@@ -476,6 +479,11 @@ defmodule EctoTablestore.RowTest do
     assert batch_write_put_order.desc == "desc3"
     assert batch_write_put_order.num == 10
     assert batch_write_put_order.price == 55.67
+
+    {:ok, batch_write_put_order4} = Keyword.get(order_batch_write_result, :put) |> List.last()
+    assert batch_write_put_order4.id == order4_changeset.data.id
+    assert is_integer(batch_write_put_order4.internal_id) == true
+    assert batch_write_put_order4.num == order4_changeset.changes.num
 
     user_batch_write_result = Keyword.get(result, User)
 

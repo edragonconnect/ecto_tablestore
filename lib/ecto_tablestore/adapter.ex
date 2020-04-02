@@ -699,6 +699,7 @@ defmodule Ecto.Adapters.Tablestore do
          schema
        )
        when primary_key != autogenerate_id_name do
+
     {value, updated_fields} = Keyword.pop(fields, primary_key)
 
     if value == nil,
@@ -1140,7 +1141,16 @@ defmodule Ecto.Adapters.Tablestore do
     schema = meta.schema
     source = schema.__schema__(:source)
     autogen_fields = autogen_fields(schema)
-    fields = Keyword.merge(autogen_fields, Map.to_list(changeset.changes))
+
+    input_fields =
+      changeset.data
+      |> Ecto.primary_key()
+      |> Enum.reduce(Map.to_list(changeset.changes), fn {key, value}, acc ->
+        if value != nil, do: [{key, value} | acc], else: acc
+      end)
+
+    fields = Keyword.merge(autogen_fields, input_fields)
+
     schema_entity = struct(schema, fields)
 
     {pks, attrs, _autogenerate_id_name} = pks_and_attrs_to_put_row(instance, schema, fields)
