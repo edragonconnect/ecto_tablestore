@@ -488,7 +488,8 @@ defmodule Ecto.Adapters.Tablestore do
         end)
 
       updated_columns_to_get =
-        (implicit_columns_to_get ++ columns_to_get_opt)
+        implicit_columns_to_get
+        |> splice_list(columns_to_get_opt)
         |> MapSet.new()
         |> MapSet.to_list()
 
@@ -941,7 +942,9 @@ defmodule Ecto.Adapters.Tablestore do
         opts = generate_filter_options(schema_entity, options)
 
         prepared_columns_to_get =
-          (Keyword.get(opts, :columns_to_get, []) ++ columns_to_get)
+          opts
+          |> Keyword.get(:columns_to_get, [])
+          |> splice_list(columns_to_get)
           |> MapSet.new()
           |> MapSet.to_list()
 
@@ -1127,7 +1130,7 @@ defmodule Ecto.Adapters.Tablestore do
   defp do_map_batch_writes(:put, {instance, {schema, ids, attrs, options}}) do
     source = schema.__schema__(:source)
     autogen_fields = autogen_fields(schema)
-    fields = Keyword.merge(autogen_fields, ids ++ attrs)
+    fields = Keyword.merge(autogen_fields, splice_list(ids, attrs))
     schema_entity = struct(schema, fields)
 
     {pks, attrs, _autogenerate_id_name} = pks_and_attrs_to_put_row(instance, schema, fields)
@@ -1277,8 +1280,9 @@ defmodule Ecto.Adapters.Tablestore do
   defp do_merge_option(input, generated) when input == nil and generated == nil, do: nil
   defp do_merge_option(input, generated) when input != nil and generated == nil, do: input
 
-  defp do_merge_option(input, generated) when is_list(input) and is_list(generated),
-    do: MapSet.new(input ++ generated) |> MapSet.to_list()
+  defp do_merge_option(input, generated) when is_list(input) and is_list(generated) do
+    input |> splice_list(generated) |> MapSet.new() |> MapSet.to_list()
+  end
 
   defp do_merge_option(input, generated) when input == generated, do: input
   defp do_merge_option(_input, generated), do: generated
@@ -1339,7 +1343,7 @@ defmodule Ecto.Adapters.Tablestore do
   defp reduce_merge_map(items) do
     Enum.reduce(items, %{}, fn map, acc ->
       Map.merge(acc, map, fn _key, v1, v2 ->
-        v1 ++ v2
+        splice_list(v1, v2)
       end)
     end)
   end
@@ -1445,7 +1449,7 @@ defmodule Ecto.Adapters.Tablestore do
 
     {
       source,
-      prepared_columns ++ [prepared_column],
+      splice_list(prepared_columns, [prepared_column]),
       create_seq?
     }
   end
@@ -1457,7 +1461,7 @@ defmodule Ecto.Adapters.Tablestore do
        when is_atom(field_name) do
     {
       source,
-      prepared_columns ++ [{Atom.to_string(field_name), PKType.string()}],
+      splice_list(prepared_columns, [{Atom.to_string(field_name), PKType.string()}]),
       create_seq?
     }
   end
@@ -1469,9 +1473,12 @@ defmodule Ecto.Adapters.Tablestore do
        when is_atom(field_name) do
     {
       source,
-      prepared_columns ++ [{Atom.to_string(field_name), PKType.binary()}],
+      splice_list(prepared_columns, [{Atom.to_string(field_name), PKType.binary()}]),
       create_seq?
     }
   end
 
+  defp splice_list(list1, list2) when is_list(list1) and is_list(list2) do
+    List.flatten([list1 | list2])
+  end
 end
