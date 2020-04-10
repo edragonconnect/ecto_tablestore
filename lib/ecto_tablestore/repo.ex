@@ -82,14 +82,15 @@ defmodule EctoTablestore.Repo do
   @doc """
   Similar to `c:get/3`, please ensure schema entity has been filled with the whole primary key(s).
 
-  **NOTICE**:
-
-  * If there are some attribute column(s) are provided in entity, these fields will be combined within multiple `:==` filtering expressions;
-  * If there are some attribute column(s) are provided and meanwhile set `filter` option, they will be merged into a composite filter.
-
   ## Options
 
-  Please refer `c:get/3`.
+    * `:entity_full_match`, whether to transfer the input attribute column(s) into the `:==` filtering expressions, by default it is `false`,
+      when set `entity_full_match: true`, please notice the following rules:
+
+       * If there exists attribute column(s) provided in entity, these fields will be combined within multiple `:==` filtering expressions;
+       * If there exists attribute column(s) provided and meanwhile set `filter` option, they will be merged into a composite filter.
+
+  Other options please refer `c:get/3`.
   """
   @callback one(entity :: Ecto.Schema.t(), options :: Keyword.t()) ::
               Ecto.Schema.t() | {:error, term()} | nil
@@ -154,15 +155,36 @@ defmodule EctoTablestore.Repo do
   Batch get several rows of data from one or more tables, this batch request put multiple `get_row` in one request from client's perspective.
   After execute each operation in servers, return results independently and independently consumes capacity units.
 
+  When input `schema_entity`, only theirs primary keys are used in query, if need to use theirs attribute columns into condition of query, please
+  use `entity_full_match: true` option to do that.
+
   ## Example
 
       batch_get([
-        {SchemaA, [[ids: ids1], [ids: ids2]]},
-        [%SchemaB{keys: keys1}, %SchemaB{keys: keys2}]
+        {Schema1, [[ids: ids1], [ids: ids2]]},
+        [%Schema2{keys: keys1}, %Schema2{keys: keys2}]
       ])
 
       batch_get([
-        {[%SchemaB{keys: keys1}, %SchemaB{keys: keys2}], filter: filter("attr_field" == 1), columns_to_get: ["attr_field", "attr_field2"]}
+        {Schema1, [[ids: ids1], [ids: ids2]]},
+        {
+          [
+            %Schema2{keys: keys1},
+            %Schema2{keys: keys2}
+          ],
+          entity_full_match: true
+        }
+      ])
+
+      batch_get([
+        {
+          [
+            %Schema2{keys: keys1},
+            %Schema2{keys: keys2}
+          ],
+          filter: filter("attr_field" == 1),
+          columns_to_get: ["attr_field", "attr_field2"]
+        }
       ])
 
   """
@@ -192,17 +214,17 @@ defmodule EctoTablestore.Repo do
 
       batch_write([
         delete: [
-          schema_entity_a,
-          schema_entity_b
+          schema_entity_1,
+          schema_entity_2
         ],
         put: [
-          {%SchemaB{}, condition: condition(:ignore)},
-          {%SchemaA{}, condition: condition(:expect_not_exist)},
-          {changeset_schema_a, condition: condition(:ignore)}
+          {%Schema2{}, condition: condition(:ignore)},
+          {%Schema1{}, condition: condition(:expect_not_exist)},
+          {changeset_schema_1, condition: condition(:ignore)}
         ],
         update: [
-          {changeset_schema_a, return_type: :pk},
-          {changeset_schema_b}
+          {changeset_schema_1, return_type: :pk},
+          {changeset_schema_2}
         ]
       ])
 

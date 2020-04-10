@@ -42,7 +42,12 @@ defmodule Ecto.Adapters.Tablestore do
       @spec one(entity :: Ecto.Schema.t(), options :: Keyword.t()) ::
               Ecto.Schema.t() | {:error, term()} | nil
       def one(%{__meta__: meta} = entity, options \\ []) do
-        options = Tablestore.generate_filter_options(entity, options)
+        options =
+          if Keyword.get(options, :entity_full_match, false) do
+            Tablestore.generate_filter_options(entity, options)
+          else
+            options
+          end
         get(meta.schema, Ecto.primary_key(entity), options)
       end
 
@@ -939,7 +944,12 @@ defmodule Ecto.Adapters.Tablestore do
     {conflict_schemas, filters, columns_to_get} =
       Enum.reduce(schema_entities, {[], [], []}, fn schema_entity,
                                                     {conflict_schemas, filters, columns_to_get} ->
-        opts = generate_filter_options(schema_entity, options)
+        opts =
+          if Keyword.get(options, :entity_full_match, false) do
+            generate_filter_options(schema_entity, options)
+          else
+            options
+          end
 
         prepared_columns_to_get =
           opts

@@ -55,7 +55,11 @@ defmodule EctoTablestore.RowTest do
     assert saved_order_internal_id != nil and is_integer(saved_order_internal_id) == true
 
     order_with_non_exist_num = %Order{id: input_id, internal_id: saved_order_internal_id, num: 2}
+    query_result = TestRepo.one(order_with_non_exist_num, entity_full_match: true)
+    assert query_result == nil
     query_result = TestRepo.one(order_with_non_exist_num)
+    assert query_result != nil
+    query_result = TestRepo.one(%Order{id: "fake", internal_id: 0})
     assert query_result == nil
 
     # `num` attribute field will be used in condition filter
@@ -65,7 +69,7 @@ defmodule EctoTablestore.RowTest do
       num: input_num
     }
 
-    query_result_by_one = TestRepo.one(order_with_matched_num)
+    query_result_by_one = TestRepo.one(order_with_matched_num, entity_full_match: true)
 
     assert query_result_by_one != nil
     assert query_result_by_one.desc == input_desc
@@ -75,7 +79,7 @@ defmodule EctoTablestore.RowTest do
     assert query_result_by_one.price == input_price
 
     # query and return fields in `columns_to_get`
-    query_result2_by_one = TestRepo.one(order_with_matched_num, columns_to_get: ["num", "desc"])
+    query_result2_by_one = TestRepo.one(order_with_matched_num, columns_to_get: ["num", "desc"], entity_full_match: true)
     assert query_result2_by_one.desc == input_desc
     assert query_result2_by_one.num == input_num
     assert query_result2_by_one.name == nil
@@ -322,14 +326,13 @@ defmodule EctoTablestore.RowTest do
       assert query_user.level != nil
     end
 
-    # provide attribute column `name` in schema, will implicitly use it in the filter and add `name` into columns_to_get if specially set columns_to_get.
+    # provide attribute column `name` in schema, and set `entity_full_match: true` will use these attribute field(s) in the filter and add `name` into columns_to_get if specially set columns_to_get.
     requests2 = [
-      {[%User{id: 1, name: "name1"}, %User{id: 2, name: "name2"}], columns_to_get: ["level"]}
+      {[%User{id: 1, name: "name1"}, %User{id: 2, name: "name2"}], columns_to_get: ["level"], entity_full_match: true}
     ]
 
     {:ok, result2} = TestRepo.batch_get(requests2)
 
-    IO.puts(">>> result2: #{inspect(result2)}")
     query_users2 = Keyword.get(result2, User)
 
     assert length(query_users2) == 2
@@ -339,11 +342,18 @@ defmodule EctoTablestore.RowTest do
       assert query_user.level != nil
     end
 
+    requests_with_fake = [
+      {[%User{id: 1, name: "name_fake"}, %User{id: 2, name: "name2"}], columns_to_get: ["level"], entity_full_match: true}
+    ]
+    {:ok, [{_, result_users}]} = TestRepo.batch_get(requests_with_fake)
+    assert length(result_users) == 1
+
     assert_raise RuntimeError, fn ->
-      # one schema provide `name` attribute, another schema only has primary key,
+      # When use `entity_full_match: true`, one schema provides `name` attribute, 
+      # another schema only has primary key,
       # in this case, there exist conflict will raise a RuntimeError for 
       requests_invalid = [
-        [%User{id: 1, name: "name1"}, %User{id: 2}]
+        {[%User{id: 1, name: "name1"}, %User{id: 2}], entity_full_match: true}
       ]
 
       TestRepo.batch_get(requests_invalid)
@@ -370,7 +380,7 @@ defmodule EctoTablestore.RowTest do
     #
     # The following case will only return User(id: 2) in batch get.
     requests3_1 = [
-      [%User{id: 1, name: "name1"}, %User{id: 2, name: "name2"}]
+      {[%User{id: 1, name: "name1"}, %User{id: 2, name: "name2"}], entity_full_match: true}
     ]
 
     {:ok, result3_1} = TestRepo.batch_get(requests3_1)
@@ -382,12 +392,13 @@ defmodule EctoTablestore.RowTest do
     assert query3_1_user.id == 2
     assert query3_1_user.name == "name2"
 
+    # Although User(id: 1)'s name is changed, but by default `batch_get` only use the primary keys of User entity to fetch rows.
     requests4 = [
-      [%User{id: 1, name: "name1"}]
+      [%User{id: 1, name: "not_existed_name1"}]
     ]
 
     {:ok, result4} = TestRepo.batch_get(requests4)
-    assert Keyword.get(result4, User) == nil
+    assert Keyword.get(result4, User) != nil
 
     for order <- saved_orders do
       TestRepo.delete(%Order{id: order.id, internal_id: order.internal_id},

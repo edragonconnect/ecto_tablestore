@@ -11,7 +11,7 @@ Supported features:
 * Support `:map` | `{:map, _}` | `:array` | `{:array, _}` field type, use Jason to encode the field value into :string when save, use Jason to simply decode the field value into `:map` | `:array` when read, the :keys option of Jason's decode always use :string.
 * Support the partition key is autoincrementing, use the sequence feature provided by `ex_aliyun_ots`.
 * Automatically converts the returned original row results into corresponding schema(s).
-* Automatically generate the provided attribute-column field(s) of schema entity into the `filter` expression option of `GetRow` (see `c:EctoTablestore.Repo.one/2`) and `BatchGet` (see `c:EctoTablestore.Repo.batch_get/1`).
+* Automatically generate the provided attribute-column field(s) of schema entity into the `filter` expression option of `GetRow` (see `c:EctoTablestore.Repo.one/2`) and `BatchGet` (see `c:EctoTablestore.Repo.batch_get/1`) use `entity_full_match: true`, by default this option is `false`.
 * Automatically generate the provided attribute-column field(s) of schema entity into the `condition` expression option of `BatchWrite`.
 * Automatically map changeset's attribute-column field(s) into `UpdateRow` operation when call `c:EctoTablestore.Repo.update/2`:
   * Use atomic increment via `{:increment, integer()}` in changeset, and return the increased value in the corrsponding field(s) by default;
