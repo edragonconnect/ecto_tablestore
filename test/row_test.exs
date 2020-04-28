@@ -810,4 +810,10 @@ defmodule EctoTablestore.RowTest do
     # Use ots's error code as check_constraint_name.
     assert error_constraint_name == check_constraint_name
   end
+
+  test "repo - naive_datetime timestamp" do
+    id = Ecto.UUID.generate()
+    {:ok, user} = %User2{id: id} |> TestRepo.insert(condition: condition(:ignore)) |> IO.inspect()
+    assert NaiveDateTime.compare(NaiveDateTime.utc_now(), user.inserted_at) == :gt
+  end
 end
