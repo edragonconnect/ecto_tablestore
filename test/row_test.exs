@@ -79,7 +79,12 @@ defmodule EctoTablestore.RowTest do
     assert query_result_by_one.price == input_price
 
     # query and return fields in `columns_to_get`
-    query_result2_by_one = TestRepo.one(order_with_matched_num, columns_to_get: ["num", "desc"], entity_full_match: true)
+    query_result2_by_one =
+      TestRepo.one(order_with_matched_num,
+        columns_to_get: ["num", "desc"],
+        entity_full_match: true
+      )
+
     assert query_result2_by_one.desc == input_desc
     assert query_result2_by_one.num == input_num
     assert query_result2_by_one.name == nil
@@ -203,7 +208,7 @@ defmodule EctoTablestore.RowTest do
     TestRepo.delete(user, condition: condition(:expect_exist))
   end
 
-  test "repo - insert/update with :map and :array field types" do
+  test "repo - insert/update with ecto types" do
     assert_raise Ecto.ConstraintError, ~r/OTSConditionCheckFail/, fn ->
       user = %User{
         name: "username2",
@@ -215,9 +220,14 @@ defmodule EctoTablestore.RowTest do
       {:ok, _saved_user} = TestRepo.insert(user, condition: condition(:expect_exist))
     end
 
+    naive_dt = NaiveDateTime.utc_now() |> NaiveDateTime.truncate(:second)
+    dt = DateTime.utc_now() |> DateTime.truncate(:second)
+
     user = %User{
       id: 1,
       name: "username",
+      naive_dt: naive_dt,
+      dt: dt,
       profile: %{"level" => 1, "age" => 20},
       tags: ["tag_a", "tag_b"]
     }
@@ -226,14 +236,27 @@ defmodule EctoTablestore.RowTest do
     get_user = TestRepo.get(User, id: 1)
     profile = get_user.profile
 
+    assert get_user.naive_dt == naive_dt
+    assert get_user.dt == dt
     assert Map.get(profile, "level") == 1
     assert Map.get(profile, "age") == 20
     assert get_user.tags == ["tag_a", "tag_b"]
 
-    changeset = Ecto.Changeset.change(get_user, name: "username2", profile: %{name: 1})
+    naive_dt = NaiveDateTime.utc_now() |> NaiveDateTime.truncate(:second)
+    dt = DateTime.utc_now() |> DateTime.truncate(:second)
+
+    changeset =
+      Ecto.Changeset.change(get_user,
+        name: "username2",
+        profile: %{name: 1},
+        naive_dt: naive_dt,
+        dt: dt
+      )
 
     {:ok, updated_user} = TestRepo.update(changeset, condition: condition(:expect_exist))
 
+    assert updated_user.naive_dt == naive_dt
+    assert updated_user.dt == dt
     assert updated_user.profile == %{name: 1}
 
     get_user = TestRepo.get(User, id: 1)
@@ -328,7 +351,8 @@ defmodule EctoTablestore.RowTest do
 
     # provide attribute column `name` in schema, and set `entity_full_match: true` will use these attribute field(s) in the filter and add `name` into columns_to_get if specially set columns_to_get.
     requests2 = [
-      {[%User{id: 1, name: "name1"}, %User{id: 2, name: "name2"}], columns_to_get: ["level"], entity_full_match: true}
+      {[%User{id: 1, name: "name1"}, %User{id: 2, name: "name2"}],
+       columns_to_get: ["level"], entity_full_match: true}
     ]
 
     {:ok, result2} = TestRepo.batch_get(requests2)
@@ -343,8 +367,10 @@ defmodule EctoTablestore.RowTest do
     end
 
     requests_with_fake = [
-      {[%User{id: 1, name: "name_fake"}, %User{id: 2, name: "name2"}], columns_to_get: ["level"], entity_full_match: true}
+      {[%User{id: 1, name: "name_fake"}, %User{id: 2, name: "name2"}],
+       columns_to_get: ["level"], entity_full_match: true}
     ]
+
     {:ok, [{_, result_users}]} = TestRepo.batch_get(requests_with_fake)
     assert length(result_users) == 1
 
@@ -748,7 +774,12 @@ defmodule EctoTablestore.RowTest do
     stale_error_field = :num
     stale_error_message = "check num condition failed"
 
-    {:error, invalid_changeset} = TestRepo.update(changeset, condition: condition(:expect_exist, "num" > 1000), stale_error_field: stale_error_field, stale_error_message: stale_error_message)
+    {:error, invalid_changeset} =
+      TestRepo.update(changeset,
+        condition: condition(:expect_exist, "num" > 1000),
+        stale_error_field: stale_error_field,
+        stale_error_message: stale_error_message
+      )
 
     {^stale_error_message, error} = Keyword.get(invalid_changeset.errors, stale_error_field)
     assert error == [stale: true]
@@ -764,13 +795,19 @@ defmodule EctoTablestore.RowTest do
     user =
       %User2{id: "100"}
       |> Ecto.Changeset.change(name: "name2")
-      |> Ecto.Changeset.check_constraint(check_constraint_field, name: check_constraint_name, message: check_constraint_message)
+      |> Ecto.Changeset.check_constraint(check_constraint_field,
+        name: check_constraint_name,
+        message: check_constraint_message
+      )
 
-    {:error, invalid_changeset} = TestRepo.insert(user, condition: condition(:expect_exist), return_type: :pk)
-    {^check_constraint_message, error_constraint} = Keyword.get(invalid_changeset.errors, check_constraint_field)
+    {:error, invalid_changeset} =
+      TestRepo.insert(user, condition: condition(:expect_exist), return_type: :pk)
+
+    {^check_constraint_message, error_constraint} =
+      Keyword.get(invalid_changeset.errors, check_constraint_field)
+
     error_constraint_name = Keyword.get(error_constraint, :constraint_name)
     # Use ots's error code as check_constraint_name.
     assert error_constraint_name == check_constraint_name
   end
-
 end

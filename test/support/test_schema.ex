@@ -27,6 +27,9 @@ defmodule EctoTablestore.TestSchema.User do
     field(:name, :string)
     field(:level, :integer)
 
+    field(:naive_dt, :naive_datetime)
+    field(:dt, :utc_datetime)
+
     field(:profile, :map)
     field(:tags, {:array, :string})
 
