@@ -68,3 +68,21 @@ defmodule EctoTablestore.TestSchema.User2 do
     field(:name, :string)
   end
 end
+
+defmodule EctoTablestore.TestSchema.Post do
+  use EctoTablestore.Schema
+
+  tablestore_schema "ecto_ots_test_post" do
+    field(:keyid, EctoTablestore.Hashids, primary_key: true, autogenerate: true, hashids: [salt: "123", min_len: 2])
+    field(:content, :string)
+  end
+end
+
+defmodule EctoTablestore.TestSchema.Post2 do
+  use EctoTablestore.Schema
+
+  tablestore_schema "ecto_ots_test_post2" do
+    field(:id, EctoTablestore.Hashids, primary_key: true, autogenerate: true, hashids: [alphabet: "1234567890cfhistu", min_len: 5, salt: "testsalt"])
+    field(:content, :string)
+  end
+end

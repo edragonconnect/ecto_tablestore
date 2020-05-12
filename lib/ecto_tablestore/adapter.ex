@@ -629,6 +629,23 @@ defmodule Ecto.Adapters.Tablestore do
 
   defp map_pks_and_attrs_to_put_row(
          [],
+         {_, autogenerate_id_name, EctoTablestore.Hashids},
+         attr_columns,
+         prepared_pks,
+         _instance,
+         schema
+       ) do
+    attrs = map_attrs_to_row(schema, attr_columns)
+
+    {
+      Enum.reverse(prepared_pks),
+      attrs,
+      autogenerate_id_name
+    }
+  end
+
+  defp map_pks_and_attrs_to_put_row(
+         [],
          {_, autogenerate_id_name, :id},
          attr_columns,
          prepared_pks,
@@ -663,13 +680,61 @@ defmodule Ecto.Adapters.Tablestore do
 
   defp map_pks_and_attrs_to_put_row(
          [primary_key | rest_primary_keys],
-         {_, autogenerate_id_name, :id} = autogenerate_id,
+         {_, autogenerate_id_name, EctoTablestore.Hashids} = autogenerate_id,
          fields,
          prepared_pks,
          instance,
          schema
+       ) when primary_key == autogenerate_id_name and is_list(prepared_pks) do
+
+    source = schema.__schema__(:source)
+
+    field_name_str = Atom.to_string(autogenerate_id_name)
+
+    next_value = Sequence.next_value(instance, bound_sequence_table_name(source), field_name_str)
+
+    hashids_value = Hashids.encode(schema.hashids(primary_key), next_value)
+
+    prepared_pks = [{field_name_str, hashids_value} | prepared_pks]
+
+    map_pks_and_attrs_to_put_row(rest_primary_keys, autogenerate_id, fields, prepared_pks, instance, schema)
+  end
+
+  defp map_pks_and_attrs_to_put_row(
+         [primary_key | rest_primary_keys],
+         {_, autogenerate_id_name, EctoTablestore.Hashids} = autogenerate_id,
+         fields,
+         prepared_pks,
+         instance,
+         schema
+       ) when primary_key != autogenerate_id_name do
+
+    {value, updated_fields} = Keyword.pop(fields, primary_key)
+
+    if value == nil,
+      do: raise("Invalid usecase - autogenerate primary key: `#{primary_key}` can not be nil.")
+
+    prepared_pks = [{Atom.to_string(primary_key), value} | prepared_pks]
+    map_pks_and_attrs_to_put_row(
+      rest_primary_keys,
+      autogenerate_id,
+      updated_fields,
+      prepared_pks,
+      instance,
+      schema
+    )
+  end
+
+
+  defp map_pks_and_attrs_to_put_row(
+         [primary_key | rest_primary_keys],
+         {_, autogenerate_id_name, :id} = autogenerate_id,
+         fields,
+         [],
+         instance,
+         schema
        )
-       when primary_key == autogenerate_id_name and prepared_pks == [] do
+       when primary_key == autogenerate_id_name do
     # Set partition_key as auto-generated, use sequence for this usecase
 
     source = schema.__schema__(:source)
@@ -678,10 +743,11 @@ defmodule Ecto.Adapters.Tablestore do
 
     next_value = Sequence.next_value(instance, bound_sequence_table_name(source), field_name_str)
 
-    update = [{field_name_str, next_value} | prepared_pks]
+    prepared_pks = [{field_name_str, next_value}]
 
-    map_pks_and_attrs_to_put_row(rest_primary_keys, autogenerate_id, fields, update, instance, schema)
+    map_pks_and_attrs_to_put_row(rest_primary_keys, autogenerate_id, fields, prepared_pks, instance, schema)
   end
+
 
   defp map_pks_and_attrs_to_put_row(
          [primary_key | rest_primary_keys],
@@ -711,13 +777,13 @@ defmodule Ecto.Adapters.Tablestore do
     if value == nil,
       do: raise("Invalid usecase - autogenerate primary key: `#{primary_key}` can not be nil.")
 
-    update = [{Atom.to_string(primary_key), value} | prepared_pks]
+    prepared_pks = [{Atom.to_string(primary_key), value} | prepared_pks]
 
     map_pks_and_attrs_to_put_row(
       rest_primary_keys,
       autogenerate_id,
       updated_fields,
-      update,
+      prepared_pks,
       instance,
       schema
     )
