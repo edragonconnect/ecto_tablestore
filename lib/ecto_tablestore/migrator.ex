@@ -78,9 +78,6 @@ defmodule EctoTablestore.Migrator do
   end
 
   defp load_migration!({version, _, file}) when is_binary(file) do
-    #tmp = Code.require_file(file)
-    #IO.puts "file: #{inspect file} to required: #{inspect tmp}"
-
     loaded_modules = file |> Code.require_file() |> Enum.map(&elem(&1, 0))
 
     if mod = Enum.find(loaded_modules, &migration?/1) do
