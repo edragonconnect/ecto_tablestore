@@ -240,7 +240,7 @@ defmodule EctoTablestore.Migration do
 
   """
   def add(column, type, opts \\ []) when is_atom(column) and is_list(opts) do
-    validate_type!(type)
+    validate_type!(column, type)
     Runner.subcommand({:add, column, type, opts})
   end
 
@@ -263,16 +263,17 @@ defmodule EctoTablestore.Migration do
     end
   end
 
-  defp validate_type!(type)
+  defp validate_type!(_column, type)
        when type == :integer
        when type == :string
-       when type == :binary do
+       when type == :binary
+       when type == :hashids do
     :ok
   end
 
-  defp validate_type!(type) do
+  defp validate_type!(column, type) do
     raise ArgumentError,
-          "#{inspect(type)} is not a valid primary key type, " <>
-            "please use an atom as :integer | :string | :binary ."
+          "#{inspect(type)} is not a valid primary key type for column: `#{inspect(column)}`, " <>
+            "please use an atom as :integer | :string | :binary | :hashids ."
   end
 end

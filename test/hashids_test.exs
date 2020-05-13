@@ -12,19 +12,27 @@ defmodule EctoTablestore.HashidsTest do
     TestHelper.setup_all()
 
     table = Post.__schema__(:source)
+
+    pk = "keyid"
+
     ExAliyunOts.create_table(
       @instance,
       table,
-      [{"keyid", :string}]
+      [{pk, :string}]
     )
 
-    seq_name = Ecto.Adapters.Tablestore.bound_sequence_table_name(table)
-    EctoTablestore.Sequence.create(@instance, seq_name)
+    # There will use `ecto_tablestore_default_seq` as global
+    EctoTablestore.Sequence.create(@instance)
 
     on_exit(fn ->
       ExAliyunOts.delete_table(@instance, table)
 
-      ExAliyunOts.delete_table(@instance, seq_name)
+      key = Ecto.Adapters.Tablestore.key_to_global_sequence(table, pk)
+
+      ExAliyunOts.delete_row(
+        @instance, "ecto_tablestore_default_seq",
+        [{"name", key}], condition: condition(:expect_exist)
+      )
     end)
   end
 

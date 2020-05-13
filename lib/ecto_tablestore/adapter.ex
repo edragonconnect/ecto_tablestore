@@ -510,6 +510,11 @@ defmodule Ecto.Adapters.Tablestore do
   end
 
   @doc false
+  def key_to_global_sequence(table_name, field) do
+    "#{table_name},#{field}"
+  end
+
+  @doc false
   def bound_sequence_table_name(table_name) do
     "#{table_name}_seq"
   end
@@ -691,7 +696,7 @@ defmodule Ecto.Adapters.Tablestore do
 
     field_name_str = Atom.to_string(autogenerate_id_name)
 
-    next_value = Sequence.next_value(instance, bound_sequence_table_name(source), field_name_str)
+    next_value = Sequence.next_value(instance, key_to_global_sequence(source, field_name_str))
 
     hashids_value = Hashids.encode(schema.hashids(primary_key), next_value)
 
@@ -1459,8 +1464,8 @@ defmodule Ecto.Adapters.Tablestore do
   ## Migration
 
   defp do_execute_ddl(meta, {:create, table, columns}) do
-    {table_name, primary_keys, create_seq?} =
-      Enum.reduce(columns, {table.name, [], false}, &do_execute_ddl_add_column/2)
+    {table_name, primary_keys, create_seq?, with_hashids?} =
+      Enum.reduce(columns, {table.name, [], false, false}, &do_execute_ddl_add_column/2)
 
     Logger.info(fn ->
       ">> table_name: #{table_name}, primary_keys: #{inspect(primary_keys)}, create_seq?: #{
@@ -1483,13 +1488,57 @@ defmodule Ecto.Adapters.Tablestore do
     end)
 
     if result == :ok and create_seq? do
-      Sequence.create(instance, bound_sequence_table_name(table_name))
+
+      if with_hashids? do
+        # so far only process `hashids` type in migration with
+        # the global default table `ecto_tablestore_default_seq`,
+        # and it will be applied and recommended in the future by default.
+        Sequence.create(instance)
+      else
+        Sequence.create(instance, bound_sequence_table_name(table_name))
+      end
     end
   end
 
   defp do_execute_ddl_add_column(
+         {:add, field_name, :hashids, options},
+         {source, prepared_columns, create_seq?, _with_hashids}
+       )
+       when is_atom(field_name) do
+    partition_key? = Keyword.get(options, :partition_key, false)
+    auto_increment? = Keyword.get(options, :auto_increment, false)
+
+    {prepared_column, create_seq?} =
+      cond do
+        partition_key? and auto_increment? ->
+          {
+            {Atom.to_string(field_name), PKType.string()},
+            true
+          }
+        create_seq? and auto_increment? ->
+          raise Ecto.MigrationError,
+            message:
+              "the `auto_increment: true` option only allows binding of one primary key, but find the duplicated `#{
+                field_name
+              }` field with options: #{inspect(options)}"
+        true ->
+          {
+            {Atom.to_string(field_name), PKType.string()},
+            true
+          }
+      end
+
+    {
+      source,
+      splice_list(prepared_columns, [prepared_column]),
+      create_seq?,
+      true
+    }
+  end
+
+  defp do_execute_ddl_add_column(
          {:add, field_name, :integer, options},
-         {source, prepared_columns, create_seq?}
+         {source, prepared_columns, create_seq?, with_hashids?}
        )
        when is_atom(field_name) do
     partition_key? = Keyword.get(options, :partition_key, false)
@@ -1526,31 +1575,34 @@ defmodule Ecto.Adapters.Tablestore do
     {
       source,
       splice_list(prepared_columns, [prepared_column]),
-      create_seq?
+      create_seq?,
+      with_hashids?
     }
   end
 
   defp do_execute_ddl_add_column(
          {:add, field_name, :string, _options},
-         {source, prepared_columns, create_seq?}
+         {source, prepared_columns, create_seq?, with_hashids?}
        )
        when is_atom(field_name) do
     {
       source,
       splice_list(prepared_columns, [{Atom.to_string(field_name), PKType.string()}]),
-      create_seq?
+      create_seq?,
+      with_hashids?
     }
   end
 
   defp do_execute_ddl_add_column(
          {:add, field_name, :binary, _options},
-         {source, prepared_columns, create_seq?}
+         {source, prepared_columns, create_seq?, with_hashids?}
        )
        when is_atom(field_name) do
     {
       source,
       splice_list(prepared_columns, [{Atom.to_string(field_name), PKType.binary()}]),
-      create_seq?
+      create_seq?,
+      with_hashids?
     }
   end
 
