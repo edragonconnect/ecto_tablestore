@@ -135,8 +135,7 @@ end
 Options:
 
   * The `partition_key` as true is required;
-  * The `auto_increment` as true required.
-
+  * The `auto_increment` as true is required.
 
 ## References
 
