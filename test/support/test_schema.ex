@@ -65,8 +65,19 @@ defmodule EctoTablestore.TestSchema.User2 do
 
   tablestore_schema "ecto_ots_test_user2" do
     field(:id, :string, primary_key: true)
+    field(:age, :integer)
+    field(:name, :string, default: "user_name_123")
+  end
+end
+
+defmodule EctoTablestore.TestSchema.User3 do
+  use EctoTablestore.Schema
+
+  tablestore_schema "ecto_ots_test_user3" do
+    field(:id, :string, primary_key: true)
     field(:name, :string)
   end
+
 end
 
 defmodule EctoTablestore.TestSchema.Post do

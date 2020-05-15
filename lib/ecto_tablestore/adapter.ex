@@ -570,13 +570,36 @@ defmodule Ecto.Adapters.Tablestore do
   end
 
   defp do_generate_filter(filter_from_entity, :and, %ExAliyunOts.Var.Filter{} = filter_from_opt) do
-    %ExAliyunOts.Var.Filter{
-      filter: %ExAliyunOts.Var.CompositeColumnValueFilter{
-        combinator: LogicOperator.and(),
-        sub_filters: [filter_from_entity, filter_from_opt]
-      },
-      filter_type: FilterType.composite_column()
-    }
+
+    filter_names_from_opt = do_generate_filter_iterate(filter_from_opt)
+
+    filter_from_entity = do_drop_filter_from_entity(filter_from_entity, filter_names_from_opt)
+
+    case filter_from_entity do
+      filter_from_entity when is_list(filter_from_entity) ->
+
+        %ExAliyunOts.Var.Filter{
+          filter: %ExAliyunOts.Var.CompositeColumnValueFilter{
+            combinator: LogicOperator.and(),
+            sub_filters: Enum.reverse([filter_from_opt | filter_from_entity])
+          },
+          filter_type: FilterType.composite_column()
+        }
+
+      %ExAliyunOts.Var.Filter{filter_type: :FT_SINGLE_COLUMN_VALUE} ->
+
+        %ExAliyunOts.Var.Filter{
+          filter: %ExAliyunOts.Var.CompositeColumnValueFilter{
+            combinator: LogicOperator.and(),
+            sub_filters: [filter_from_entity, filter_from_opt]
+          },
+          filter_type: FilterType.composite_column()
+        }
+
+      nil ->
+        filter_from_opt
+    end
+
   end
 
   defp do_generate_filter(filter_from_entity, :or, %ExAliyunOts.Var.Filter{} = filter_from_opt) do
@@ -593,14 +616,57 @@ defmodule Ecto.Adapters.Tablestore do
     raise("Invalid usecase - input invalid `:filter` option: #{inspect(filter_from_opt)}")
   end
 
+  defp do_generate_filter_iterate(%ExAliyunOts.Var.Filter{filter: %{sub_filters: sub_filters}, filter_type: :FT_COMPOSITE_COLUMN_VALUE}) do
+    sub_filters
+    |> Enum.map(fn(filter) ->
+      do_generate_filter_iterate(filter)
+    end)
+    |> List.flatten()
+  end
+  defp do_generate_filter_iterate(%ExAliyunOts.Var.Filter{filter: %{column_name: column_name}, filter_type: :FT_SINGLE_COLUMN_VALUE}) do
+    [column_name]
+  end
+
+  defp do_drop_filter_from_entity(%ExAliyunOts.Var.Filter{filter: %{column_name: column_name}, filter_type: :FT_SINGLE_COLUMN_VALUE} = filter, fields) do
+    if column_name in fields, do: nil, else: filter
+  end
+
+  defp do_drop_filter_from_entity(%ExAliyunOts.Var.Filter{filter: %{sub_filters: sub_filters}, filter_type: :FT_COMPOSITE_COLUMN_VALUE}, fields) do
+    filter_from_entity =
+      sub_filters
+      |> Enum.reduce([], fn(filter, acc) ->
+        f = do_drop_filter_from_entity(filter, fields)
+        if f != nil, do: [f | acc], else: acc
+      end)
+      |> Enum.reverse()
+    if filter_from_entity == [], do: nil, else: filter_from_entity
+  end
+
   defp generate_filter_ast([], prepared) do
     List.first(prepared)
+  end
+
+  defp generate_filter_ast([{field_name, value} | rest], [])
+    when is_atom(field_name) and is_map(value)
+    when is_atom(field_name) and is_list(value) do
+      field_name = Atom.to_string(field_name)
+      ast = quote do: unquote(field_name) == unquote(Jason.encode!(value))
+      generate_filter_ast(rest, [ast])
   end
 
   defp generate_filter_ast([{field_name, value} | rest], []) when is_atom(field_name) do
     field_name = Atom.to_string(field_name)
     ast = quote do: unquote(field_name) == unquote(value)
     generate_filter_ast(rest, [ast])
+  end
+
+
+  defp generate_filter_ast([{field_name, value} | rest], prepared)
+    when is_atom(field_name) and is_map(value)
+    when is_atom(field_name) and is_list(value) do
+      field_name = Atom.to_string(field_name)
+      ast = quote do: unquote(field_name) == unquote(Jason.encode!(value))
+      generate_filter_ast(rest, [{:and, [], [ast | prepared]}])
   end
 
   defp generate_filter_ast([{field_name, value} | rest], prepared) when is_atom(field_name) do
