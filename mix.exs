@@ -4,7 +4,7 @@ defmodule EctoTablestore.MixProject do
   def project do
     [
       app: :ecto_tablestore,
-      version: "0.5.0",
+      version: "0.5.2",
       elixir: "~> 1.7",
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
@@ -30,6 +30,7 @@ defmodule EctoTablestore.MixProject do
       {:ecto, "~> 3.2"},
       {:jason, "~> 1.0"},
       {:ex_aliyun_ots, "~> 0.6"},
+      {:hashids, "~> 2.0", optional: true},
       {:ex_doc, "~> 0.21", only: :dev, runtime: false}
     ]
   end

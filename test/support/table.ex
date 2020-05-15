@@ -2,7 +2,7 @@ defmodule EctoTablestore.Support.Table do
 
   @instance EDCEXTestInstance
 
-  alias EctoTablestore.TestSchema.{Order, User, User2, Page}
+  alias EctoTablestore.TestSchema.{Order, User, User2, User3, Page}
 
   def create_order() do
     table = Order.__schema__(:source)
@@ -18,6 +18,12 @@ defmodule EctoTablestore.Support.Table do
 
   def create_user2() do
     table = User2.__schema__(:source)
+    ExAliyunOts.create_table(@instance, table,
+      [{"id", :string}])
+  end
+
+  def create_user3() do
+    table = User3.__schema__(:source)
     ExAliyunOts.create_table(@instance, table,
       [{"id", :string}])
   end
@@ -43,6 +49,11 @@ defmodule EctoTablestore.Support.Table do
 
   def delete_user2() do
     table = User2.__schema__(:source)
+    ExAliyunOts.delete_table(@instance, table)
+  end
+
+  def delete_user3() do
+    table = User3.__schema__(:source)
     ExAliyunOts.delete_table(@instance, table)
   end
 

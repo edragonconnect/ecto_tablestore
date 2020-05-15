@@ -86,6 +86,56 @@ end
 
 4, After finish the above preparation, we can use `MyRepo` to operate data store.
 
+## Integrate Hashids
+
+Base on unique integer of atomic-increment sequence, provides a way to simply integrate `Hashids` to generate your *hash* ids when insert row(s), for `Repo.insert/2` or `Repo.batch_write/1`.
+
+
+### use in schema
+
+```elixir
+defmodule Module do
+  use EctoTablestore.Schema
+
+  tablestore_schema "table_name" do
+    field(:id, :hashids, primary_key: true, autogenerate: true,
+      hashids: [salt: "123", min_len: 2, alphabet: "..."])
+    field(:content, :string)
+  end
+  
+end
+```
+
+Options:
+
+  * The `primary_key` as true is required;
+  * The `autogenerate` as true is required; 
+  * The `salt`, `min_len`, and `alphabet` of hashids option is used for configuration options from `Hashids.new/1`.
+
+
+### use in migration
+
+Use `:hashids` as a type in `add` operation to define the partition key,
+the principle behind this will use `ecto_tablestore_default_seq` as a global default table to maintain the sequences of all tables, if `ecto_tablestore_default_seq` is not existed, there will create this, if it is existed, please ignore the "OTSObjectAlreadyExist" error of requested table already exists.
+
+```elixir
+defmodule EctoTablestore.TestRepo.Migrations.TestHashids do
+  use EctoTablestore.Migration
+
+  def change do
+    create table("table_name") do
+      add :id, :hashids, partition_key: true, auto_increment: true
+      add :oid, :integer
+    end
+  end
+
+end
+```
+
+Options:
+
+  * The `partition_key` as true is required;
+  * The `auto_increment` as true is required.
 
 ## References
 

@@ -174,7 +174,7 @@ defmodule EctoTablestore.Migration do
   @doc """
   Adds a primary key when creating a table.
 
-  This function only accepts types as `:string` | `:binary` | `:integer`.
+  This function only accepts types as `:string` | `:binary` | `:integer` | `:hashids`.
 
   About `:auto_increment` option:
 
@@ -189,6 +189,11 @@ defmodule EctoTablestore.Migration do
   Tablestore can only have up to 4 primary keys, meanwhile the first defined primary key is the
   partition key, Please know that the order of the primary key definition will be directly mapped to
   the created table.
+
+  About `:hashids` type to define the partition key:
+
+    * set `partition_key` as `true` is required.
+    * set `auto_increment` as `true` is required.
 
   ## Examples
 
@@ -231,6 +236,12 @@ defmodule EctoTablestore.Migration do
         add :version, :integer, auto_increment: true
       end
 
+  The `:hashids` type for the partition key with the built-in sequence feature:
+
+      create table("posts") do
+        add :id, :hashids, auto_increment: true, partition_key: true
+      end
+
   ## Options
 
     * `:partition_key` - when `true`, marks this field as the partition key, only the first explicitly defined field is available for this option.
@@ -240,7 +251,7 @@ defmodule EctoTablestore.Migration do
 
   """
   def add(column, type, opts \\ []) when is_atom(column) and is_list(opts) do
-    validate_type!(type)
+    validate_type!(column, type)
     Runner.subcommand({:add, column, type, opts})
   end
 
@@ -263,16 +274,17 @@ defmodule EctoTablestore.Migration do
     end
   end
 
-  defp validate_type!(type)
+  defp validate_type!(_column, type)
        when type == :integer
        when type == :string
-       when type == :binary do
+       when type == :binary
+       when type == :hashids do
     :ok
   end
 
-  defp validate_type!(type) do
+  defp validate_type!(column, type) do
     raise ArgumentError,
-          "#{inspect(type)} is not a valid primary key type, " <>
-            "please use an atom as :integer | :string | :binary ."
+          "#{inspect(type)} is not a valid primary key type for column: `#{inspect(column)}`, " <>
+            "please use an atom as :integer | :string | :binary | :hashids ."
   end
 end

@@ -6,7 +6,9 @@ defmodule EctoTablestore.Sequence do
   alias ExAliyunOts.Var
   alias ExAliyunOts.Sequence
 
-  def create(instance, seq_name) do
+  @default_seq "ecto_tablestore_default_seq"
+
+  def create(instance, seq_name \\ @default_seq) do
     new_seq = %Var.NewSequence{name: seq_name}
     result = Sequence.create(instance, new_seq)
     Logger.info("create a sequence: #{seq_name} result: #{inspect(result)}")
@@ -22,4 +24,18 @@ defmodule EctoTablestore.Sequence do
 
     Sequence.next_value(instance, var_next)
   end
+
+  @doc """
+  Use a global sequence table to store all kinds of sequences to the tables.
+  """
+  def next_value(instance, event)
+      when is_bitstring(event) do
+    var_next = %Var.GetSequenceNextValue{
+      name: @default_seq,
+      event: event
+    }
+
+    Sequence.next_value(instance, var_next)
+  end
+
 end

@@ -1,7 +1,7 @@
 defmodule EctoTablestore.RowTest do
   use ExUnit.Case
 
-  alias EctoTablestore.TestSchema.{Order, User, User2}
+  alias EctoTablestore.TestSchema.{Order, User, User2, User3}
   alias EctoTablestore.TestRepo
   alias Ecto.Changeset
 
@@ -13,11 +13,13 @@ defmodule EctoTablestore.RowTest do
     EctoTablestore.Support.Table.create_order()
     EctoTablestore.Support.Table.create_user()
     EctoTablestore.Support.Table.create_user2()
+    EctoTablestore.Support.Table.create_user3()
 
     on_exit(fn ->
       EctoTablestore.Support.Table.delete_order()
       EctoTablestore.Support.Table.delete_user()
       EctoTablestore.Support.Table.delete_user2()
+      EctoTablestore.Support.Table.delete_user3()
     end)
 
     Process.sleep(3_000)
@@ -641,7 +643,7 @@ defmodule EctoTablestore.RowTest do
   end
 
   test "repo - at least one attribute column" do
-    u = %User2{id: "1"}
+    u = %User3{id: "1"}
 
     assert_raise Ecto.ConstraintError, fn ->
       TestRepo.insert(u, condition: condition(:expect_not_exist))
@@ -816,4 +818,79 @@ defmodule EctoTablestore.RowTest do
     {:ok, user} = %User2{id: id} |> TestRepo.insert(condition: condition(:ignore)) |> IO.inspect()
     assert NaiveDateTime.compare(NaiveDateTime.utc_now(), user.inserted_at) == :gt
   end
+  
+  test "repo batch write to delete with an array field" do
+    user1 = %User{id: 1, tags: ["1", "2"], name: "name1"}
+    user2 = %User{id: 2, tags: ["a", "b", "c"], name: "name2"}
+    {:ok, _} =
+      TestRepo.batch_write(
+        [
+          put: [
+            {user1, condition: condition(:ignore)},
+            {user2, condition: condition(:ignore)}
+          ]
+        ]
+      )
+
+    {:ok, _} =
+      TestRepo.batch_write(
+        [
+          delete: [
+            user1,
+            user2
+          ]
+        ]
+      )
+
+    {:ok, [{User, users}]} =
+      TestRepo.batch_get(
+        [
+          [
+            %User{id: 1},
+            %User{id: 2},
+          ]
+        ]
+      )
+
+    assert users == nil
+  end
+
+  test "repo batch write to delete with a default value" do
+    user = %User2{id: "1", name: "username0", age: 30}
+    user2 = %User2{id: "2", name: "username2", age: 25}
+
+    {:ok, _} =
+      TestRepo.batch_write(
+        [
+          put: [
+            {user, condition: condition(:ignore)},
+            {user2, condition: condition(:ignore)}
+          ]
+        ]
+      )
+
+    {:ok, [{User2, results}]} =
+      TestRepo.batch_write(
+        [
+          delete: [
+            {%User2{id: "1", age: 30}, condition: condition(:expect_exist, "name" == "username0")}
+          ]
+        ]
+      )
+
+    [{:ok, deleted_user2}] = results[:delete]
+    assert deleted_user2.id == "1"
+
+    {:ok, [{User2, results}]} =
+      TestRepo.batch_write(
+        [
+          delete: [
+            {%User2{id: "2", age: 0}, condition: condition(:expect_exist, "name" == "username2" and "age" == 25)}
+          ]
+        ]
+      )
+    [{:ok, deleted_user2}] = results[:delete]
+    assert deleted_user2.id == "2"
+  end
+
 end

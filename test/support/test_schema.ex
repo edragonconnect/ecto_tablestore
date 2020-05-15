@@ -68,11 +68,40 @@ defmodule EctoTablestore.TestSchema.User2 do
 
   tablestore_schema "ecto_ots_test_user2" do
     field(:id, :string, primary_key: true)
+    field(:age, :integer)
+    field(:name, :string, default: "user_name_123")
+  end
+end
+
+defmodule EctoTablestore.TestSchema.User3 do
+  use EctoTablestore.Schema
+
+  tablestore_schema "ecto_ots_test_user3" do
+    field(:id, :string, primary_key: true)
     field(:name, :string)
 
     timestamps(
       type: :naive_datetime,
       autogenerate: {Ecto.Schema, :__timestamps__, [:naive_datetime]}
     )
+  end
+
+end
+
+defmodule EctoTablestore.TestSchema.Post do
+  use EctoTablestore.Schema
+
+  tablestore_schema "ecto_ots_test_post" do
+    field(:keyid, :hashids, primary_key: true, autogenerate: true, hashids: [salt: "123", min_len: 2])
+    field(:content, :string)
+  end
+end
+
+defmodule EctoTablestore.TestSchema.Post2 do
+  use EctoTablestore.Schema
+
+  tablestore_schema "ecto_ots_test_post2" do
+    field(:id, EctoTablestore.Hashids, primary_key: true, autogenerate: true, hashids: [alphabet: "1234567890cfhistu", min_len: 5, salt: "testsalt"])
+    field(:content, :string)
   end
 end
