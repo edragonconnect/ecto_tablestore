@@ -469,7 +469,7 @@ defmodule Ecto.Adapters.Tablestore do
 
     options =
       attr_columns
-      |> generate_filter_ast([])
+      |> generate_filter_from_entity([])
       |> do_generate_filter_options(options)
 
     columns_to_get_opt = Keyword.get(options, :columns_to_get, [])
@@ -500,6 +500,54 @@ defmodule Ecto.Adapters.Tablestore do
 
       Keyword.put(options, :columns_to_get, updated_columns_to_get)
     end
+  end
+
+  defp generate_filter_from_entity([], []) do
+    nil
+  end
+
+  defp generate_filter_from_entity([], [
+    %ExAliyunOts.Var.Filter{filter_type: :FT_SINGLE_COLUMN_VALUE} = filter
+  ]) do
+    filter
+  end
+  defp generate_filter_from_entity([], prepared) do
+    %ExAliyunOts.Var.Filter{
+      filter: %ExAliyunOts.Var.CompositeColumnValueFilter{
+        combinator: :LO_AND,
+        sub_filters: prepared,
+      },
+      filter_type: :FT_COMPOSITE_COLUMN_VALUE
+    }
+  end
+
+  defp generate_filter_from_entity([{field_name, value} | rest], prepared) when is_map(value) or is_list(value) do
+    filter =
+      %ExAliyunOts.Var.Filter{
+        filter: %ExAliyunOts.Var.SingleColumnValueFilter{
+          column_name: Atom.to_string(field_name),
+          column_value: Jason.encode!(value),
+          comparator: :CT_EQUAL,
+          ignore_if_missing: false,
+          latest_version_only: true
+        },
+        filter_type: :FT_SINGLE_COLUMN_VALUE
+      }
+    generate_filter_from_entity(rest, [filter | prepared])
+  end
+  defp generate_filter_from_entity([{field_name, value} | rest], prepared) do
+    filter =
+      %ExAliyunOts.Var.Filter{
+        filter: %ExAliyunOts.Var.SingleColumnValueFilter{
+          column_name: Atom.to_string(field_name),
+          column_value: value,
+          comparator: :CT_EQUAL,
+          ignore_if_missing: false,
+          latest_version_only: true
+        },
+        filter_type: :FT_SINGLE_COLUMN_VALUE
+      }
+    generate_filter_from_entity(rest, [filter | prepared])
   end
 
   @doc false
@@ -555,13 +603,8 @@ defmodule Ecto.Adapters.Tablestore do
   defp do_generate_filter_options(nil, options) do
     options
   end
-
-  defp do_generate_filter_options(ast, options) do
-    merged =
-      ast
-      |> ExAliyunOts.expressions_to_filter(binding())
-      |> do_generate_filter(:and, Keyword.get(options, :filter))
-
+  defp do_generate_filter_options(filter_from_entity, options) do
+    merged = do_generate_filter(filter_from_entity, :and, options[:filter])
     Keyword.put(options, :filter, merged)
   end
 
@@ -640,39 +683,6 @@ defmodule Ecto.Adapters.Tablestore do
       end)
       |> Enum.reverse()
     if filter_from_entity == [], do: nil, else: filter_from_entity
-  end
-
-  defp generate_filter_ast([], prepared) do
-    List.first(prepared)
-  end
-
-  defp generate_filter_ast([{field_name, value} | rest], [])
-    when is_atom(field_name) and is_map(value)
-    when is_atom(field_name) and is_list(value) do
-      field_name = Atom.to_string(field_name)
-      ast = quote do: unquote(field_name) == unquote(Jason.encode!(value))
-      generate_filter_ast(rest, [ast])
-  end
-
-  defp generate_filter_ast([{field_name, value} | rest], []) when is_atom(field_name) do
-    field_name = Atom.to_string(field_name)
-    ast = quote do: unquote(field_name) == unquote(value)
-    generate_filter_ast(rest, [ast])
-  end
-
-
-  defp generate_filter_ast([{field_name, value} | rest], prepared)
-    when is_atom(field_name) and is_map(value)
-    when is_atom(field_name) and is_list(value) do
-      field_name = Atom.to_string(field_name)
-      ast = quote do: unquote(field_name) == unquote(Jason.encode!(value))
-      generate_filter_ast(rest, [{:and, [], [ast | prepared]}])
-  end
-
-  defp generate_filter_ast([{field_name, value} | rest], prepared) when is_atom(field_name) do
-    field_name = Atom.to_string(field_name)
-    ast = quote do: unquote(field_name) == unquote(value)
-    generate_filter_ast(rest, [{:and, [], [ast | prepared]}])
   end
 
   defp pks_and_attrs_to_put_row(instance, schema, fields) do
