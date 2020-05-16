@@ -70,6 +70,11 @@ defmodule EctoTablestore.TestSchema.User2 do
     field(:id, :string, primary_key: true)
     field(:age, :integer)
     field(:name, :string, default: "user_name_123")
+
+    timestamps(
+      type: :naive_datetime,
+      autogenerate: {Ecto.Schema, :__timestamps__, [:naive_datetime]}
+    )
   end
 end
 
@@ -79,11 +84,6 @@ defmodule EctoTablestore.TestSchema.User3 do
   tablestore_schema "ecto_ots_test_user3" do
     field(:id, :string, primary_key: true)
     field(:name, :string)
-
-    timestamps(
-      type: :naive_datetime,
-      autogenerate: {Ecto.Schema, :__timestamps__, [:naive_datetime]}
-    )
   end
 
 end
