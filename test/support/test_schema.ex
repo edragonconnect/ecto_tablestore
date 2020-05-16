@@ -27,6 +27,9 @@ defmodule EctoTablestore.TestSchema.User do
     field(:name, :string)
     field(:level, :integer)
 
+    field(:naive_dt, :naive_datetime)
+    field(:dt, :utc_datetime)
+
     field(:profile, :map)
     field(:tags, {:array, :string})
 
@@ -76,6 +79,11 @@ defmodule EctoTablestore.TestSchema.User3 do
   tablestore_schema "ecto_ots_test_user3" do
     field(:id, :string, primary_key: true)
     field(:name, :string)
+
+    timestamps(
+      type: :naive_datetime,
+      autogenerate: {Ecto.Schema, :__timestamps__, [:naive_datetime]}
+    )
   end
 
 end

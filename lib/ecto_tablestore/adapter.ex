@@ -48,6 +48,7 @@ defmodule Ecto.Adapters.Tablestore do
           else
             options
           end
+
         get(meta.schema, Ecto.primary_key(entity), options)
       end
 
@@ -215,7 +216,6 @@ defmodule Ecto.Adapters.Tablestore do
 
   @impl true
   def delete(repo, schema_meta, filters, options) do
-
     result =
       ExAliyunOts.delete_row(
         repo.instance,
@@ -232,6 +232,7 @@ defmodule Ecto.Adapters.Tablestore do
         case error do
           %Error{code: code} when code == @ots_condition_check_fail ->
             {:error, :stale}
+
           _ ->
             {:invalid, [{:check, error.code}]}
         end
@@ -240,7 +241,6 @@ defmodule Ecto.Adapters.Tablestore do
 
   @impl true
   def update(repo, schema_meta, fields, filters, _returning, options) do
-
     schema = schema_meta.schema
 
     options =
@@ -270,6 +270,7 @@ defmodule Ecto.Adapters.Tablestore do
         case error do
           %Error{code: code} when code == @ots_condition_check_fail ->
             {:error, :stale}
+
           _ ->
             {:invalid, [{:check, error.code}]}
         end
@@ -826,9 +827,15 @@ defmodule Ecto.Adapters.Tablestore do
 
     prepared_pks = [{field_name_str, next_value}]
 
-    map_pks_and_attrs_to_put_row(rest_primary_keys, autogenerate_id, fields, prepared_pks, instance, schema)
+    map_pks_and_attrs_to_put_row(
+      rest_primary_keys,
+      autogenerate_id,
+      fields,
+      prepared_pks,
+      instance,
+      schema
+    )
   end
-
 
   defp map_pks_and_attrs_to_put_row(
          [primary_key | rest_primary_keys],
@@ -840,7 +847,15 @@ defmodule Ecto.Adapters.Tablestore do
        )
        when primary_key == autogenerate_id_name do
     update = [{Atom.to_string(autogenerate_id_name), PKType.auto_increment()} | prepared_pks]
-    map_pks_and_attrs_to_put_row(rest_primary_keys, autogenerate_id, fields, update, instance, schema)
+
+    map_pks_and_attrs_to_put_row(
+      rest_primary_keys,
+      autogenerate_id,
+      fields,
+      update,
+      instance,
+      schema
+    )
   end
 
   defp map_pks_and_attrs_to_put_row(
@@ -852,7 +867,6 @@ defmodule Ecto.Adapters.Tablestore do
          schema
        )
        when primary_key != autogenerate_id_name do
-
     {value, updated_fields} = Keyword.pop(fields, primary_key)
 
     if value == nil,
@@ -957,6 +971,16 @@ defmodule Ecto.Adapters.Tablestore do
   end
 
   defp do_map_row_item_to_attr(type, key, value)
+       when type in [:naive_datetime_usec, :naive_datetime] and is_atom(key) do
+    {key, value |> DateTime.from_unix!() |> DateTime.to_naive()}
+  end
+
+  defp do_map_row_item_to_attr(type, key, value)
+       when type in [:utc_datetime, :utc_datetime_usec] and is_atom(key) do
+    {key, DateTime.from_unix!(value)}
+  end
+
+  defp do_map_row_item_to_attr(type, key, value)
        when type == :map and is_atom(key)
        when type == :array and is_atom(key) do
     {key, Jason.decode!(value)}
@@ -1031,25 +1055,28 @@ defmodule Ecto.Adapters.Tablestore do
   defp prepare_primary_keys_by_order(schema_entity) do
     schema_entity
     |> Ecto.primary_key()
-    |> Enum.map(fn({key, value}) ->
+    |> Enum.map(fn {key, value} ->
       {Atom.to_string(key), map_key_value(value)}
     end)
   end
 
-  defp prepare_primary_keys_by_order(schema, input_primary_keys) when is_list(input_primary_keys) do
+  defp prepare_primary_keys_by_order(schema, input_primary_keys)
+       when is_list(input_primary_keys) do
     struct(schema)
     |> Ecto.primary_key()
-    |> Enum.map(fn({key, _}) ->
+    |> Enum.map(fn {key, _} ->
       key_str = Atom.to_string(key)
 
       value =
         input_primary_keys
-        |> Enum.find_value(fn({input_k, input_v}) ->
+        |> Enum.find_value(fn {input_k, input_v} ->
           cond do
             is_atom(input_k) and input_k == key ->
               input_v
+
             is_bitstring(input_k) and input_k == key_str ->
               input_v
+
             true ->
               nil
           end
@@ -1359,7 +1386,8 @@ defmodule Ecto.Adapters.Tablestore do
 
     schema_entity = do_map_merge(changeset.data, changes, true)
 
-    {source, prepare_primary_keys_by_order(entity), merge_options(options, update_attrs), schema_entity}
+    {source, prepare_primary_keys_by_order(entity), merge_options(options, update_attrs),
+     schema_entity}
   end
 
   defp do_map_batch_writes(
