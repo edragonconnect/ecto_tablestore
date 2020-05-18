@@ -353,6 +353,31 @@ defmodule EctoTablestore.RowTest do
 
     # provide attribute column `name` in schema, and set `entity_full_match: true` will use these attribute field(s) in the filter and add `name` into columns_to_get if specially set columns_to_get.
     requests2 = [
+      {User, [
+        [{"id", 1}],
+        [{"id", 2}]
+      ]}
+    ]
+
+    {:ok, result2} = TestRepo.batch_get(requests2)
+    query_users2 = Keyword.get(result2, User)
+    assert length(query_users2) == 2
+
+    requests2 = [
+      {User, [
+        [{"id", 1}],
+        [{"id", 2}]
+      ], columns_to_get: ["level"]}
+    ]
+    {:ok, result2} = TestRepo.batch_get(requests2)
+    query_users2 = Keyword.get(result2, User)
+    assert length(query_users2) == 2
+
+    for query_user <- query_users2 do
+      assert query_user.level != nil
+    end
+
+    requests2 = [
       {[%User{id: 1, name: "name1"}, %User{id: 2, name: "name2"}],
        columns_to_get: ["level"], entity_full_match: true}
     ]

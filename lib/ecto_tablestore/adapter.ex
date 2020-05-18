@@ -1417,7 +1417,19 @@ defmodule Ecto.Adapters.Tablestore do
   end
 
   defp format_ids_groups(schema, ids_groups) when is_list(ids_groups) do
-    format_ids_groups(schema, [ids_groups])
+
+    primary_keys_size = length(schema.__schema__(:primary_key))
+
+    if primary_keys_size == length(ids_groups) do
+      # fetch a single row with multi primary_key(s)
+      format_ids_groups(schema, [ids_groups])
+    else
+      # fetch multi rows with multi primary_keys
+      Enum.map(ids_groups, fn(ids_group) ->
+        prepare_primary_keys_by_order(schema, ids_group)
+      end)
+    end
+
   end
 
   defp autogen_fields(schema) do
