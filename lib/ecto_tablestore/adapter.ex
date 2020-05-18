@@ -308,6 +308,8 @@ defmodule Ecto.Adapters.Tablestore do
             is_all_succeeded: response.is_all_succeeded,
             next_token: response.next_token,
             total_hits: response.total_hits,
+            aggs: response.aggs,
+            group_bys: response.group_bys,
             schemas:
               Enum.map(response.rows, fn row ->
                 row_to_schema(schema, row)
