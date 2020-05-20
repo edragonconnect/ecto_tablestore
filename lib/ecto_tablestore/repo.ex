@@ -208,9 +208,16 @@ defmodule EctoTablestore.Repo do
   Batch write several rows of data from one or more tables, this batch request put multiple put_row/delete_row/update_row in one request from client's perspective.
   After execute each operation in servers, return results independently and independently consumes capacity units.
 
+  If use a batch write request include a transaction ID, all rows in that request can only be written to the table that matches the transaction ID.
+
+  ## Options
+
+  * `transaction_id`, use local transaction.
+
   ## Example
 
-  The options are similar as `put_row` / `delete_row` / `update_row`, but expect `transaction_id` option.
+  The options of each `:put`, `:delete`, and `:update` operation are similar as `ExAliyunOts.put_row/5`, `ExAliyunOts.delete_row/4` and `ExAliyunOts.update_row/4`,
+  but `transaction_id` option is using in the options of `c:EctoTablestore.Repo.batch_write/2`.
 
       batch_write([
         delete: [
@@ -227,9 +234,8 @@ defmodule EctoTablestore.Repo do
           {changeset_schema_2}
         ]
       ])
-
   """
-  @callback batch_write(writes) ::
+  @callback batch_write(writes, options :: Keyword.t()) ::
               {:ok, Keyword.t()} | {:error, term()}
             when writes: [
                    {

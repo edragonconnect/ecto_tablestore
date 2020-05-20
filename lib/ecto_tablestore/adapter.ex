@@ -103,7 +103,7 @@ defmodule Ecto.Adapters.Tablestore do
 
       ## Addition
 
-      @spec batch_write(writes) ::
+      @spec batch_write(writes, options :: Keyword.t()) ::
               {:ok, Keyword.t()} | {:error, term()}
             when writes: [
                    {
@@ -134,10 +134,11 @@ defmodule Ecto.Adapters.Tablestore do
                        ]
                      }
                  ]
-      def batch_write(writes) do
+      def batch_write(writes, options \\ []) do
         Tablestore.batch_write(
           get_dynamic_repo(),
-          writes
+          writes,
+          options
         )
       end
     end
@@ -411,7 +412,7 @@ defmodule Ecto.Adapters.Tablestore do
   end
 
   @doc false
-  def batch_write(repo, writes) do
+  def batch_write(repo, writes, options) do
     {_adapter, meta} = Ecto.Repo.Registry.lookup(repo)
 
     instance = meta.instance
@@ -442,7 +443,7 @@ defmodule Ecto.Adapters.Tablestore do
 
     input_schema_entities = reduce_merge_map(schema_entities_map)
 
-    result = ExAliyunOts.batch_write(instance, prepared_requests, [])
+    result = ExAliyunOts.batch_write(instance, prepared_requests, options)
 
     case result do
       {:ok, response} ->
