@@ -44,7 +44,7 @@ defmodule EctoTablestore.Support.Search do
   defp create_index(@instance, table, [index1, index2]) do
     create_search_index(@instance, table, index1)
     create_search_index2(@instance, table, index2)
-    Process.sleep(5_000)
+    Process.sleep(10_000)
   end
 
   defp inseart_test_data() do
@@ -142,7 +142,7 @@ defmodule EctoTablestore.Support.Search do
     end)
 
     Logger.info("waiting for indexing...")
-    Process.sleep(25_000)
+    Process.sleep(35_000)
   end
 
   defp create_search_index(@instance, table, index_name) do
