@@ -92,7 +92,7 @@ defmodule EctoTablestore.TestSchema.Post do
   use EctoTablestore.Schema
 
   tablestore_schema "ecto_ots_test_post" do
-    field(:keyid, :hashids, primary_key: true, autogenerate: true, hashids: [salt: "123", min_len: 2])
+    field(:keyid, :hashids, primary_key: true, autogenerate: true)
     field(:content, :string)
   end
 end

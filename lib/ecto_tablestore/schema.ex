@@ -69,7 +69,7 @@ defmodule EctoTablestore.Schema do
 
   defmacro tablestore_schema(source, do: block) do
 
-    {block, hashids} = check_block(block)
+    {block, hashids} = check_block(block, __CALLER__.module)
 
     quote do
       Ecto.Schema.schema(unquote(source), do: unquote(block))
@@ -88,26 +88,27 @@ defmodule EctoTablestore.Schema do
     end
   end
 
-  defp check_block({:__block__, info, fields}) do
-    {fields, hashids} = supplement_fields(fields, [], [])
+  defp check_block({:__block__, info, fields}, schema_module) do
+    {fields, hashids} = supplement_fields(fields, [], [], schema_module)
     {
       {:__block__, info, fields},
       Macro.escape(hashids)
     }
   end
 
-  defp check_block(block) do
+  defp check_block(block, _) do
     block
   end
 
-  defp supplement_fields([], prepared, hashids) do
+  defp supplement_fields([], prepared, hashids, _schema_module) do
     {Enum.reverse(prepared), hashids}
   end
 
   defp supplement_fields(
          [{defined_macro, field_line, [field_name, :integer]} | rest_fields],
          prepared,
-         hashids
+         hashids,
+         schema_module
        ) do
     update = {
       defined_macro,
@@ -119,13 +120,14 @@ defmodule EctoTablestore.Schema do
       ]
     }
 
-    supplement_fields(rest_fields, [update | prepared], hashids)
+    supplement_fields(rest_fields, [update | prepared], hashids, schema_module)
   end
 
   defp supplement_fields(
          [{defined_macro, field_line, [field_name, :integer, opts]} = field | rest_fields],
          prepared,
-         hashids
+         hashids,
+         schema_module
        ) do
     field =
       if Keyword.get(opts, :primary_key, false) do
@@ -142,7 +144,7 @@ defmodule EctoTablestore.Schema do
         }
       end
 
-    supplement_fields(rest_fields, [field | prepared], hashids)
+    supplement_fields(rest_fields, [field | prepared], hashids, schema_module)
   end
 
   defp supplement_fields(
@@ -152,7 +154,8 @@ defmodule EctoTablestore.Schema do
            | rest_fields
          ],
          prepared,
-         hashids
+         hashids,
+         schema_module
        ) do
     update = {
       defined_macro,
@@ -160,7 +163,7 @@ defmodule EctoTablestore.Schema do
       [field_name, {:__aliases__, line, [:EctoTablestore, :Integer]}, [read_after_writes: true]]
     }
 
-    supplement_fields(rest_fields, [update | prepared], hashids)
+    supplement_fields(rest_fields, [update | prepared], hashids, schema_module)
   end
 
   defp supplement_fields(
@@ -170,7 +173,8 @@ defmodule EctoTablestore.Schema do
            | rest_fields
          ],
          prepared,
-         hashids
+         hashids,
+         schema_module
        ) do
     field =
       if Keyword.get(opts, :primary_key, false) do
@@ -187,7 +191,7 @@ defmodule EctoTablestore.Schema do
         }
       end
 
-    supplement_fields(rest_fields, [field | prepared], hashids)
+    supplement_fields(rest_fields, [field | prepared], hashids, schema_module)
   end
 
   defp supplement_fields(
@@ -197,14 +201,15 @@ defmodule EctoTablestore.Schema do
            | rest_fields
          ],
          prepared,
-         prepared_hashids
+         prepared_hashids,
+         schema_module
        ) do
 
-    if Keyword.get(opts, :primary_key, false) and opts[:hashids] != nil do
-      {field, new_hashids} = supplement_hashids_field(defined_macro, field_line, field_name, opts)
-      supplement_fields(rest_fields, [field | prepared], [new_hashids | prepared_hashids])
+    if Keyword.get(opts, :primary_key, false) do
+      {field, new_hashids} = supplement_hashids_field(defined_macro, field_line, field_name, opts, schema_module)
+      supplement_fields(rest_fields, [field | prepared], [new_hashids | prepared_hashids], schema_module)
     else
-      supplement_fields(rest_fields, [field | prepared], prepared_hashids)
+      supplement_fields(rest_fields, [field | prepared], prepared_hashids, schema_module)
     end
 
   end
@@ -216,27 +221,30 @@ defmodule EctoTablestore.Schema do
            | rest_fields
          ],
          prepared,
-         prepared_hashids
+         prepared_hashids,
+         schema_module
        )
        when type == [:EctoTablestore, :Hashids]
        when type == [:Hashids] do
 
-    if Keyword.get(opts, :primary_key, false) and opts[:hashids] != nil do
-      {field, new_hashids} = supplement_hashids_field(defined_macro, field_line, field_name, opts)
-      supplement_fields(rest_fields, [field | prepared], [new_hashids | prepared_hashids])
+    if Keyword.get(opts, :primary_key, false) do
+      {field, new_hashids} = supplement_hashids_field(defined_macro, field_line, field_name, opts, schema_module)
+      supplement_fields(rest_fields, [field | prepared], [new_hashids | prepared_hashids], schema_module)
     else
-      supplement_fields(rest_fields, [field | prepared], prepared_hashids)
+      supplement_fields(rest_fields, [field | prepared], prepared_hashids, schema_module)
     end
   end
 
-  defp supplement_fields([{defined_macro, field_line, field_info} | rest_fields], prepared, hashids) do
-    supplement_fields(rest_fields, [{defined_macro, field_line, field_info} | prepared], hashids)
+  defp supplement_fields([{defined_macro, field_line, field_info} | rest_fields], prepared, hashids, schema_module) do
+    supplement_fields(rest_fields, [{defined_macro, field_line, field_info} | prepared], hashids, schema_module)
   end
 
-  defp supplement_hashids_field(defined_macro, field_line, field_name, opts) do
+  defp supplement_hashids_field(defined_macro, field_line, field_name, opts, schema_module) do
+
+    hashids_opts = fetch_hashids_opts(opts[:hashids], schema_module)
+
     hashids =
-      opts
-      |> Keyword.get(:hashids)
+      hashids_opts
       |> Keyword.take([:salt, :min_len, :alphabet])
       |> Hashids.new()
 
@@ -254,5 +262,12 @@ defmodule EctoTablestore.Schema do
     new_hashids = {field_name, hashids}
 
     {field, new_hashids}
+  end
+
+  defp fetch_hashids_opts(nil, schema_module) do
+    Application.fetch_env!(:ecto_tablestore, :hashids) |> Keyword.get(schema_module, [])
+  end
+  defp fetch_hashids_opts(opts, _schema_module) when is_list(opts) do
+    opts
   end
 end
