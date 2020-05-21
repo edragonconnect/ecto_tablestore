@@ -105,3 +105,15 @@ defmodule EctoTablestore.TestSchema.Post2 do
     field(:content, :string)
   end
 end
+
+defmodule EctoTablestore.TestSchema.TransactionTestRange do
+  use EctoTablestore.Schema
+
+  tablestore_schema "test_txn_range" do
+    field(:key, :string, primary_key: true)
+    field(:key2, :integer, primary_key: true)
+    field(:field1, :string)
+    field(:status, :integer)
+  end
+
+end
