@@ -345,7 +345,7 @@ defmodule EctoTablestore.Repo do
             ) :: {:ok, Ecto.Schema.t()} | {:error, term()}
 
   @doc """
-  Please see `c:Ecto.Repo.start_link/2` for details.
+  Please see `c:Ecto.Repo.start_link/1` for details.
   """
   @callback start_link(options :: Keyword.t()) ::
               {:ok, pid}
