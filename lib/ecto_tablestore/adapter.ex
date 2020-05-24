@@ -1488,7 +1488,8 @@ defmodule Ecto.Adapters.Tablestore do
   defp do_merge_option(_input, generated), do: generated
 
   defp batch_get_row_response_to_schemas(tables, schemas_mapping) do
-    Enum.reduce(tables, [], fn table, acc ->
+    tables
+    |> Enum.reduce([], fn table, acc ->
       schema = Map.get(schemas_mapping, table.table_name)
 
       schemas_data =
@@ -1499,12 +1500,12 @@ defmodule Ecto.Adapters.Tablestore do
 
       case schemas_data do
         [] ->
-          Keyword.put(acc, schema, nil)
-
+          [{schema, nil} | acc]
         _ ->
-          Keyword.put(acc, schema, Enum.reverse(schemas_data))
+          [{schema, Enum.reverse(schemas_data)} | acc]
       end
     end)
+    |> Enum.reverse()
   end
 
   defp batch_write_row_response_to_schemas(tables, input_schema_entities, operations) do

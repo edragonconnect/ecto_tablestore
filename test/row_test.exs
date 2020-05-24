@@ -341,10 +341,10 @@ defmodule EctoTablestore.RowTest do
 
     {:ok, result} = TestRepo.batch_get(requests1)
 
-    query_orders = Keyword.get(result, Order)
+    [{Order, query_orders}, {User, query_users}] = result
+
     assert length(query_orders) == 1
 
-    query_users = Keyword.get(result, User)
     assert length(query_users) == 2
 
     for query_user <- query_users do
