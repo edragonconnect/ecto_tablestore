@@ -79,6 +79,22 @@ defmodule Ecto.Adapters.Tablestore do
         )
       end
 
+      @spec get_range_stream(
+              schema :: Ecto.Schema.t(), start_primary_keys :: list | binary(),
+              end_primary_keys :: list,
+              options :: Keyword.t()
+            ) :: Stream.t()
+      def get_range_stream(
+            schema,
+            start_primary_keys,
+            end_primary_keys,
+            options \\ [direction: :forward]) do
+        Tablestore.get_range_stream(
+          &Tablestore.get_range(get_dynamic_repo(), schema, &1, end_primary_keys, options),
+          start_primary_keys
+        )
+      end
+
       @spec batch_get(gets) ::
               {:ok, Keyword.t()} | {:error, term()}
             when gets: [
@@ -386,6 +402,26 @@ defmodule Ecto.Adapters.Tablestore do
 
       _error ->
         result
+    end
+  end
+
+  @doc false
+  def get_range_stream(fun, start_primary_keys) do
+    Stream.transform(Stream.cycle([fun]), start_primary_keys, &_get_range_stream/2)
+  end
+
+  defp _get_range_stream(_fun, nil), do: {:halt, []}
+
+  defp _get_range_stream(fun, start_primary_keys) do
+    case fun.(start_primary_keys) do
+      {nil, _} ->
+        {:halt, []}
+
+      {:error, _} ->
+        {:halt, []}
+
+      response ->
+        response
     end
   end
 

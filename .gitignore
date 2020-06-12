@@ -36,3 +36,4 @@ erl_crash.dump
 node_modules
 *.sublime-project
 *.sublime-workspace
+*.iml
