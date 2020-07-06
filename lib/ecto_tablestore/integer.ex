@@ -8,11 +8,7 @@ defmodule EctoTablestore.Integer do
     {:ok, {:increment, int}}
   end
 
-  def cast(int) when is_integer(int) do
-    {:ok, int}
-  end
-
-  def cast(_term), do: :error
+  def cast(int), do: Ecto.Type.cast(:integer, int)
 
   def load(term) when is_integer(term) do
     {:ok, term}

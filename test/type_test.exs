@@ -9,6 +9,7 @@ defmodule EctoTablestore.TypeTest do
     assert load(Integer, 1) == {:ok, 1}
     assert dump(Integer, 1) == {:ok, 1}
     assert cast(Integer, 1) == {:ok, 1}
+    assert cast(Integer, "1") == {:ok, 1}
 
     assert dump(Integer, {:increment, 1}) == {:ok, {:increment, 1}}
     assert cast(Integer, {:increment, 2}) == {:ok, {:increment, 2}}
