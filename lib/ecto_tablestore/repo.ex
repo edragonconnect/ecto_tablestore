@@ -125,10 +125,12 @@ defmodule EctoTablestore.Repo do
 
   ## Options
 
-  * `:direction`, set it as `:forward` to make the order of the query result in ascending by primary key(s), set it as `:backward` to make the order of the query result in descending by primary key(s).
+  * `:direction`, by default it is `:forward`, set it as `:forward` to make the order of the query result in ascending by primary key(s), set it as `:backward` to make the order of the query result in descending by primary key(s).
   * `:columns_to_get`, string list, return the specified attribute columns, if not specify this field all attribute columns will be return.
   * `:start_column`, string, used as a starting column for Wide Column read, the return result contains this as starter.
   * `:end_column`, string, used as a ending column for Wide Column read, the return result DON NOT contain this column.
+  * `:limit`, optional, the maximum number of rows of data to be returned, this value must be greater than 0, whether this option is set or not, there returns a maximum of 5,000 data rows and the total data size never exceeds 4 MB.
+  * `:transaction_id`, read under local transaction in a partition key.
   * `:filter`, used as a filter by condition, support `">"`, `"<"`, `">="`, `"<="`, `"=="`, `"and"`, `"or"` and `"()"` expressions.
 
       The `ignore_if_missing` can be used for the non-existed attribute column, for example:
@@ -141,8 +143,6 @@ defmodule EctoTablestore.Repo do
       ```elixir
       filter: filter(("name[ignore_if_missing: true]" == var_name and "age" > 1) or ("class" == "1"))
       ```
-  * `:transaction_id`, read under local transaction in a partition key.
-
   """
   @callback get_range(
               schema :: Ecto.Schema.t(),
@@ -150,6 +150,20 @@ defmodule EctoTablestore.Repo do
               end_primary_keys :: list,
               options :: Keyword.t()
             ) :: {nil, nil} | {list, nil} | {list, binary()} | {:error, term()}
+
+  @doc """
+  As a wrapper built on `ExAliyunOts.stream_range/5` to create composable and lazy enumerables stream for iteration.
+
+  ## Options
+
+  Please see options of `c:get_range/4` for details.
+  """
+  @callback stream_range(
+              schema :: Ecto.Schema.t(),
+              start_primary_keys :: list,
+              end_primary_keys :: list,
+              options :: Keyword.t()
+            ) :: Enumerable.t()
 
   @doc """
   Batch get several rows of data from one or more tables, this batch request put multiple `get_row` in one request from client's perspective.

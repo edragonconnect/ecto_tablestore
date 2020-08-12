@@ -317,6 +317,69 @@ defmodule EctoTablestore.RowTest do
     end
   end
 
+  test "repo - stream_range" do
+    saved_orders =
+      Enum.map(1..9, fn var ->
+        order = %Order{id: "#{var}", desc: "desc#{var}", num: var, price: 20.5 * var}
+
+        {:ok, saved_order} =
+          TestRepo.insert(order, condition: condition(:ignore), return_type: :pk)
+
+        saved_order
+      end)
+
+    start_pks = [{"id", "1"}, {"internal_id", :inf_min}]
+    end_pks = [{"id", "3"}, {"internal_id", :inf_max}]
+
+    orders =
+      Order
+      |> TestRepo.stream_range(start_pks, end_pks, direction: :forward, limit: 1)
+      |> Enum.to_list()
+
+    assert length(orders) == 3
+
+    # start/end pks with an invalid `direction`
+    [{:error, error}] =
+      Order
+      |> TestRepo.stream_range(start_pks, end_pks, direction: :backward)
+      |> Enum.to_list()
+
+    assert error.code == "OTSParameterInvalid"
+           and error.message == "Begin key must more than end key in BACKWARD"
+
+    start_pks = [{"id", "3"}, {"internal_id", :inf_max}]
+    end_pks = [{"id", "1"}, {"internal_id", :inf_min}]
+
+    backward_orders =
+      Order
+      |> TestRepo.stream_range(start_pks, end_pks, direction: :backward)
+      |> Enum.to_list()
+
+    assert orders == Enum.reverse(backward_orders)
+
+    start_pks = [{"id", "1"}, {"internal_id", :inf_min}]
+    end_pks = [{"id", "9"}, {"internal_id", :inf_max}]
+    all_orders =
+      Order
+      |> TestRepo.stream_range(start_pks, end_pks, limit: 3)
+      |> Enum.to_list()
+
+    assert length(all_orders) == 9
+
+    take_orders =
+      Order
+      |> TestRepo.stream_range(start_pks, end_pks, limit: 3)
+      |> Enum.take(5)
+
+    assert length(take_orders) == 5
+
+    for order <- saved_orders do
+      TestRepo.delete(%Order{id: order.id, internal_id: order.internal_id},
+        condition: condition(:expect_exist)
+      )
+    end
+  end
+
   test "repo - batch_get" do
     {saved_orders, saved_users} =
       Enum.reduce(1..3, {[], []}, fn var, {cur_orders, cur_users} ->

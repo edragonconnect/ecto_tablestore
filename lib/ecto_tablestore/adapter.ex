@@ -79,6 +79,27 @@ defmodule Ecto.Adapters.Tablestore do
         )
       end
 
+      @spec stream_range(
+              schema :: Ecto.Schema.t(),
+              start_primary_keys :: list,
+              end_primary_keys :: list,
+              options :: Keyword.t()
+            ) :: Enumerable.t()
+      def stream_range(
+            schema,
+            start_primary_keys,
+            end_primary_keys,
+            options \\ [direction: :forward]
+          ) do
+        Tablestore.stream_range(
+          get_dynamic_repo(),
+          schema,
+          start_primary_keys,
+          end_primary_keys,
+          options
+        )
+      end
+
       @spec batch_get(gets) ::
               {:ok, Keyword.t()} | {:error, term()}
             when gets: [
@@ -371,22 +392,41 @@ defmodule Ecto.Adapters.Tablestore do
 
     case result do
       {:ok, response} ->
-        records =
-          case response.rows do
-            nil ->
-              nil
-
-            rows when is_list(rows) ->
-              Enum.map(response.rows, fn row ->
-                row_to_schema(schema, row)
-              end)
-          end
-
-        {records, response.next_start_primary_key}
+        {
+          transfer_rows_by_schema(response.rows, schema),
+          response.next_start_primary_key
+        }
 
       _error ->
         result
     end
+  end
+
+  @doc false
+  def stream_range(repo, schema, start_primary_keys, end_primary_keys, options) do
+    {_adapter, meta} = Ecto.Repo.Registry.lookup(repo)
+
+    meta.instance
+    |> ExAliyunOts.stream_range(
+      schema.__schema__(:source),
+      start_primary_keys,
+      end_primary_keys,
+      options
+    )
+    |> Stream.flat_map(fn
+      {:ok, response} ->
+        transfer_rows_by_schema(response.rows, schema)
+      error ->
+        [error]
+    end)
+
+  end
+
+  defp transfer_rows_by_schema(nil, _schema), do: nil
+  defp transfer_rows_by_schema(rows, schema) when is_list(rows) do
+    Enum.map(rows, fn row ->
+      row_to_schema(schema, row)
+    end)
   end
 
   @doc false
