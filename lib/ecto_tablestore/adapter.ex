@@ -413,12 +413,13 @@ defmodule Ecto.Adapters.Tablestore do
       end_primary_keys,
       options
     )
-    |> Stream.transform(nil, fn
-      {:ok, response}, acc ->
-        {transfer_rows_by_schema(response.rows, schema), acc}
-      error, acc ->
-        {[error], acc}
+    |> Stream.flat_map(fn
+      {:ok, response} ->
+        transfer_rows_by_schema(response.rows, schema)
+      error ->
+        [error]
     end)
+
   end
 
   defp transfer_rows_by_schema(nil, _schema), do: nil
