@@ -29,7 +29,7 @@ defmodule EctoTablestore.MixProject do
     [
       {:ecto, "~> 3.2"},
       {:jason, "~> 1.0"},
-      {:ex_aliyun_ots, github: "xinz/ex_aliyun_ots", branch: "stream_range"},
+      {:ex_aliyun_ots, github: "xinz/ex_aliyun_ots"},
       {:hashids, "~> 2.0", optional: true},
       {:ex_doc, "~> 0.21", only: :dev, runtime: false}
     ]
