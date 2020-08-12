@@ -317,7 +317,7 @@ defmodule EctoTablestore.RowTest do
     end
   end
 
-  test "repo - get_range_stream" do
+  test "repo - stream_range" do
     saved_orders =
       Enum.map(1..9, fn var ->
         order = %Order{id: "#{var}", desc: "desc#{var}", num: var, price: 20.5 * var}
@@ -330,19 +330,29 @@ defmodule EctoTablestore.RowTest do
 
     start_pks = [{"id", "1"}, {"internal_id", :inf_min}]
     end_pks = [{"id", "3"}, {"internal_id", :inf_max}]
+
     orders =
       Order
-      |> TestRepo.get_range_stream(start_pks, end_pks)
+      |> TestRepo.stream_range(start_pks, end_pks, direction: :forward, limit: 1)
       |> Enum.to_list()
 
     assert length(orders) == 3
+
+    # start/end pks with an invalid `direction`
+    [{:error, error}] =
+      Order
+      |> TestRepo.stream_range(start_pks, end_pks, direction: :backward)
+      |> Enum.to_list()
+
+    assert error.code == "OTSParameterInvalid"
+           and error.message == "Begin key must more than end key in BACKWARD"
 
     start_pks = [{"id", "3"}, {"internal_id", :inf_max}]
     end_pks = [{"id", "1"}, {"internal_id", :inf_min}]
 
     backward_orders =
       Order
-      |> TestRepo.get_range_stream(start_pks, end_pks, direction: :backward)
+      |> TestRepo.stream_range(start_pks, end_pks, direction: :backward)
       |> Enum.to_list()
 
     assert orders == Enum.reverse(backward_orders)
@@ -351,14 +361,14 @@ defmodule EctoTablestore.RowTest do
     end_pks = [{"id", "9"}, {"internal_id", :inf_max}]
     all_orders =
       Order
-      |> TestRepo.get_range_stream(start_pks, end_pks, limit: 3)
+      |> TestRepo.stream_range(start_pks, end_pks, limit: 3)
       |> Enum.to_list()
 
     assert length(all_orders) == 9
 
     take_orders =
       Order
-      |> TestRepo.get_range_stream(start_pks, end_pks, limit: 3)
+      |> TestRepo.stream_range(start_pks, end_pks, limit: 3)
       |> Enum.take(5)
 
     assert length(take_orders) == 5

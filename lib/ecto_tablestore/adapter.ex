@@ -79,19 +79,24 @@ defmodule Ecto.Adapters.Tablestore do
         )
       end
 
-      @spec get_range_stream(
-              schema :: Ecto.Schema.t(), start_primary_keys :: list | binary(),
+      @spec stream_range(
+              schema :: Ecto.Schema.t(),
+              start_primary_keys :: list,
               end_primary_keys :: list,
               options :: Keyword.t()
-            ) :: Stream.t()
-      def get_range_stream(
+            ) :: Enumerable.t()
+      def stream_range(
             schema,
             start_primary_keys,
             end_primary_keys,
-            options \\ [direction: :forward]) do
-        Tablestore.get_range_stream(
-          &Tablestore.get_range(get_dynamic_repo(), schema, &1, end_primary_keys, options),
-          start_primary_keys
+            options \\ [direction: :forward]
+          ) do
+        Tablestore.stream_range(
+          get_dynamic_repo(),
+          schema,
+          start_primary_keys,
+          end_primary_keys,
+          options
         )
       end
 
@@ -387,18 +392,10 @@ defmodule Ecto.Adapters.Tablestore do
 
     case result do
       {:ok, response} ->
-        records =
-          case response.rows do
-            nil ->
-              nil
-
-            rows when is_list(rows) ->
-              Enum.map(response.rows, fn row ->
-                row_to_schema(schema, row)
-              end)
-          end
-
-        {records, response.next_start_primary_key}
+        {
+          transfer_rows_by_schema(response.rows, schema),
+          response.next_start_primary_key
+        }
 
       _error ->
         result
@@ -406,23 +403,29 @@ defmodule Ecto.Adapters.Tablestore do
   end
 
   @doc false
-  def get_range_stream(fun, start_primary_keys) do
-    Stream.transform(Stream.cycle([fun]), start_primary_keys, &_get_range_stream/2)
+  def stream_range(repo, schema, start_primary_keys, end_primary_keys, options) do
+    {_adapter, meta} = Ecto.Repo.Registry.lookup(repo)
+
+    meta.instance
+    |> ExAliyunOts.stream_range(
+      schema.__schema__(:source),
+      start_primary_keys,
+      end_primary_keys,
+      options
+    )
+    |> Stream.transform(nil, fn
+      {:ok, response}, acc ->
+        {transfer_rows_by_schema(response.rows, schema), acc}
+      error, acc ->
+        {[error], acc}
+    end)
   end
 
-  defp _get_range_stream(_fun, nil), do: {:halt, []}
-
-  defp _get_range_stream(fun, start_primary_keys) do
-    case fun.(start_primary_keys) do
-      {nil, _} ->
-        {:halt, []}
-
-      {:error, _} ->
-        {:halt, []}
-
-      response ->
-        response
-    end
+  defp transfer_rows_by_schema(nil, _schema), do: nil
+  defp transfer_rows_by_schema(rows, schema) when is_list(rows) do
+    Enum.map(rows, fn row ->
+      row_to_schema(schema, row)
+    end)
   end
 
   @doc false
