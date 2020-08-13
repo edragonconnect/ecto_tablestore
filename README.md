@@ -2,7 +2,7 @@
 
 [![hex.pm version](https://img.shields.io/hexpm/v/ecto_tablestore.svg)](https://hex.pm/packages/ecto_tablestore)
 
-Ecto 3.x adapter for Alibaba Tablestore, this is based on [`ex_aliyun_ots`](https://hex.pm/packages/ex_aliyun_ots) build to implement `Ecto.Adapter` and `Ecto.Adapter.Schema` behaviours.
+Ecto 3.x adapter for Alibaba Tablestore, this is built on top of [`ex_aliyun_ots`](https://hex.pm/packages/ex_aliyun_ots) to implement `Ecto.Adapter` and `Ecto.Adapter.Schema` behaviours.
 
 Supported features:
 
@@ -25,6 +25,7 @@ Implement Tablestore row related functions in `EctoTablestore.Repo` module, plea
 * UpdateRow
 * DeleteRow
 * GetRange
+* StreamRange
 * BatchGetRow
 * BatchWriteRow
 * Search
