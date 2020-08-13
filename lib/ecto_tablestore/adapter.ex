@@ -415,15 +415,16 @@ defmodule Ecto.Adapters.Tablestore do
     )
     |> Stream.flat_map(fn
       {:ok, response} ->
-        transfer_rows_by_schema(response.rows, schema)
+        transfer_rows_by_schema(response.rows, schema, [])
       error ->
         [error]
     end)
 
   end
 
-  defp transfer_rows_by_schema(nil, _schema), do: nil
-  defp transfer_rows_by_schema(rows, schema) when is_list(rows) do
+  defp transfer_rows_by_schema(rows, schema, default \\ nil)
+  defp transfer_rows_by_schema(nil, _schema, default), do: default
+  defp transfer_rows_by_schema(rows, schema, _default) when is_list(rows) do
     Enum.map(rows, fn row ->
       row_to_schema(schema, row)
     end)

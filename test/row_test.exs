@@ -281,6 +281,13 @@ defmodule EctoTablestore.RowTest do
         saved_order
       end)
 
+
+    start_pks = [{"id", "0a"}, {"internal_id", :inf_min}]
+    end_pks = [{"id", "0b"}, {"internal_id", :inf_max}]
+
+    {orders, next_start_primary_key} = TestRepo.get_range(Order, start_pks, end_pks)
+    assert orders == nil and next_start_primary_key == nil
+
     start_pks = [{"id", "1"}, {"internal_id", :inf_min}, {"id", "1"}]
     end_pks = [{"id", "3"}, {"internal_id", :inf_max}, {"id", "3"}]
     {orders, next_start_primary_key} = TestRepo.get_range(Order, start_pks, end_pks)
@@ -327,6 +334,17 @@ defmodule EctoTablestore.RowTest do
 
         saved_order
       end)
+
+    start_pks = [{"id", "0a"}, {"internal_id", :inf_min}]
+    end_pks = [{"id", "0b"}, {"internal_id", :inf_max}]
+
+    # since it is enumerable, no matched data will return `[]`.
+    orders =
+      Order
+      |> TestRepo.stream_range(start_pks, end_pks, direction: :forward)
+      |> Enum.to_list()
+
+    assert orders == []
 
     start_pks = [{"id", "1"}, {"internal_id", :inf_min}]
     end_pks = [{"id", "3"}, {"internal_id", :inf_max}]
