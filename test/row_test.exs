@@ -773,7 +773,7 @@ defmodule EctoTablestore.RowTest do
       price: input_price
     }
 
-    {status, saved_order} =
+    {:ok, saved_order} =
       TestRepo.insert(order, condition: condition(:ignore), return_type: :pk)
 
     start_pks = [{"id", input_id}, {"internal_id", :inf_min}]
