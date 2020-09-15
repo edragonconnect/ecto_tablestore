@@ -105,7 +105,7 @@ defmodule EctoTablestore.Repo do
   * `:end_column`, string, used as a ending column for Wide Column read, the return result DON NOT contain this column.
   * `:filter`, used as a filter by condition, support `">"`, `"<"`, `">="`, `"<="`, `"=="`, `"and"`, `"or"` and `"()"` expressions.
 
-      The `ignore_if_missing` can be used for the non-existed attribute column, for example:
+      The `ignore_if_missing` option can be used for the non-existed attribute column, for example:
 
       An attribute column does not exist meanwhile set it as `true`, will ignore this match condition in the return result;
 
@@ -113,7 +113,7 @@ defmodule EctoTablestore.Repo do
       return in result.
 
       ```elixir
-      filter: filter(("name[ignore_if_missing: true]" == var_name and "age" > 1) or ("class" == "1"))
+      filter: filter(({"name", ignore_if_missing: true} == var_name and "age" > 1) or ("class" == "1"))
       ```
   * `:transaction_id`, read under local transaction in a partition key.
   """
@@ -133,7 +133,7 @@ defmodule EctoTablestore.Repo do
   * `:transaction_id`, read under local transaction in a partition key.
   * `:filter`, used as a filter by condition, support `">"`, `"<"`, `">="`, `"<="`, `"=="`, `"and"`, `"or"` and `"()"` expressions.
 
-      The `ignore_if_missing` can be used for the non-existed attribute column, for example:
+      The `ignore_if_missing` option can be used for the non-existed attribute column, for example:
 
       An attribute column does not exist meanwhile set it as `true`, will ignore this match condition in the return result;
 
@@ -141,7 +141,7 @@ defmodule EctoTablestore.Repo do
       return in result.
 
       ```elixir
-      filter: filter(("name[ignore_if_missing: true]" == var_name and "age" > 1) or ("class" == "1"))
+      filter: filter(({"name", ignore_if_missing: true} == var_name and "age" > 1) or ("class" == "1"))
       ```
   """
   @callback get_range(
