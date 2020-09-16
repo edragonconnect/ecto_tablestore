@@ -406,24 +406,37 @@ defmodule Ecto.Adapters.Tablestore do
   def stream_range(repo, schema, start_primary_keys, end_primary_keys, options) do
     {_adapter, meta} = Ecto.Repo.Registry.lookup(repo)
 
+    prepared_start_primary_keys =
+      cond do
+        is_list(start_primary_keys) ->
+          prepare_primary_keys_by_order(schema, start_primary_keys)
+
+        is_binary(start_primary_keys) ->
+          start_primary_keys
+
+        true ->
+          raise "Invalid start_primary_keys: #{inspect(start_primary_keys)}, expect it as `list` or `binary`"
+      end
+
     meta.instance
     |> ExAliyunOts.stream_range(
       schema.__schema__(:source),
-      start_primary_keys,
-      end_primary_keys,
+      prepared_start_primary_keys,
+      prepare_primary_keys_by_order(schema, end_primary_keys),
       options
     )
     |> Stream.flat_map(fn
       {:ok, response} ->
         transfer_rows_by_schema(response.rows, schema, [])
+
       error ->
         [error]
     end)
-
   end
 
   defp transfer_rows_by_schema(rows, schema, default \\ nil)
   defp transfer_rows_by_schema(nil, _schema, default), do: default
+
   defp transfer_rows_by_schema(rows, schema, _default) when is_list(rows) do
     Enum.map(rows, fn row ->
       row_to_schema(schema, row)
@@ -552,46 +565,49 @@ defmodule Ecto.Adapters.Tablestore do
   end
 
   defp generate_filter_from_entity([], [
-    %ExAliyunOts.Var.Filter{filter_type: :FT_SINGLE_COLUMN_VALUE} = filter
-  ]) do
+         %ExAliyunOts.Var.Filter{filter_type: :FT_SINGLE_COLUMN_VALUE} = filter
+       ]) do
     filter
   end
+
   defp generate_filter_from_entity([], prepared) do
     %ExAliyunOts.Var.Filter{
       filter: %ExAliyunOts.Var.CompositeColumnValueFilter{
         combinator: :LO_AND,
-        sub_filters: prepared,
+        sub_filters: prepared
       },
       filter_type: :FT_COMPOSITE_COLUMN_VALUE
     }
   end
 
-  defp generate_filter_from_entity([{field_name, value} | rest], prepared) when is_map(value) or is_list(value) do
-    filter =
-      %ExAliyunOts.Var.Filter{
-        filter: %ExAliyunOts.Var.SingleColumnValueFilter{
-          column_name: Atom.to_string(field_name),
-          column_value: Jason.encode!(value),
-          comparator: :CT_EQUAL,
-          ignore_if_missing: false,
-          latest_version_only: true
-        },
-        filter_type: :FT_SINGLE_COLUMN_VALUE
-      }
+  defp generate_filter_from_entity([{field_name, value} | rest], prepared)
+       when is_map(value) or is_list(value) do
+    filter = %ExAliyunOts.Var.Filter{
+      filter: %ExAliyunOts.Var.SingleColumnValueFilter{
+        column_name: Atom.to_string(field_name),
+        column_value: Jason.encode!(value),
+        comparator: :CT_EQUAL,
+        ignore_if_missing: false,
+        latest_version_only: true
+      },
+      filter_type: :FT_SINGLE_COLUMN_VALUE
+    }
+
     generate_filter_from_entity(rest, [filter | prepared])
   end
+
   defp generate_filter_from_entity([{field_name, value} | rest], prepared) do
-    filter =
-      %ExAliyunOts.Var.Filter{
-        filter: %ExAliyunOts.Var.SingleColumnValueFilter{
-          column_name: Atom.to_string(field_name),
-          column_value: value,
-          comparator: :CT_EQUAL,
-          ignore_if_missing: false,
-          latest_version_only: true
-        },
-        filter_type: :FT_SINGLE_COLUMN_VALUE
-      }
+    filter = %ExAliyunOts.Var.Filter{
+      filter: %ExAliyunOts.Var.SingleColumnValueFilter{
+        column_name: Atom.to_string(field_name),
+        column_value: value,
+        comparator: :CT_EQUAL,
+        ignore_if_missing: false,
+        latest_version_only: true
+      },
+      filter_type: :FT_SINGLE_COLUMN_VALUE
+    }
+
     generate_filter_from_entity(rest, [filter | prepared])
   end
 
@@ -648,6 +664,7 @@ defmodule Ecto.Adapters.Tablestore do
   defp do_generate_filter_options(nil, options) do
     options
   end
+
   defp do_generate_filter_options(filter_from_entity, options) do
     merged = do_generate_filter(filter_from_entity, :and, options[:filter])
     Keyword.put(options, :filter, merged)
@@ -658,14 +675,12 @@ defmodule Ecto.Adapters.Tablestore do
   end
 
   defp do_generate_filter(filter_from_entity, :and, %ExAliyunOts.Var.Filter{} = filter_from_opt) do
-
     filter_names_from_opt = do_generate_filter_iterate(filter_from_opt)
 
     filter_from_entity = do_drop_filter_from_entity(filter_from_entity, filter_names_from_opt)
 
     case filter_from_entity do
       filter_from_entity when is_list(filter_from_entity) ->
-
         %ExAliyunOts.Var.Filter{
           filter: %ExAliyunOts.Var.CompositeColumnValueFilter{
             combinator: LogicOperator.and(),
@@ -675,7 +690,6 @@ defmodule Ecto.Adapters.Tablestore do
         }
 
       %ExAliyunOts.Var.Filter{filter_type: :FT_SINGLE_COLUMN_VALUE} ->
-
         %ExAliyunOts.Var.Filter{
           filter: %ExAliyunOts.Var.CompositeColumnValueFilter{
             combinator: LogicOperator.and(),
@@ -687,7 +701,6 @@ defmodule Ecto.Adapters.Tablestore do
       nil ->
         filter_from_opt
     end
-
   end
 
   defp do_generate_filter(filter_from_entity, :or, %ExAliyunOts.Var.Filter{} = filter_from_opt) do
@@ -704,29 +717,49 @@ defmodule Ecto.Adapters.Tablestore do
     raise("Invalid usecase - input invalid `:filter` option: #{inspect(filter_from_opt)}")
   end
 
-  defp do_generate_filter_iterate(%ExAliyunOts.Var.Filter{filter: %{sub_filters: sub_filters}, filter_type: :FT_COMPOSITE_COLUMN_VALUE}) do
+  defp do_generate_filter_iterate(%ExAliyunOts.Var.Filter{
+         filter: %{sub_filters: sub_filters},
+         filter_type: :FT_COMPOSITE_COLUMN_VALUE
+       }) do
     sub_filters
-    |> Enum.map(fn(filter) ->
+    |> Enum.map(fn filter ->
       do_generate_filter_iterate(filter)
     end)
     |> List.flatten()
   end
-  defp do_generate_filter_iterate(%ExAliyunOts.Var.Filter{filter: %{column_name: column_name}, filter_type: :FT_SINGLE_COLUMN_VALUE}) do
+
+  defp do_generate_filter_iterate(%ExAliyunOts.Var.Filter{
+         filter: %{column_name: column_name},
+         filter_type: :FT_SINGLE_COLUMN_VALUE
+       }) do
     [column_name]
   end
 
-  defp do_drop_filter_from_entity(%ExAliyunOts.Var.Filter{filter: %{column_name: column_name}, filter_type: :FT_SINGLE_COLUMN_VALUE} = filter, fields) do
+  defp do_drop_filter_from_entity(
+         %ExAliyunOts.Var.Filter{
+           filter: %{column_name: column_name},
+           filter_type: :FT_SINGLE_COLUMN_VALUE
+         } = filter,
+         fields
+       ) do
     if column_name in fields, do: nil, else: filter
   end
 
-  defp do_drop_filter_from_entity(%ExAliyunOts.Var.Filter{filter: %{sub_filters: sub_filters}, filter_type: :FT_COMPOSITE_COLUMN_VALUE}, fields) do
+  defp do_drop_filter_from_entity(
+         %ExAliyunOts.Var.Filter{
+           filter: %{sub_filters: sub_filters},
+           filter_type: :FT_COMPOSITE_COLUMN_VALUE
+         },
+         fields
+       ) do
     filter_from_entity =
       sub_filters
-      |> Enum.reduce([], fn(filter, acc) ->
+      |> Enum.reduce([], fn filter, acc ->
         f = do_drop_filter_from_entity(filter, fields)
         if f != nil, do: [f | acc], else: acc
       end)
       |> Enum.reverse()
+
     if filter_from_entity == [], do: nil, else: filter_from_entity
   end
 
@@ -811,8 +844,8 @@ defmodule Ecto.Adapters.Tablestore do
          prepared_pks,
          instance,
          schema
-       ) when primary_key == autogenerate_id_name and is_list(prepared_pks) do
-
+       )
+       when primary_key == autogenerate_id_name and is_list(prepared_pks) do
     source = schema.__schema__(:source)
 
     field_name_str = Atom.to_string(autogenerate_id_name)
@@ -823,7 +856,14 @@ defmodule Ecto.Adapters.Tablestore do
 
     prepared_pks = [{field_name_str, hashids_value} | prepared_pks]
 
-    map_pks_and_attrs_to_put_row(rest_primary_keys, autogenerate_id, fields, prepared_pks, instance, schema)
+    map_pks_and_attrs_to_put_row(
+      rest_primary_keys,
+      autogenerate_id,
+      fields,
+      prepared_pks,
+      instance,
+      schema
+    )
   end
 
   defp map_pks_and_attrs_to_put_row(
@@ -833,14 +873,15 @@ defmodule Ecto.Adapters.Tablestore do
          prepared_pks,
          instance,
          schema
-       ) when primary_key != autogenerate_id_name do
-
+       )
+       when primary_key != autogenerate_id_name do
     {value, updated_fields} = Keyword.pop(fields, primary_key)
 
     if value == nil,
       do: raise("Invalid usecase - autogenerate primary key: `#{primary_key}` can not be nil.")
 
     prepared_pks = [{Atom.to_string(primary_key), value} | prepared_pks]
+
     map_pks_and_attrs_to_put_row(
       rest_primary_keys,
       autogenerate_id,
@@ -850,7 +891,6 @@ defmodule Ecto.Adapters.Tablestore do
       schema
     )
   end
-
 
   defp map_pks_and_attrs_to_put_row(
          [primary_key | rest_primary_keys],
@@ -1459,7 +1499,6 @@ defmodule Ecto.Adapters.Tablestore do
   end
 
   defp format_ids_groups(schema, ids_groups) when is_list(ids_groups) do
-
     primary_keys_size = length(schema.__schema__(:primary_key))
 
     if primary_keys_size == length(ids_groups) do
@@ -1467,11 +1506,10 @@ defmodule Ecto.Adapters.Tablestore do
       format_ids_groups(schema, [ids_groups])
     else
       # fetch multi rows with multi primary_keys
-      Enum.map(ids_groups, fn(ids_group) ->
+      Enum.map(ids_groups, fn ids_group ->
         prepare_primary_keys_by_order(schema, ids_group)
       end)
     end
-
   end
 
   defp autogen_fields(schema) do
@@ -1542,6 +1580,7 @@ defmodule Ecto.Adapters.Tablestore do
       case schemas_data do
         [] ->
           [{schema, nil} | acc]
+
         _ ->
           [{schema, Enum.reverse(schemas_data)} | acc]
       end
@@ -1649,7 +1688,6 @@ defmodule Ecto.Adapters.Tablestore do
     end)
 
     if result == :ok and create_seq? do
-
       if with_hashids? do
         # so far only process `hashids` type in migration with
         # the global default table `ecto_tablestore_default_seq`,
@@ -1676,12 +1714,14 @@ defmodule Ecto.Adapters.Tablestore do
             {Atom.to_string(field_name), PKType.string()},
             true
           }
+
         create_seq? and auto_increment? ->
           raise Ecto.MigrationError,
             message:
               "the `auto_increment: true` option only allows binding of one primary key, but find the duplicated `#{
                 field_name
               }` field with options: #{inspect(options)}"
+
         true ->
           {
             {Atom.to_string(field_name), PKType.string()},
