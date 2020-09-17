@@ -281,7 +281,6 @@ defmodule EctoTablestore.RowTest do
         saved_order
       end)
 
-
     start_pks = [{"id", "0a"}, {"internal_id", :inf_min}]
     end_pks = [{"id", "0b"}, {"internal_id", :inf_max}]
 
@@ -362,8 +361,8 @@ defmodule EctoTablestore.RowTest do
       |> TestRepo.stream_range(start_pks, end_pks, direction: :backward)
       |> Enum.to_list()
 
-    assert error.code == "OTSParameterInvalid"
-           and error.message == "Begin key must more than end key in BACKWARD"
+    assert error.code == "OTSParameterInvalid" and
+             error.message == "Begin key must more than end key in BACKWARD"
 
     start_pks = [{"id", "3"}, {"internal_id", :inf_max}]
     end_pks = [{"id", "1"}, {"internal_id", :inf_min}]
@@ -377,6 +376,7 @@ defmodule EctoTablestore.RowTest do
 
     start_pks = [{"id", "1"}, {"internal_id", :inf_min}]
     end_pks = [{"id", "9"}, {"internal_id", :inf_max}]
+
     all_orders =
       Order
       |> TestRepo.stream_range(start_pks, end_pks, limit: 3)
@@ -434,10 +434,11 @@ defmodule EctoTablestore.RowTest do
 
     # provide attribute column `name` in schema, and set `entity_full_match: true` will use these attribute field(s) in the filter and add `name` into columns_to_get if specially set columns_to_get.
     requests2 = [
-      {User, [
-        [{"id", 1}],
-        [{"id", 2}]
-      ]}
+      {User,
+       [
+         [{"id", 1}],
+         [{"id", 2}]
+       ]}
     ]
 
     {:ok, result2} = TestRepo.batch_get(requests2)
@@ -445,11 +446,13 @@ defmodule EctoTablestore.RowTest do
     assert length(query_users2) == 2
 
     requests2 = [
-      {User, [
-        [{"id", 1}],
-        [{"id", 2}]
-      ], columns_to_get: ["level"]}
+      {User,
+       [
+         [{"id", 1}],
+         [{"id", 2}]
+       ], columns_to_get: ["level"]}
     ]
+
     {:ok, result2} = TestRepo.batch_get(requests2)
     query_users2 = Keyword.get(result2, User)
     assert length(query_users2) == 2
@@ -773,8 +776,7 @@ defmodule EctoTablestore.RowTest do
       price: input_price
     }
 
-    {:ok, saved_order} =
-      TestRepo.insert(order, condition: condition(:ignore), return_type: :pk)
+    {:ok, saved_order} = TestRepo.insert(order, condition: condition(:ignore), return_type: :pk)
 
     start_pks = [{"id", input_id}, {"internal_id", :inf_min}]
     end_pks = [{"id", "100010"}, {"internal_id", :inf_max}]
@@ -924,39 +926,34 @@ defmodule EctoTablestore.RowTest do
     {:ok, user} = %User2{id: id} |> TestRepo.insert(condition: condition(:ignore)) |> IO.inspect()
     assert NaiveDateTime.compare(NaiveDateTime.utc_now(), user.inserted_at) == :gt
   end
-  
+
   test "repo batch write to delete with an array field" do
     user1 = %User{id: 1, tags: ["1", "2"], name: "name1"}
     user2 = %User{id: 2, tags: ["a", "b", "c"], name: "name2"}
+
     {:ok, _} =
       TestRepo.batch_write(
-        [
-          put: [
-            {user1, condition: condition(:ignore)},
-            {user2, condition: condition(:ignore)}
-          ]
+        put: [
+          {user1, condition: condition(:ignore)},
+          {user2, condition: condition(:ignore)}
         ]
       )
 
     {:ok, _} =
       TestRepo.batch_write(
-        [
-          delete: [
-            user1,
-            user2
-          ]
+        delete: [
+          user1,
+          user2
         ]
       )
 
     {:ok, [{User, users}]} =
-      TestRepo.batch_get(
+      TestRepo.batch_get([
         [
-          [
-            %User{id: 1},
-            %User{id: 2},
-          ]
+          %User{id: 1},
+          %User{id: 2}
         ]
-      )
+      ])
 
     assert users == nil
   end
@@ -967,20 +964,16 @@ defmodule EctoTablestore.RowTest do
 
     {:ok, _} =
       TestRepo.batch_write(
-        [
-          put: [
-            {user, condition: condition(:ignore)},
-            {user2, condition: condition(:ignore)}
-          ]
+        put: [
+          {user, condition: condition(:ignore)},
+          {user2, condition: condition(:ignore)}
         ]
       )
 
     {:ok, [{User2, results}]} =
       TestRepo.batch_write(
-        [
-          delete: [
-            {%User2{id: "1", age: 30}, condition: condition(:expect_exist, "name" == "username0")}
-          ]
+        delete: [
+          {%User2{id: "1", age: 30}, condition: condition(:expect_exist, "name" == "username0")}
         ]
       )
 
@@ -989,14 +982,13 @@ defmodule EctoTablestore.RowTest do
 
     {:ok, [{User2, results}]} =
       TestRepo.batch_write(
-        [
-          delete: [
-            {%User2{id: "2", age: 0}, condition: condition(:expect_exist, "name" == "username2" and "age" == 25)}
-          ]
+        delete: [
+          {%User2{id: "2", age: 0},
+           condition: condition(:expect_exist, "name" == "username2" and "age" == 25)}
         ]
       )
+
     [{:ok, deleted_user2}] = results[:delete]
     assert deleted_user2.id == "2"
   end
-
 end

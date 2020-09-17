@@ -14,13 +14,11 @@ defmodule EctoTablestore.AdapterTest do
   import EctoTablestore.Query, only: [condition: 2, condition: 1]
 
   setup_all do
-
     EctoTablestore.Support.Table.create_user()
 
     on_exit(fn ->
       EctoTablestore.Support.Table.delete_user()
     end)
-
   end
 
   test "generate_filter_options" do

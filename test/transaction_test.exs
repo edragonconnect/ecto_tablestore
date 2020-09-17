@@ -24,20 +24,21 @@ defmodule EctoTablestore.TransactionTest do
       )
 
     on_exit(fn ->
-      table =  TransactionTestRange.__schema__(:source)
+      table = TransactionTestRange.__schema__(:source)
 
       ExAliyunOts.delete_row(@instance, table, [{"key", "1"}, {"key2", 1}],
-        condition: condition(:ignore))
+        condition: condition(:ignore)
+      )
 
       ExAliyunOts.delete_row(@instance, table, [{"key", "1"}, {"key2", 2}],
-        condition: condition(:ignore))
+        condition: condition(:ignore)
+      )
     end)
 
     {:ok, items: [item1, item2]}
   end
 
   test "batch write with transaction id", context do
-
     table = TransactionTestRange.__schema__(:source)
     {:ok, response} = ExAliyunOts.start_local_transaction(@instance, table, {"key", "1"})
     transaction_id = response.transaction_id

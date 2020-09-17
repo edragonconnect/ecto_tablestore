@@ -53,16 +53,7 @@ defmodule EctoTablestore.Migration do
   defmacro __using__(_) do
     quote location: :keep do
       import EctoTablestore.Migration
-      @before_compile EctoTablestore.Migration
-    end
-  end
-
-  @doc false
-  defmacro __before_compile__(_env) do
-    quote do
-      def __migration__ do
-        :ok
-      end
+      def __migration__, do: :ok
     end
   end
 
@@ -100,11 +91,7 @@ defmodule EctoTablestore.Migration do
 
       if table.partition_key do
         opts = Runner.repo_config(:migration_primary_key, [])
-
-        opts =
-          opts
-          |> Keyword.put(:partition_key, true)
-          |> Keyword.put(:auto_increment, true)
+        opts = [{:partition_key, true}, {:auto_increment, true} | opts]
 
         {name, opts} = Keyword.pop(opts, :name, :id)
         {type, opts} = Keyword.pop(opts, :type, :integer)
@@ -274,17 +261,13 @@ defmodule EctoTablestore.Migration do
     end
   end
 
-  defp validate_type!(_column, type)
-       when type == :integer
-       when type == :string
-       when type == :binary
-       when type == :hashids do
-    :ok
-  end
-
   defp validate_type!(column, type) do
-    raise ArgumentError,
-          "#{inspect(type)} is not a valid primary key type for column: `#{inspect(column)}`, " <>
-            "please use an atom as :integer | :string | :binary | :hashids ."
+    if type in [:integer, :string, :binary, :hashids] do
+      :ok
+    else
+      raise ArgumentError,
+            "#{inspect(type)} is not a valid primary key type for column: `#{inspect(column)}`, " <>
+              "please use an atom as :integer | :string | :binary | :hashids ."
+    end
   end
 end

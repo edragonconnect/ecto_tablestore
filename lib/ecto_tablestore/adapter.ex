@@ -369,23 +369,11 @@ defmodule Ecto.Adapters.Tablestore do
   def get_range(repo, schema, start_primary_keys, end_primary_keys, options) do
     {_adapter, meta} = Ecto.Repo.Registry.lookup(repo)
 
-    prepared_start_primary_keys =
-      cond do
-        is_list(start_primary_keys) ->
-          prepare_primary_keys_by_order(schema, start_primary_keys)
-
-        is_binary(start_primary_keys) ->
-          start_primary_keys
-
-        true ->
-          raise "Invalid start_primary_keys: #{inspect(start_primary_keys)}, expect it as `list` or `binary`"
-      end
-
     result =
       ExAliyunOts.get_range(
         meta.instance,
         schema.__schema__(:source),
-        prepared_start_primary_keys,
+        prepare_start_primary_keys_by_order(schema, start_primary_keys),
         prepare_primary_keys_by_order(schema, end_primary_keys),
         options
       )
@@ -406,22 +394,10 @@ defmodule Ecto.Adapters.Tablestore do
   def stream_range(repo, schema, start_primary_keys, end_primary_keys, options) do
     {_adapter, meta} = Ecto.Repo.Registry.lookup(repo)
 
-    prepared_start_primary_keys =
-      cond do
-        is_list(start_primary_keys) ->
-          prepare_primary_keys_by_order(schema, start_primary_keys)
-
-        is_binary(start_primary_keys) ->
-          start_primary_keys
-
-        true ->
-          raise "Invalid start_primary_keys: #{inspect(start_primary_keys)}, expect it as `list` or `binary`"
-      end
-
     meta.instance
     |> ExAliyunOts.stream_range(
       schema.__schema__(:source),
-      prepared_start_primary_keys,
+      prepare_start_primary_keys_by_order(schema, start_primary_keys),
       prepare_primary_keys_by_order(schema, end_primary_keys),
       options
     )
@@ -1144,6 +1120,19 @@ defmodule Ecto.Adapters.Tablestore do
     end)
   end
 
+  defp prepare_start_primary_keys_by_order(schema, start_primary_keys) do
+    cond do
+      is_list(start_primary_keys) ->
+        prepare_primary_keys_by_order(schema, start_primary_keys)
+
+      is_binary(start_primary_keys) ->
+        start_primary_keys
+
+      true ->
+        raise "Invalid start_primary_keys: #{inspect(start_primary_keys)}, expect it as `list` or `binary`"
+    end
+  end
+
   defp prepare_primary_keys_by_order(schema, input_primary_keys)
        when is_list(input_primary_keys) do
     struct(schema)
@@ -1677,7 +1666,7 @@ defmodule Ecto.Adapters.Tablestore do
 
     result =
       ExAliyunOts.create_table(
-        meta.instance,
+        instance,
         table_name,
         primary_keys,
         Keyword.put(table.meta, :max_versions, 1)

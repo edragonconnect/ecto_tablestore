@@ -85,7 +85,6 @@ defmodule EctoTablestore.TestSchema.User3 do
     field(:id, :string, primary_key: true)
     field(:name, :string)
   end
-
 end
 
 defmodule EctoTablestore.TestSchema.Post do
@@ -101,7 +100,12 @@ defmodule EctoTablestore.TestSchema.Post2 do
   use EctoTablestore.Schema
 
   tablestore_schema "ecto_ots_test_post2" do
-    field(:id, EctoTablestore.Hashids, primary_key: true, autogenerate: true, hashids: [alphabet: "1234567890cfhistu", min_len: 5, salt: "testsalt"])
+    field(:id, EctoTablestore.Hashids,
+      primary_key: true,
+      autogenerate: true,
+      hashids: [alphabet: "1234567890cfhistu", min_len: 5, salt: "testsalt"]
+    )
+
     field(:content, :string)
   end
 end
@@ -115,5 +119,4 @@ defmodule EctoTablestore.TestSchema.TransactionTestRange do
     field(:field1, :string)
     field(:status, :integer)
   end
-
 end

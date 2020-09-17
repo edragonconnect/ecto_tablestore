@@ -60,9 +60,7 @@ defmodule Mix.Tasks.Ecto.Ots.Migrate do
     for repo <- repos do
       ensure_repo(repo, args)
       path = ensure_migrations_path(repo, opts)
-
-      migrator = &EctoTablestore.Migrator.run/3
-      fun = &migrator.(&1, path, opts)
+      fun = &EctoTablestore.Migrator.run(&1, path, opts)
 
       case EctoTablestore.Migrator.with_repo(repo, fun, [mode: :temporary] ++ opts) do
         {:ok, _migrated, _apps} ->

@@ -18,7 +18,8 @@ defmodule EctoTablestore.Migration.Runner do
 
     log(level, "== Running #{version} #{inspect(module)}.#{operation}/0")
     {time, _} = :timer.tc(fn -> perform_operation(module, operation) end)
-    log(level, "== Migrated #{version} in #{inspect(div(time, 100_000) / 10)}s")
+    time = System.convert_time_unit(time, :microsecond, :second)
+    log(level, "== Migrated #{version} in #{time}s")
 
     stop()
   end

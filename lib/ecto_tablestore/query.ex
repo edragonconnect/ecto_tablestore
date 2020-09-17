@@ -20,5 +20,4 @@ defmodule EctoTablestore.Query do
       filter(unquote(filter_expr))
     end
   end
-
 end
