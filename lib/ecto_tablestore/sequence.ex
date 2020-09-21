@@ -5,6 +5,8 @@ defmodule EctoTablestore.Sequence do
 
   @default_seq "ecto_tablestore_default_seq"
 
+  def default_table, do: @default_seq
+
   def create(instance, seq_name \\ @default_seq) do
     new_seq = %Var.NewSequence{name: seq_name}
     result = Sequence.create(instance, new_seq)

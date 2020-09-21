@@ -923,7 +923,7 @@ defmodule EctoTablestore.RowTest do
 
   test "repo - naive_datetime timestamp" do
     id = Ecto.UUID.generate()
-    {:ok, user} = %User2{id: id} |> TestRepo.insert(condition: condition(:ignore)) |> IO.inspect()
+    {:ok, user} = %User2{id: id} |> TestRepo.insert(condition: condition(:ignore))
     assert NaiveDateTime.compare(NaiveDateTime.utc_now(), user.inserted_at) == :gt
   end
 

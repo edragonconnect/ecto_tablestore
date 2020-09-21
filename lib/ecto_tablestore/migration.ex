@@ -33,8 +33,11 @@ defmodule EctoTablestore.Migration do
   column for the partition key, there will automatically create an "ecto_ots_test_posts_seq" table to generate a serial integer
   for `:post_id` field when insert a new record.
   """
-
+  require ExAliyunOts.Const.PKType, as: PKType
+  require Logger
   alias EctoTablestore.Migration.Runner
+  alias EctoTablestore.Sequence
+  alias Ecto.MigrationError
 
   defmodule Table do
     @moduledoc false
@@ -52,9 +55,72 @@ defmodule EctoTablestore.Migration do
   @doc false
   defmacro __using__(_) do
     quote location: :keep do
-      import EctoTablestore.Migration
+      import EctoTablestore.Migration,
+        only: [
+          table: 1,
+          table: 2,
+          create: 2,
+          create_table: 2,
+          add: 2,
+          add: 3,
+          add_pk: 2,
+          add_pk: 3
+        ]
+
       def __migration__, do: :ok
     end
+  end
+
+  @doc """
+  Returns a table struct that can be given to `create/2`.
+
+  Since Tablestore is a NoSQL service, there are up to 4 primary key(s) can be
+  added when creation, the first added key is partition key when set `partition_key`
+  option as false.
+
+  ## Examples
+
+      create table("products") do
+        add :name, :string
+        add :price, :integer
+      end
+
+      create table("products", partition_key: false) do
+        add :name, :string
+        add :price, :integer
+      end
+
+  ## Options
+
+    * `:partition_key` - as `true` by default, and there will add an `:id` field as partition key
+      with type as a large autoincrementing integer (as `bigserial`), Tablestore does not support
+      `bigserial` type for primary keys, but can use the `ex_aliyun_ots` lib's wrapper - Sequence
+      to implement it; when `false`, a partition key field is not generated on table creation.
+    * `:prefix` - the prefix for the table.
+    * `:meta` - define the meta information when create table, can see Tablestore's document for details:
+
+      * `:reserved_throughput_write` - reserve the throughtput for write when create table, an integer,
+        the default value is 0;
+      * `:reserved_throughput_read` - reserve the throughtput for read when create table, an integer,
+        the default value is 0;
+      * `:time_to_live` - the survival time of the saved data, a.k.a TTL; an integer, unit as second,
+        the default value is -1 (permanent preservation);
+      * `:deviation_cell_version_in_sec` - maximum version deviation, the default value is 86400
+        seconds, which is 1 day;
+      * `stream_spec` - set the stream specification of Tablestore:
+
+        - `is_enabled`, open or close stream
+        - `expiration_time`, the expriration time of the table's stream
+
+  """
+  def table(name, opts \\ [])
+
+  def table(name, opts) when is_atom(name) do
+    table(Atom.to_string(name), opts)
+  end
+
+  def table(name, opts) when is_binary(name) and is_list(opts) do
+    struct(%Table{name: name}, opts)
   end
 
   @doc """
@@ -80,82 +146,182 @@ defmodule EctoTablestore.Migration do
       end
 
   """
-  defmacro create(object, do: block) do
-    expand_create(object, :create, block)
-  end
+  defmacro create(table, do: block), do: _create_table(table, block)
+  defmacro create_table(table, do: block), do: _create_table(table, block)
 
-  defp expand_create(object, command, block) do
-    quote do
-      table = %Table{} = unquote(object)
-      Runner.start_command({unquote(command), EctoTablestore.Migration.__prefix__(table)})
-
-      if table.partition_key do
-        opts = Runner.repo_config(:migration_primary_key, [])
-        opts = [{:partition_key, true}, {:auto_increment, true} | opts]
-
-        {name, opts} = Keyword.pop(opts, :name, :id)
-        {type, opts} = Keyword.pop(opts, :type, :integer)
-
-        add(name, type, opts)
+  defp _create_table(table, block) do
+    columns =
+      case block do
+        {:__block__, _, columns} -> columns
+        column -> [column]
       end
 
-      unquote(block)
-
-      Runner.end_command()
-      table
+    quote do
+      map = unquote(__MODULE__).__create_table__(unquote(table), unquote(columns))
+      Runner.push_command(&unquote(__MODULE__).do_create_table(&1, map))
     end
   end
 
-  @doc """
-  Returns a table struct that can be given to `create/2`.
+  def __create_table__(%Table{} = table, columns) do
+    partition_key_count = Enum.count(columns, & &1.partition_key)
 
-  Since Tablestore is a NoSQL service, there are up to 4 primary key(s) can be
-  added when creation, the first added key is partition key when set `partition_key`
-  option as false.
+    columns =
+      cond do
+        partition_key_count == 1 ->
+          columns
 
-  ## Examples
+        # 根据配置自动生成自增id
+        partition_key_count == 0 and table.partition_key ->
+          opts = Runner.repo_config(:migration_primary_key, [])
+          {name, opts} = Keyword.pop(opts, :name, :id)
+          {type, _opts} = Keyword.pop(opts, :type, :integer)
+          [%{pk_name: name, type: type, partition_key: true, auto_increment: true} | columns]
 
-      create table("products") do
-        add :name, :string
-        add :price, :integer
+        # 没有定义主键
+        partition_key_count == 0 ->
+          raise MigrationError,
+            message: "Please define at least one partition primary keys for table: " <> table.name
+
+        # 分区键只能有一个
+        true ->
+          raise MigrationError,
+            message:
+              "The maximum number of partition primary keys is 4, now is #{partition_key_count} defined on table: " <>
+                table.name <> " columns:\n" <> inspect(columns)
       end
 
-      create table("products", partition_key: false) do
-        add :name, :string
-        add :price, :integer
-      end
+    case Enum.count(columns) do
+      # 主键数量不能大于4个
+      pk_count when pk_count > 4 ->
+        raise MigrationError,
+          message:
+            "The maximum number of primary keys is 4, now is #{pk_count} defined on table: " <>
+              table.name <> " columns:\n" <> inspect(columns)
 
-  ## Options
+      # 仅且只能定义一个主键为自增列
+      pk_count ->
+        left_columns = Enum.reject(columns, & &1.auto_increment)
+        auto_increment_count = pk_count - length(left_columns)
+        hashids_count = Enum.count(left_columns, &match?(:hashids, &1.type))
+        total_increment_count = auto_increment_count + hashids_count
 
-    * `:partition_key` - as `true` by default, and there will add an `:id` field as partition key 
-      with type as a large autoincrementing integer (as `bigserial`), Tablestore does not support 
-      `bigserial` type for primary keys, but can use the `ex_aliyun_ots` lib's wrapper - Sequence
-      to implement it; when `false`, a partition key field is not generated on table creation.
-    * `:prefix` - the prefix for the table.
-    * `:meta` - define the meta information when create table, can see Tablestore's document for details:
+        if total_increment_count > 1 do
+          raise MigrationError,
+            message:
+              "The maximum number of [auto_increment & hashids] pk is 1, but now find #{
+                total_increment_count
+              } pks defined on table: " <> table.name
+        else
+          seq_type =
+            cond do
+              auto_increment_count > 0 -> :self_seq
+              hashids_count > 0 -> :default_seq
+              true -> :none_seq
+            end
 
-      * `:reserved_throughput_write` - reserve the throughtput for write when create table, an integer,
-        the default value is 0;
-      * `:reserved_throughput_read` - reserve the throughtput for read when create table, an integer,
-        the default value is 0;
-      * `:time_to_live` - the survival time of the saved data, a.k.a TTL; an integer, unit as second,
-        the default value is -1 (permanent preservation);
-      * `:deviation_cell_version_in_sec` - maximum version deviation, the default value is 86400
-        seconds, which is 1 day;
-      * `stream_spec` - set the stream specification of Tablestore:
-    
-        - `is_enabled`, open or close stream
-        - `expiration_time`, the expriration time of the table's stream
-
-  """
-  def table(name, opts \\ [])
-
-  def table(name, opts) when is_atom(name) do
-    table(Atom.to_string(name), opts)
+          %{table: table, columns: columns, seq_type: seq_type}
+        end
+    end
   end
 
-  def table(name, opts) when is_binary(name) and is_list(opts) do
-    struct(%Table{name: name}, opts)
+  @doc false
+  def do_create_table(repo, %{table: table, columns: columns, seq_type: seq_type}) do
+    table_name = get_table_name(table, repo.config())
+    repo_meta = Ecto.Adapter.lookup_meta(repo)
+    instance = repo_meta.instance
+    table_names = Runner.list_table_names(instance)
+
+    # check if not exists
+    if table_name not in table_names do
+      primary_keys = Enum.map(columns, &transform_table_column/1)
+
+      Logger.info(fn -> ">> table: #{table_name}, primary_keys: #{inspect(primary_keys)}" end)
+
+      options = Keyword.put(table.meta, :max_versions, 1)
+      result = ExAliyunOts.create_table(instance, table_name, primary_keys, options)
+
+      Logger.info(fn -> "create table: #{table_name} result: #{inspect(result)}" end)
+
+      if is_tuple(result) do
+        elem(result, 0)
+      else
+        result
+      end
+    else
+      Logger.info(fn -> ">> table: " <> table_name <> " already exists!" end)
+      :already_exists
+    end
+    |> case do
+      :ok ->
+        create_seq_table_by_type(seq_type, table_name, table_names, repo, instance)
+
+        {table_name, :ok}
+
+      result ->
+        {table_name, result}
+    end
+  end
+
+  def create_seq_table_by_type(:none_seq, _table_name, _table_names, _repo, _instance),
+    do: :ignore
+
+  def create_seq_table_by_type(seq_type, table_name, table_names, repo, instance) do
+    seq_table_name =
+      case seq_type do
+        :self_seq -> repo.__adapter__.bound_sequence_table_name(table_name)
+        :default_seq -> Sequence.default_table()
+      end
+
+    # check if not exists
+    if seq_table_name not in table_names do
+      Logger.info(fn ->
+        ">> auto create table: #{seq_table_name} for table: " <> table_name
+      end)
+
+      Sequence.create(instance, seq_table_name)
+    else
+      :already_exists
+    end
+  end
+
+  @doc false
+  defp get_table_name(table, repo_config) do
+    prefix = table.prefix || Keyword.get(repo_config, :migration_default_prefix)
+
+    if prefix do
+      prefix <> table.name
+    else
+      table.name
+    end
+  end
+
+  defp transform_table_column(%{
+         type: type,
+         pk_name: field_name,
+         partition_key: partition_key?,
+         auto_increment: auto_increment?
+       }) do
+    field_name =
+      if is_binary(field_name) do
+        field_name
+      else
+        Atom.to_string(field_name)
+      end
+
+    case type do
+      :integer when auto_increment? and not partition_key? ->
+        {field_name, PKType.integer(), PKType.auto_increment()}
+
+      _ ->
+        type_mapping = %{
+          hashids: PKType.string(),
+          integer: PKType.integer(),
+          string: PKType.string(),
+          binary: PKType.binary()
+        }
+
+        {field_name, type_mapping[type]}
+    end
   end
 
   @doc """
@@ -237,31 +403,24 @@ defmodule EctoTablestore.Migration do
       a serial number for this field, the `auto_increment: true` option only allows binding of one primary key.
 
   """
-  def add(column, type, opts \\ []) when is_atom(column) and is_list(opts) do
-    validate_type!(column, type)
-    Runner.subcommand({:add, column, type, opts})
-  end
+  defmacro add(column, type, opts \\ []), do: _add_pk(column, type, opts)
+  defmacro add_pk(column, type, opts \\ []), do: _add_pk(column, type, opts)
 
-  @doc false
-  def __prefix__(%{prefix: prefix} = table) do
-    runner_prefix = Runner.prefix()
+  defp _add_pk(column, type, opts)
+       when (is_atom(column) or is_binary(column)) and is_list(opts) do
+    validate_pk_type!(column, type)
 
-    cond do
-      is_nil(prefix) ->
-        prefix = runner_prefix || Runner.repo_config(:migration_default_prefix, nil)
-        %{table | prefix: prefix}
-
-      is_nil(runner_prefix) or runner_prefix == to_string(prefix) ->
-        table
-
-      true ->
-        raise Ecto.MigrationError,
-          message:
-            "the :prefix option `#{prefix}` does match the migrator prefix `#{runner_prefix}`"
+    quote location: :keep do
+      %{
+        pk_name: unquote(column),
+        type: unquote(type),
+        partition_key: Keyword.get(unquote(opts), :partition_key, false),
+        auto_increment: Keyword.get(unquote(opts), :auto_increment, false)
+      }
     end
   end
 
-  defp validate_type!(column, type) do
+  defp validate_pk_type!(column, type) do
     if type in [:integer, :string, :binary, :hashids] do
       :ok
     else
