@@ -238,17 +238,20 @@ defmodule EctoTablestore.Migration do
       Logger.info(fn -> ">> table: #{table_name}, primary_keys: #{inspect(primary_keys)}" end)
 
       options = Keyword.put(table.meta, :max_versions, 1)
-      result = ExAliyunOts.create_table(instance, table_name, primary_keys, options)
 
-      Logger.info(fn -> "create table: #{table_name} result: #{inspect(result)}" end)
+      case ExAliyunOts.create_table(instance, table_name, primary_keys, options) do
+        :ok ->
+          result_str = IO.ANSI.format([:green, "ok", :reset])
+          Logger.info(fn -> "create table: #{table_name} result: #{result_str}" end)
+          :ok
 
-      if is_tuple(result) do
-        elem(result, 0)
-      else
-        result
+        result ->
+          Logger.error(fn -> "create table: #{table_name} result: #{inspect(result)}" end)
+          elem(result, 0)
       end
     else
-      Logger.info(fn -> ">> table: " <> table_name <> " already exists!" end)
+      result_str = IO.ANSI.format([:yellow, "exists", :reset])
+      Logger.info(fn -> ">> table: #{table_name} already #{result_str}" end)
       :already_exists
     end
     |> case do
