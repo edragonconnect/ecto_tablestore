@@ -369,23 +369,11 @@ defmodule Ecto.Adapters.Tablestore do
   def get_range(repo, schema, start_primary_keys, end_primary_keys, options) do
     {_adapter, meta} = Ecto.Repo.Registry.lookup(repo)
 
-    prepared_start_primary_keys =
-      cond do
-        is_list(start_primary_keys) ->
-          prepare_primary_keys_by_order(schema, start_primary_keys)
-
-        is_binary(start_primary_keys) ->
-          start_primary_keys
-
-        true ->
-          raise "Invalid start_primary_keys: #{inspect(start_primary_keys)}, expect it as `list` or `binary`"
-      end
-
     result =
       ExAliyunOts.get_range(
         meta.instance,
         schema.__schema__(:source),
-        prepared_start_primary_keys,
+        prepare_start_primary_keys_by_order(schema, start_primary_keys),
         prepare_primary_keys_by_order(schema, end_primary_keys),
         options
       )
@@ -406,22 +394,10 @@ defmodule Ecto.Adapters.Tablestore do
   def stream_range(repo, schema, start_primary_keys, end_primary_keys, options) do
     {_adapter, meta} = Ecto.Repo.Registry.lookup(repo)
 
-    prepared_start_primary_keys =
-      cond do
-        is_list(start_primary_keys) ->
-          prepare_primary_keys_by_order(schema, start_primary_keys)
-
-        is_binary(start_primary_keys) ->
-          start_primary_keys
-
-        true ->
-          raise "Invalid start_primary_keys: #{inspect(start_primary_keys)}, expect it as `list` or `binary`"
-      end
-
     meta.instance
     |> ExAliyunOts.stream_range(
       schema.__schema__(:source),
-      prepared_start_primary_keys,
+      prepare_start_primary_keys_by_order(schema, start_primary_keys),
       prepare_primary_keys_by_order(schema, end_primary_keys),
       options
     )
@@ -609,13 +585,6 @@ defmodule Ecto.Adapters.Tablestore do
     }
 
     generate_filter_from_entity(rest, [filter | prepared])
-  end
-
-  @doc false
-  def execute_ddl(repo, definition) do
-    repo
-    |> Ecto.Adapter.lookup_meta()
-    |> do_execute_ddl(definition)
   end
 
   @doc false
@@ -1144,6 +1113,19 @@ defmodule Ecto.Adapters.Tablestore do
     end)
   end
 
+  defp prepare_start_primary_keys_by_order(schema, start_primary_keys) do
+    cond do
+      is_list(start_primary_keys) ->
+        prepare_primary_keys_by_order(schema, start_primary_keys)
+
+      is_binary(start_primary_keys) ->
+        start_primary_keys
+
+      true ->
+        raise "Invalid start_primary_keys: #{inspect(start_primary_keys)}, expect it as `list` or `binary`"
+    end
+  end
+
   defp prepare_primary_keys_by_order(schema, input_primary_keys)
        when is_list(input_primary_keys) do
     struct(schema)
@@ -1659,152 +1641,6 @@ defmodule Ecto.Adapters.Tablestore do
     Enum.reduce(keyword, map, fn {key, value}, acc ->
       if value != nil, do: Map.put(acc, key, value), else: acc
     end)
-  end
-
-  ## Migration
-
-  defp do_execute_ddl(meta, {:create, table, columns}) do
-    {table_name, primary_keys, create_seq?, with_hashids?} =
-      Enum.reduce(columns, {table.name, [], false, false}, &do_execute_ddl_add_column/2)
-
-    Logger.info(fn ->
-      ">> table_name: #{table_name}, primary_keys: #{inspect(primary_keys)}, create_seq?: #{
-        create_seq?
-      }"
-    end)
-
-    instance = meta.instance
-
-    result =
-      ExAliyunOts.create_table(
-        meta.instance,
-        table_name,
-        primary_keys,
-        Keyword.put(table.meta, :max_versions, 1)
-      )
-
-    Logger.info(fn ->
-      "create a table: #{table_name} result: #{inspect(result)}"
-    end)
-
-    if result == :ok and create_seq? do
-      if with_hashids? do
-        # so far only process `hashids` type in migration with
-        # the global default table `ecto_tablestore_default_seq`,
-        # and it will be applied and recommended in the future by default.
-        Sequence.create(instance)
-      else
-        Sequence.create(instance, bound_sequence_table_name(table_name))
-      end
-    end
-  end
-
-  defp do_execute_ddl_add_column(
-         {:add, field_name, :hashids, options},
-         {source, prepared_columns, create_seq?, _with_hashids}
-       )
-       when is_atom(field_name) do
-    partition_key? = Keyword.get(options, :partition_key, false)
-    auto_increment? = Keyword.get(options, :auto_increment, false)
-
-    {prepared_column, create_seq?} =
-      cond do
-        partition_key? and auto_increment? ->
-          {
-            {Atom.to_string(field_name), PKType.string()},
-            true
-          }
-
-        create_seq? and auto_increment? ->
-          raise Ecto.MigrationError,
-            message:
-              "the `auto_increment: true` option only allows binding of one primary key, but find the duplicated `#{
-                field_name
-              }` field with options: #{inspect(options)}"
-
-        true ->
-          {
-            {Atom.to_string(field_name), PKType.string()},
-            true
-          }
-      end
-
-    {
-      source,
-      splice_list(prepared_columns, [prepared_column]),
-      create_seq?,
-      true
-    }
-  end
-
-  defp do_execute_ddl_add_column(
-         {:add, field_name, :integer, options},
-         {source, prepared_columns, create_seq?, with_hashids?}
-       )
-       when is_atom(field_name) do
-    partition_key? = Keyword.get(options, :partition_key, false)
-    auto_increment? = Keyword.get(options, :auto_increment, false)
-
-    {prepared_column, create_seq?} =
-      cond do
-        partition_key? == true and auto_increment? == true ->
-          {
-            {Atom.to_string(field_name), PKType.integer()},
-            true
-          }
-
-        create_seq? and auto_increment? == true ->
-          raise Ecto.MigrationError,
-            message:
-              "the `auto_increment: true` option only allows binding of one primary key, but find the duplicated `#{
-                field_name
-              }` field with options: #{inspect(options)}"
-
-        auto_increment? == true ->
-          {
-            {Atom.to_string(field_name), PKType.integer(), PKType.auto_increment()},
-            create_seq?
-          }
-
-        true ->
-          {
-            {Atom.to_string(field_name), PKType.integer()},
-            create_seq?
-          }
-      end
-
-    {
-      source,
-      splice_list(prepared_columns, [prepared_column]),
-      create_seq?,
-      with_hashids?
-    }
-  end
-
-  defp do_execute_ddl_add_column(
-         {:add, field_name, :string, _options},
-         {source, prepared_columns, create_seq?, with_hashids?}
-       )
-       when is_atom(field_name) do
-    {
-      source,
-      splice_list(prepared_columns, [{Atom.to_string(field_name), PKType.string()}]),
-      create_seq?,
-      with_hashids?
-    }
-  end
-
-  defp do_execute_ddl_add_column(
-         {:add, field_name, :binary, _options},
-         {source, prepared_columns, create_seq?, with_hashids?}
-       )
-       when is_atom(field_name) do
-    {
-      source,
-      splice_list(prepared_columns, [{Atom.to_string(field_name), PKType.binary()}]),
-      create_seq?,
-      with_hashids?
-    }
   end
 
   defp splice_list(list1, list2) when is_list(list1) and is_list(list2) do

@@ -7,7 +7,14 @@ defmodule EctoTablestore.Support.Search do
 
   import EctoTablestore.Query, only: [condition: 1]
 
-  import ExAliyunOts.Search, only: [field_schema_keyword: 1, field_schema_integer: 1, field_schema_float: 1, field_schema_boolean: 1, field_schema_nested: 2]
+  import ExAliyunOts.Search,
+    only: [
+      field_schema_keyword: 1,
+      field_schema_integer: 1,
+      field_schema_float: 1,
+      field_schema_boolean: 1,
+      field_schema_nested: 2
+    ]
 
   @instance EDCEXTestInstance
 
@@ -148,21 +155,27 @@ defmodule EctoTablestore.Support.Search do
   defp create_search_index(@instance, table, index_name) do
     result =
       ExAliyunOts.create_search_index(
-        @instance, table, index_name,
+        @instance,
+        table,
+        index_name,
         field_schemas: [
           field_schema_keyword("name"),
           field_schema_integer("age"),
           field_schema_float("score"),
           field_schema_boolean("is_actived"),
-          field_schema_keyword("comment"),
-        ])
+          field_schema_keyword("comment")
+        ]
+      )
+
     Logger.info("create_search_index: #{inspect(result)}")
   end
 
   defp create_search_index2(@instance, table, index_name) do
     result =
       ExAliyunOts.create_search_index(
-        @instance, table, index_name,
+        @instance,
+        table,
+        index_name,
         field_schemas: [
           field_schema_nested(
             "content",
@@ -171,7 +184,9 @@ defmodule EctoTablestore.Support.Search do
               field_schema_keyword("body")
             ]
           )
-        ])
+        ]
+      )
+
     Logger.info("create_search_index2: #{inspect(result)}")
   end
 end

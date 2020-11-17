@@ -1,12 +1,11 @@
 defmodule EctoTablestore.Sequence do
   @moduledoc false
-
   require Logger
-
-  alias ExAliyunOts.Var
-  alias ExAliyunOts.Sequence
+  alias ExAliyunOts.{Var, Sequence}
 
   @default_seq "ecto_tablestore_default_seq"
+
+  def default_table, do: @default_seq
 
   def create(instance, seq_name \\ @default_seq) do
     new_seq = %Var.NewSequence{name: seq_name}
@@ -37,5 +36,4 @@ defmodule EctoTablestore.Sequence do
 
     Sequence.next_value(instance, var_next)
   end
-
 end

@@ -30,15 +30,20 @@ defmodule EctoTablestore.HashidsTest do
       key = Ecto.Adapters.Tablestore.key_to_global_sequence(table, pk)
 
       ExAliyunOts.delete_row(
-        @instance, "ecto_tablestore_default_seq",
-        [{"name", key}], condition: condition(:expect_exist)
+        @instance,
+        "ecto_tablestore_default_seq",
+        [{"name", key}],
+        condition: condition(:expect_exist)
       )
     end)
   end
 
   test "generate hashids as primary key when insert" do
     post = %Post{content: "test"}
-    {:ok, post2} = TestRepo.insert(post, condition: condition(:expect_not_exist), return_type: :pk)
+
+    {:ok, post2} =
+      TestRepo.insert(post, condition: condition(:expect_not_exist), return_type: :pk)
+
     new_content = "update test content"
     changeset = Ecto.Changeset.change(post2, content: new_content)
 
@@ -53,11 +58,14 @@ defmodule EctoTablestore.HashidsTest do
     assert fetch_post2.content == new_content
 
     new_post = %Post{content: "new content"}
-    {:ok, new_post2} = TestRepo.insert(new_post, condition: condition(:expect_not_exist), return_type: :pk)
+
+    {:ok, new_post2} =
+      TestRepo.insert(new_post, condition: condition(:expect_not_exist), return_type: :pk)
+
     assert new_post2.keyid != post2.keyid
     hashids = Post.hashids(:keyid)
-    [id2] = Hashids.decode!(hashids, new_post2.keyid) 
-    [id] = Hashids.decode!(hashids, post2.keyid) 
+    [id2] = Hashids.decode!(hashids, new_post2.keyid)
+    [id] = Hashids.decode!(hashids, post2.keyid)
     assert id2 == id + 1
   end
 
@@ -71,7 +79,8 @@ defmodule EctoTablestore.HashidsTest do
     p3 = %Post{content: "p3"}
 
     new_p2_content = "new p2 content"
-    changeset_post2 = 
+
+    changeset_post2 =
       Post
       |> TestRepo.get(keyid: saved_p2.keyid)
       |> Ecto.Changeset.change(content: new_p2_content)
@@ -117,5 +126,4 @@ defmodule EctoTablestore.HashidsTest do
     [num2] = Hashids.decode!(hashids2, value2)
     assert num2 == 10
   end
-
 end
