@@ -60,7 +60,6 @@ defmodule EctoTablestore.Migration do
           table: 1,
           table: 2,
           create: 2,
-          create_table: 2,
           add: 2,
           add: 3,
           add_pk: 2,
@@ -147,7 +146,6 @@ defmodule EctoTablestore.Migration do
 
   """
   defmacro create(table, do: block), do: _create_table(table, block)
-  defmacro create_table(table, do: block), do: _create_table(table, block)
 
   defp _create_table(table, block) do
     columns =

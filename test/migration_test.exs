@@ -1,9 +1,6 @@
 defmodule EctoTablestore.MigrationTest do
   use ExUnit.Case
-
-  import EctoTablestore.Migration,
-    only: [table: 1, table: 2, create_table: 2, add_pk: 2, add_pk: 3]
-
+  import EctoTablestore.Migration, only: [table: 1, table: 2, create: 2, add_pk: 2, add_pk: 3]
   alias EctoTablestore.Migration
   alias Ecto.MigrationError
 
@@ -164,7 +161,7 @@ defmodule EctoTablestore.MigrationTest do
     table = table(table_name)
     runner = setup_runner(@repo)
 
-    create_table table do
+    create table do
       add_pk(:id, :integer, partition_key: true)
       add_pk(:age, :integer)
       add_pk(:name, :string)
@@ -181,7 +178,7 @@ defmodule EctoTablestore.MigrationTest do
     table = table(table_name)
     runner = setup_runner(@repo)
 
-    create_table table do
+    create table do
       add_pk(:id, :integer, partition_key: true)
       add_pk(:age, :integer)
       add_pk(:name, :string)
@@ -201,7 +198,7 @@ defmodule EctoTablestore.MigrationTest do
     table = table(table_name)
     runner = setup_runner(@repo)
 
-    create_table table do
+    create table do
       add_pk(:id, :integer, partition_key: true)
       add_pk(:age, :integer)
       add_pk(:name, :string)
