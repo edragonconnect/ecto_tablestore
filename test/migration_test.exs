@@ -22,7 +22,7 @@ defmodule EctoTablestore.MigrationTest do
     end)
   end
 
-  # 分区键只能有一个
+  # The partition key only can define one
   test "only one partition_key" do
     assert_raise MigrationError,
                  ~r/^The maximum number of partition primary keys is 4, now is 2 defined on table:/,
@@ -34,7 +34,7 @@ defmodule EctoTablestore.MigrationTest do
                  end
   end
 
-  # 主键数量不能大于4个
+  # The number of primary keys can not be more than 4
   test "only 4 pk" do
     assert_raise MigrationError,
                  ~r/^The maximum number of primary keys is 4, now is 5 defined on table:/,
@@ -49,7 +49,7 @@ defmodule EctoTablestore.MigrationTest do
                  end
   end
 
-  # 没有定义主键
+  # No partition key defined
   test "at least one pk" do
     assert_raise MigrationError,
                  "Please define at least one partition primary keys for table: table_name",
@@ -63,7 +63,7 @@ defmodule EctoTablestore.MigrationTest do
                  end
   end
 
-  # 仅且只能定义一个主键为自增列
+  # Only support to define one primary key as auto_increment integer
   test "more then one [auto_increment & hashids] pk" do
     assert_raise MigrationError,
                  "The maximum number of [auto_increment & hashids] pk is 1, but now find 2 pks defined on table: table_name",
@@ -86,7 +86,7 @@ defmodule EctoTablestore.MigrationTest do
                  end
   end
 
-  # 根据配置自动生成自增id
+  # Make the partition key as `:id` and in an increment integer sequence
   test "auto generate partition_key" do
     table = table("table_name")
 

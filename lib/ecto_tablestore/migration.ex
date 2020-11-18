@@ -168,19 +168,19 @@ defmodule EctoTablestore.Migration do
         partition_key_count == 1 ->
           columns
 
-        # 根据配置自动生成自增id
+        # Make the partition key as `:id` and in an increment integer sequence
         partition_key_count == 0 and table.partition_key ->
           opts = Runner.repo_config(:migration_primary_key, [])
           {name, opts} = Keyword.pop(opts, :name, :id)
           {type, _opts} = Keyword.pop(opts, :type, :integer)
           [%{pk_name: name, type: type, partition_key: true, auto_increment: true} | columns]
 
-        # 没有定义主键
+        # No partition key defined
         partition_key_count == 0 ->
           raise MigrationError,
             message: "Please define at least one partition primary keys for table: " <> table.name
 
-        # 分区键只能有一个
+        # The partition key only can define one
         true ->
           raise MigrationError,
             message:
@@ -189,14 +189,14 @@ defmodule EctoTablestore.Migration do
       end
 
     case Enum.count(columns) do
-      # 主键数量不能大于4个
+      # The number of primary keys can not be more than 4
       pk_count when pk_count > 4 ->
         raise MigrationError,
           message:
             "The maximum number of primary keys is 4, now is #{pk_count} defined on table: " <>
               table.name <> " columns:\n" <> inspect(columns)
 
-      # 仅且只能定义一个主键为自增列
+      # Only support to define one primary key as auto_increment integer
       pk_count ->
         left_columns = Enum.reject(columns, & &1.auto_increment)
         auto_increment_count = pk_count - length(left_columns)
