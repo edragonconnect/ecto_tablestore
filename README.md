@@ -1,24 +1,44 @@
 # Alibaba Tablestore adapter for Ecto
 
-[![hex.pm version](https://img.shields.io/hexpm/v/ecto_tablestore.svg)](https://hex.pm/packages/ecto_tablestore)
+[![Module Version](https://img.shields.io/hexpm/v/ecto_tablestore.svg)](https://hex.pm/packages/ecto_tablestore)
+[![Hex Docs](https://img.shields.io/badge/hex-docs-lightgreen.svg)](https://hexdocs.pm/ecto_tablestore/)
+[![Total Download](https://img.shields.io/hexpm/dt/ecto_tablestore.svg)](https://hex.pm/packages/ecto_tablestore)
+[![License](https://img.shields.io/hexpm/l/ecto_tablestore.svg)](https://github.com/edragonconnect/ecto_tablestore/blob/master/LICENSE.md)
+[![Last Updated](https://img.shields.io/github/last-commit/edragonconnect/ecto_tablestore.svg)](https://github.com/edragonconnect/ecto_tablestore/commits/master)
 
-Ecto 3.x adapter for Alibaba Tablestore, this is built on top of [`ex_aliyun_ots`](https://hex.pm/packages/ex_aliyun_ots) to implement `Ecto.Adapter` and `Ecto.Adapter.Schema` behaviours.
+
+Ecto 3.x adapter for [Alibaba Tablestore](https://www.alibabacloud.com/product/table-store), this
+is built on top of [`ex_aliyun_ots`](https://hex.pm/packages/ex_aliyun_ots) to implement
+`Ecto.Adapter` and `Ecto.Adapter.Schema` behaviours.
 
 Supported features:
 
 * Compatible `Ecto.Repo` API.
-* Support schema's `timestamps()` macro, make `inserted_at` and `updated_at` as an integer UTC timestamps.
-* Support `:map` | `{:map, _}` | `:array` | `{:array, _}` field type, use Jason to encode the field value into :string when save, use Jason to simply decode the field value into `:map` | `:array` when read, the :keys option of Jason's decode always use :string.
-* Support the partition key is autoincrementing, use the sequence feature provided by `ex_aliyun_ots`.
+* Support schema's `timestamps()` macro, make `inserted_at` and `updated_at` as an integer UTC
+  timestamps.
+* Support `:map` | `{:map, _}` | `:array` | `{:array, _}` field type, use Jason to encode the
+  field value into :string when save, use Jason to simply decode the field value into `:map` |
+  `:array` when read, the :keys option of Jason's decode always use :string.
+* Support the partition key is autoincrementing, use the sequence feature provided by
+  `ex_aliyun_ots`.
 * Automatically converts the returned original row results into corresponding schema(s).
-* Automatically generate the provided attribute-column field(s) of schema entity into the `filter` expression option of `GetRow` (see `c:EctoTablestore.Repo.one/2`) and `BatchGet` (see `c:EctoTablestore.Repo.batch_get/1`) use `entity_full_match: true`, by default this option is `false`.
-* Automatically generate the provided attribute-column field(s) of schema entity into the `condition` expression option of `BatchWrite`.
-* Automatically map changeset's attribute-column field(s) into `UpdateRow` operation when call `c:EctoTablestore.Repo.update/2`:
-  * Use atomic increment via `{:increment, integer()}` in changeset, and return the increased value in the corrsponding field(s) by default;
-  * Set any attribute(s) of schema changeset as `nil` will `:delete_all` that attribute-column field(s);
+* Automatically generate the provided attribute-column field(s) of schema entity into the `filter`
+  expression option of `GetRow` (see `c:EctoTablestore.Repo.one/2`) and `BatchGet` (see
+  `c:EctoTablestore.Repo.batch_get/1`) use `entity_full_match: true`, by default this option is
+  `false`.
+* Automatically generate the provided attribute-column field(s) of schema entity into the
+  `condition` expression option of `BatchWrite`.
+* Automatically map changeset's attribute-column field(s) into `UpdateRow` operation when call
+  `c:EctoTablestore.Repo.update/2`:
+
+  * Use atomic increment via `{:increment, integer()}` in changeset, and return the increased
+    value in the corresponding field(s) by default;
+  * Set any attribute(s) of schema changeset as `nil` will `:delete_all` that attribute-column
+    field(s);
   * Set existed attribute(s) in schema changeset will `:put` to save.
 
-Implement Tablestore row related functions in `EctoTablestore.Repo` module, please see [document](https://hexdocs.pm/ecto_tablestore/readme.html) for details:
+Implement Tablestore row related functions in `EctoTablestore.Repo` module, please see
+[document](https://hexdocs.pm/ecto_tablestore/readme.html) for details:
 
 * PutRow
 * GetRow
@@ -51,7 +71,7 @@ config :ex_aliyun_ots, MyInstance,
 
 config :ex_aliyun_ots,
   instances: [MyInstance]
-  
+
 # config for `ecto_tablestore`
 
 config :my_otp_app, EctoTablestore.MyRepo,
@@ -59,7 +79,8 @@ config :my_otp_app, EctoTablestore.MyRepo,
 
 ```
 
-2, Create the `EctoTablestore.MyRepo` module mentioned earlier in the configuration, use `EctoTablestore.Repo` and set required `otp_app` option with your OTP application's name.
+2, Create the `EctoTablestore.MyRepo` module mentioned earlier in the configuration, use
+`EctoTablestore.Repo` and set required `otp_app` option with your OTP application's name.
 
 ```elixir
 defmodule EctoTablestore.MyRepo do
@@ -68,11 +89,13 @@ defmodule EctoTablestore.MyRepo do
 end
 ```
 
-3, Each repository in Ecto defines a `start_link/0` function that needs to be invoked before using the repository. In general, this function is not called directly, but used as
-part of your application supervision tree.
+3, Each repository in Ecto defines a `start_link/0` function that needs to be invoked before using
+the repository. In general, this function is not called directly, but used as part of your
+application supervision tree.
 
-Add `EctoTablestore.MyRepo` into your application start callback that defines and start your supervisor. You just need to edit `start/2` function to start the repo as a
-supervisor on your application's supervisor:
+Add `EctoTablestore.MyRepo` into your application start callback that defines and start your
+supervisor. You just need to edit `start/2` function to start the repo as a supervisor on your
+application's supervisor:
 
 ```elixir
 def start(_type, _args) do
@@ -89,10 +112,10 @@ end
 
 ## Integrate Hashids
 
-Base on unique integer of atomic-increment sequence, provides a way to simply integrate `Hashids` to generate your *hash* ids when insert row(s), for `Repo.insert/2` or `Repo.batch_write/1`.
+Base on unique integer of atomic-increment sequence, provides a way to simply integrate `Hashids`
+to generate your *hash* ids when insert row(s), for `Repo.insert/2` or `Repo.batch_write/1`.
 
-
-### use in schema
+### Use in schema
 
 ```elixir
 defmodule Module do
@@ -103,21 +126,24 @@ defmodule Module do
       hashids: [salt: "123", min_len: 2, alphabet: "..."])
     field(:content, :string)
   end
-  
+
 end
 ```
 
 Options:
 
   * The `primary_key` as true is required;
-  * The `autogenerate` as true is required; 
-  * The `salt`, `min_len`, and `alphabet` of hashids option is used for configuration options from `Hashids.new/1`.
+  * The `autogenerate` as true is required;
+  * The `salt`, `min_len`, and `alphabet` of hashids option is used for configuration options from
+    `Hashids.new/1`.
 
 
-### use in migration
+### Use in migration
 
-Use `:hashids` as a type in `add` operation to define the partition key,
-the principle behind this will use `ecto_tablestore_default_seq` as a global default table to maintain the sequences of all tables, if `ecto_tablestore_default_seq` is not existed, there will create this, if it is existed, please ignore the "OTSObjectAlreadyExist" error of requested table already exists.
+Use `:hashids` as a type in `add` operation to define the partition key, the principle behind this
+will use `ecto_tablestore_default_seq` as a global default table to maintain the sequences of all
+tables, if `ecto_tablestore_default_seq` is not existed, there will create this, if it is existed,
+please ignore the "OTSObjectAlreadyExist" error of requested table already exists.
 
 ```elixir
 defmodule EctoTablestore.TestRepo.Migrations.TestHashids do
@@ -147,4 +173,4 @@ Alibaba Tablestore product official references:
 
 ## License
 
-MIT
+This project is licensed under the MIT license. Copyright (c) 2018- Xin Zou.

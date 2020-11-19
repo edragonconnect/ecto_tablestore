@@ -4,8 +4,9 @@ defmodule EctoTablestore.Repo do
 
   A repository maps to an underlying data store, controlled by `Ecto.Adapters.Tablestore` adapter.
 
-  When used, the repository expects the `:otp_app` option, and uses `Ecto.Adapters.Tablestore` by default.
-  The `:otp_app` should point to an OTP application that has repository configuration. For example, the repository:
+  When used, the repository expects the `:otp_app` option, and uses `Ecto.Adapters.Tablestore` by
+  default.  The `:otp_app` should point to an OTP application that has repository configuration.
+  For example, the repository:
 
   ```elixir
   defmodule EctoTablestore.MyRepo do
@@ -27,7 +28,8 @@ defmodule EctoTablestore.Repo do
     instances: [MyInstance]
   ```
 
-  Add the following configuration to associate `MyRepo` with the previous configuration of `ex_aliyun_ots`:
+  Add the following configuration to associate `MyRepo` with the previous configuration of
+  `ex_aliyun_ots`:
 
   ```elixir
   config :my_otp_app, EctoTablestore.MyRepo,
@@ -70,7 +72,8 @@ defmodule EctoTablestore.Repo do
   * NestedQuery
   * ExistsQuery
 
-  Currently, not supported search index features which are depended by [`ex_aliyun_ots`](https://hex.pm/packages/ex_aliyun_ots)
+  Currently, not supported search index features which are depended by
+  [`ex_aliyun_ots`](https://hex.pm/packages/ex_aliyun_ots)
 
   * GeoBoundingBoxQuery
   * GeoDistanceQuery
@@ -84,11 +87,15 @@ defmodule EctoTablestore.Repo do
 
   ## Options
 
-    * `:entity_full_match`, whether to transfer the input attribute column(s) into the `:==` filtering expressions, by default it is `false`,
-      when set `entity_full_match: true`, please notice the following rules:
+    * `:entity_full_match`, whether to transfer the input attribute column(s) into the `:==`
+      filtering expressions, by default it is `false`, when set `entity_full_match: true`, please
+      notice the following rules:
 
-       * If there exists attribute column(s) provided in entity, these fields will be combined within multiple `:==` filtering expressions;
-       * If there exists attribute column(s) provided and meanwhile set `filter` option, they will be merged into a composite filter.
+       * If there exists attribute column(s) provided in entity, these fields will be combined
+        within multiple `:==` filtering expressions;
+
+       * If there exists attribute column(s) provided and meanwhile set `filter` option, they will
+       be merged into a composite filter.
 
   Other options please refer `c:get/3`.
   """
@@ -100,17 +107,24 @@ defmodule EctoTablestore.Repo do
 
   ## Options
 
-  * `:columns_to_get`, string list, return the specified attribute columns, if not specify this option field, will try to return all attribute columns together.
-  * `:start_column`, string, used as a starting column for Wide Column read, the return result contains this as starter.
-  * `:end_column`, string, used as a ending column for Wide Column read, the return result DON NOT contain this column.
-  * `:filter`, used as a filter by condition, support `">"`, `"<"`, `">="`, `"<="`, `"=="`, `"and"`, `"or"` and `"()"` expressions.
+  * `:columns_to_get`, string list, return the specified attribute columns, if not specify this
+    option field, will try to return all attribute columns together.
+  * `:start_column`, string, used as a starting column for Wide Column read, the return result
+    contains this as starter.
+  * `:end_column`, string, used as a ending column for Wide Column read, the return result DON NOT
+    contain this column.
+  * `:filter`, used as a filter by condition, support `">"`, `"<"`, `">="`, `"<="`, `"=="`,
+    `"and"`, `"or"` and `"()"` expressions.
 
-      The `ignore_if_missing` option can be used for the non-existed attribute column, for example:
+      The `ignore_if_missing` option can be used for the non-existed attribute column, for
+      example:
 
-      An attribute column does not exist meanwhile set it as `true`, will ignore this match condition in the return result;
+      An attribute column does not exist meanwhile set it as `true`, will ignore this match
+      condition in the return result;
 
-      An existed attribute column DOES NOT suit for this usecase, the match condition will always affect the return result, if match condition does not satisfy, they won't be
-      return in result.
+      An existed attribute column DOES NOT suit for this use case, the match condition will always
+      affect the return result, if match condition does not satisfy, they won't be return in
+      result.
 
       ```elixir
       filter: filter(({"name", ignore_if_missing: true} == var_name and "age" > 1) or ("class" == "1"))
@@ -121,24 +135,36 @@ defmodule EctoTablestore.Repo do
               Ecto.Schema.t() | {:error, term()} | nil
 
   @doc """
-  Get multiple structs by range from one table, rely on the conjunction of the partition key and other primary key(s).
+  Get multiple structs by range from one table, rely on the conjunction of the partition key and
+  other primary key(s).
 
   ## Options
 
-  * `:direction`, by default it is `:forward`, set it as `:forward` to make the order of the query result in ascending by primary key(s), set it as `:backward` to make the order of the query result in descending by primary key(s).
-  * `:columns_to_get`, string list, return the specified attribute columns, if not specify this field all attribute columns will be return.
-  * `:start_column`, string, used as a starting column for Wide Column read, the return result contains this as starter.
-  * `:end_column`, string, used as a ending column for Wide Column read, the return result DON NOT contain this column.
-  * `:limit`, optional, the maximum number of rows of data to be returned, this value must be greater than 0, whether this option is set or not, there returns a maximum of 5,000 data rows and the total data size never exceeds 4 MB.
+  * `:direction`, by default it is `:forward`, set it as `:forward` to make the order of the query
+    result in ascending by primary key(s), set it as `:backward` to make the order of the query
+    result in descending by primary key(s).
+  * `:columns_to_get`, string list, return the specified attribute columns, if not specify this
+    field all attribute columns will be return.
+  * `:start_column`, string, used as a starting column for Wide Column read, the return result
+    contains this as starter.
+  * `:end_column`, string, used as a ending column for Wide Column read, the return result DON NOT
+    contain this column.
+  * `:limit`, optional, the maximum number of rows of data to be returned, this value must be
+    greater than 0, whether this option is set or not, there returns a maximum of 5,000 data rows
+    and the total data size never exceeds 4 MB.
   * `:transaction_id`, read under local transaction in a partition key.
-  * `:filter`, used as a filter by condition, support `">"`, `"<"`, `">="`, `"<="`, `"=="`, `"and"`, `"or"` and `"()"` expressions.
+  * `:filter`, used as a filter by condition, support `">"`, `"<"`, `">="`, `"<="`, `"=="`,
+    `"and"`, `"or"` and `"()"` expressions.
 
-      The `ignore_if_missing` option can be used for the non-existed attribute column, for example:
+      The `ignore_if_missing` option can be used for the non-existed attribute column, for
+      example:
 
-      An attribute column does not exist meanwhile set it as `true`, will ignore this match condition in the return result;
+      An attribute column does not exist meanwhile set it as `true`, will ignore this match
+      condition in the return result;
 
-      An existed attribute column DOES NOT suit for this usecase, the match condition will always affect the return result, if match condition does not satisfy, they won't be
-      return in result.
+      An existed attribute column DOES NOT suit for this use case, the match condition will always
+      affect the return result, if match condition does not satisfy, they won't be return in
+      result.
 
       ```elixir
       filter: filter(({"name", ignore_if_missing: true} == var_name and "age" > 1) or ("class" == "1"))
@@ -152,7 +178,8 @@ defmodule EctoTablestore.Repo do
             ) :: {nil, nil} | {list, nil} | {list, binary()} | {:error, term()}
 
   @doc """
-  As a wrapper built on `ExAliyunOts.stream_range/5` to create composable and lazy enumerables stream for iteration.
+  As a wrapper built on `ExAliyunOts.stream_range/5` to create composable and lazy enumerables
+  stream for iteration.
 
   ## Options
 
@@ -166,11 +193,15 @@ defmodule EctoTablestore.Repo do
             ) :: Enumerable.t()
 
   @doc """
-  Batch get several rows of data from one or more tables, this batch request put multiple `get_row` in one request from client's perspective.
-  After execute each operation in servers, return results independently and independently consumes capacity units.
+  Batch get several rows of data from one or more tables, this batch request put multiple
+  `get_row` in one request from client's perspective.
 
-  When input `schema_entity`, only theirs primary keys are used in query, if need to use theirs attribute columns into condition of query, please
-  use `entity_full_match: true` option to do that.
+  After execute each operation in servers, return results independently and independently consumes
+  capacity units.
+
+  When input `schema_entity`, only theirs primary keys are used in query, if need to use theirs
+  attribute columns into condition of query, please use `entity_full_match: true` option to do
+  that.
 
   ## Example
 
@@ -219,19 +250,24 @@ defmodule EctoTablestore.Repo do
                  ]
 
   @doc """
-  Batch write several rows of data from one or more tables, this batch request put multiple put_row/delete_row/update_row in one request from client's perspective.
-  After execute each operation in servers, return results independently and independently consumes capacity units.
+  Batch write several rows of data from one or more tables, this batch request put multiple
+  put_row/delete_row/update_row in one request from client's perspective.
 
-  If use a batch write request include a transaction ID, all rows in that request can only be written to the table that matches the transaction ID.
+  After execute each operation in servers, return results independently and independently consumes
+  capacity units.
+
+  If use a batch write request include a transaction ID, all rows in that request can only be
+  written to the table that matches the transaction ID.
 
   ## Options
 
-  * `transaction_id`, use local transaction.
+    * `transaction_id`, use local transaction.
 
   ## Example
 
-  The options of each `:put`, `:delete`, and `:update` operation are similar as `ExAliyunOts.put_row/5`, `ExAliyunOts.delete_row/4` and `ExAliyunOts.update_row/4`,
-  but `transaction_id` option is using in the options of `c:EctoTablestore.Repo.batch_write/2`.
+  The options of each `:put`, `:delete`, and `:update` operation are similar as
+  `ExAliyunOts.put_row/5`, `ExAliyunOts.delete_row/4` and `ExAliyunOts.update_row/4`, but
+  `transaction_id` option is using in the options of `c:EctoTablestore.Repo.batch_write/2`.
 
       batch_write([
         delete: [
@@ -286,15 +322,15 @@ defmodule EctoTablestore.Repo do
 
   ## Options
 
-  * `:condition`, this option is required, whether to add conditional judgment before date insert.
+    * `:condition`, this option is required, whether to add conditional judgment before date insert.
 
-    Two kinds of insert condition types as below:
+      Two kinds of insert condition types as below:
 
-    As `condition(:ignore)` means DO NOT do any condition validation before insert, if the schema non-partitioned primary key
-    is auto increment, we can only use `condition(:ignore)` option.
+      As `condition(:ignore)` means DO NOT do any condition validation before insert, if the schema
+      non-partitioned primary key is auto increment, we can only use `condition(:ignore)` option.
 
-    As `condition(:expect_not_exist)` means the primary key(s) are NOT existed before insert.
-  * `:transaction_id`, insert under local transaction in a partition key.
+      As `condition(:expect_not_exist)` means the primary key(s) are NOT existed before insert.  *
+      `:transaction_id`, insert under local transaction in a partition key.
 
   """
   @callback insert(
@@ -307,7 +343,8 @@ defmodule EctoTablestore.Repo do
 
   ## Options
 
-  * `:condition`, this option is required, whether to add conditional judgment before data delete.
+    * `:condition`, this option is required, whether to add conditional judgment before data
+      delete.
 
     Two kinds of update condition types as below:
 
@@ -319,11 +356,12 @@ defmodule EctoTablestore.Repo do
         3. condition(:expect_exist, "attr1" > 100 or "attr2" < 1000)
 
       As `condition(:ignore)` means DO NOT do any condition validation before delete.
-  * `:transaction_id`, delete under local transaction in a partition key.
-  * `:stale_error_field` - The field where stale errors will be added in the returning changeset.
-    This option can be used to avoid raising `Ecto.StaleEntryError`.
-  * `:stale_error_message` - The message to add to the configured `:stale_error_field` when stale
-    errors happen, defaults to "is stale".
+
+    * `:transaction_id`, delete under local transaction in a partition key.
+    * `:stale_error_field` - The field where stale errors will be added in the returning
+      changeset.  This option can be used to avoid raising `Ecto.StaleEntryError`.
+    * `:stale_error_message` - The message to add to the configured `:stale_error_field` when
+      stale errors happen, defaults to "is stale".
   """
   @callback delete(
               struct_or_changeset :: Ecto.Schema.t() | Ecto.Changeset.t(),
@@ -335,9 +373,10 @@ defmodule EctoTablestore.Repo do
 
   ## Options
 
-  * `:condition`, this option is required, whether to add conditional judgment before data update.
+    * `:condition`, this option is required, whether to add conditional judgment before data
+      update.
 
-    Two kinds of update condition types as below:
+      Two kinds of update condition types as below:
 
       As `condition(:expect_exist)` means the primary key(s) can match a row to update, we also can add
       some compare expressions for the attribute columns, e.g.
@@ -347,11 +386,12 @@ defmodule EctoTablestore.Repo do
         3. condition(:expect_exist, "attr1" > 100 or "attr2" < 1000)
 
       As `condition(:ignore)` means DO NOT do any condition validation before update.
-  * `:transaction_id`, update under local transaction in a partition key.
-  * `:stale_error_field` - The field where stale errors will be added in the returning changeset.
-    This option can be used to avoid raising `Ecto.StaleEntryError`.
-  * `:stale_error_message` - The message to add to the configured `:stale_error_field` when stale
-    errors happen, defaults to "is stale".
+
+    * `:transaction_id`, update under local transaction in a partition key.
+    * `:stale_error_field` - The field where stale errors will be added in the returning
+      changeset.  This option can be used to avoid raising `Ecto.StaleEntryError`.
+    * `:stale_error_message` - The message to add to the configured `:stale_error_field` when
+      stale errors happen, defaults to "is stale".
   """
   @callback update(
               changeset :: Ecto.Changeset.t(),
