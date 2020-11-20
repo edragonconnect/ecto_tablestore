@@ -2,12 +2,14 @@ defmodule EctoTablestore.Migration do
   @moduledoc """
   Migrations are used to create your tables.
 
-  Support the partition key is autoincrementing based on this library's wrapper, for this usecase,
-  we can use the migration to automatically create an another separated table to generate the serial value
-  when `:insert` (viz `ExAliyunOts.put_row/5`) or `:batch_write` (viz `ExAliyunOts.batch_write/3`) with `:put` option.
+  Support the partition key is autoincrementing based on this library's wrapper, for this use
+  case, we can use the migration to automatically create an another separated table to generate
+  the serial value when `:insert` (viz `ExAliyunOts.put_row/5`) or `:batch_write` (viz
+  `ExAliyunOts.batch_write/3`) with `:put` option.
 
-  In practice, we don't create migration files by hand either, we typically use `mix ecto.ots.gen.migration` to
-  generate the file with the proper timestamp and then we just fill in its contents:
+  In practice, we don't create migration files by hand either, we typically use `mix
+  ecto.ots.gen.migration` to generate the file with the proper timestamp and then we just fill in
+  its contents:
 
       $ mix ecto.ots.gen.migration create_posts_table
 
@@ -24,14 +26,15 @@ defmodule EctoTablestore.Migration do
       end
 
 
-  After we filled the above migration content, you can run the migration above by going to the root of your project
-  and typing:
+  After we filled the above migration content, you can run the migration above by going to the
+  root of your project and typing:
 
       $ mix ecto.ots.migrate
 
-  Finally, we successfully create the "ecto_ots_test_posts" table, since the above definition added an autoincrementing
-  column for the partition key, there will automatically create an "ecto_ots_test_posts_seq" table to generate a serial integer
-  for `:post_id` field when insert a new record.
+  Finally, we successfully create the "ecto_ots_test_posts" table, since the above definition
+  added an autoincrementing column for the partition key, there will automatically create an
+  "ecto_ots_test_posts_seq" table to generate a serial integer for `:post_id` field when insert a
+  new record.
   """
   require ExAliyunOts.Const.PKType, as: PKType
   require Logger
@@ -73,9 +76,8 @@ defmodule EctoTablestore.Migration do
   @doc """
   Returns a table struct that can be given to `create/2`.
 
-  Since Tablestore is a NoSQL service, there are up to 4 primary key(s) can be
-  added when creation, the first added key is partition key when set `partition_key`
-  option as false.
+  Since Tablestore is a NoSQL service, there are up to 4 primary key(s) can be added when
+  creation, the first added key is partition key when set `partition_key` option as false.
 
   ## Examples
 
@@ -93,23 +95,23 @@ defmodule EctoTablestore.Migration do
 
     * `:partition_key` - as `true` by default, and there will add an `:id` field as partition key
       with type as a large autoincrementing integer (as `bigserial`), Tablestore does not support
-      `bigserial` type for primary keys, but can use the `ex_aliyun_ots` lib's wrapper - Sequence
-      to implement it; when `false`, a partition key field is not generated on table creation.
+      `bigserial` type for primary keys, but can use the `ex_aliyun_ots` lib's wrapper - Sequence to
+      implement it; when `false`, a partition key field is not generated on table creation.
     * `:prefix` - the prefix for the table.
     * `:meta` - define the meta information when create table, can see Tablestore's document for details:
 
-      * `:reserved_throughput_write` - reserve the throughtput for write when create table, an integer,
-        the default value is 0;
-      * `:reserved_throughput_read` - reserve the throughtput for read when create table, an integer,
-        the default value is 0;
-      * `:time_to_live` - the survival time of the saved data, a.k.a TTL; an integer, unit as second,
-        the default value is -1 (permanent preservation);
-      * `:deviation_cell_version_in_sec` - maximum version deviation, the default value is 86400
-        seconds, which is 1 day;
-      * `stream_spec` - set the stream specification of Tablestore:
+    * `:reserved_throughput_write` - reserve the throughput for write when create table, an
+      integer, the default value is 0;
+    * `:reserved_throughput_read` - reserve the throughput for read when create table, an integer,
+      the default value is 0;
+    * `:time_to_live` - the survival time of the saved data, a.k.a TTL; an integer, unit as second,
+      the default value is -1 (permanent preservation);
+    * `:deviation_cell_version_in_sec` - maximum version deviation, the default value is 86400
+      seconds, which is 1 day;
+    * `stream_spec` - set the stream specification of Tablestore:
 
-        - `is_enabled`, open or close stream
-        - `expiration_time`, the expriration time of the table's stream
+      - `is_enabled`, open or close stream
+      - `expiration_time`, the expiration time of the table's stream
 
   """
   def table(name, opts \\ [])
@@ -332,17 +334,18 @@ defmodule EctoTablestore.Migration do
 
   About `:auto_increment` option:
 
-    * set `:auto_increment` as `true` and its field is primary key of non-partitioned key, there will
-    use Tablestore's auto-increment column to process it.
+    * set `:auto_increment` as `true` and its field is primary key of non-partitioned key, there
+      will use Tablestore's auto-increment column to process it.
 
-    * set `:auto_increment` as `true` and its field is partition key, there will use `ex_aliyun_ots`'s
-    built-in Sequence function, the actual principle behind it is to use the atomic update operation
-    though another separate table when generate serial integer, by default there will add an `:id`
-    partition key as `:integer` type, the initial value of the sequence is 0, and the increment step is 1.
+    * set `:auto_increment` as `true` and its field is partition key, there will use
+      `ex_aliyun_ots`'s built-in Sequence function, the actual principle behind it is to use the
+      atomic update operation though another separate table when generate serial integer, by default
+      there will add an `:id` partition key as `:integer` type, the initial value of the sequence is
+      0, and the increment step is 1.
 
   Tablestore can only have up to 4 primary keys, meanwhile the first defined primary key is the
-  partition key, Please know that the order of the primary key definition will be directly mapped to
-  the created table.
+  partition key, Please know that the order of the primary key definition will be directly mapped
+  to the created table.
 
   About `:hashids` type to define the partition key:
 
@@ -362,7 +365,7 @@ defmodule EctoTablestore.Migration do
       create table("posts", partition_key: false) do
         add :id, :integer, partition_key: true, auto_increment: true
         add :title, :string
-      end 
+      end
 
   The explicitly defined field with `partition_key`:
 
@@ -398,10 +401,13 @@ defmodule EctoTablestore.Migration do
 
   ## Options
 
-    * `:partition_key` - when `true`, marks this field as the partition key, only the first explicitly defined field is available for this option.
-    * `:auto_increment` - when `true` and this field is non-partitioned key, Tablestore automatically generates the primary key value, which is unique
-      in the partition key, and which increases progressively, when `true` and this field is a partition key, use `ex_aliyun_ots`'s Sequence to build
-      a serial number for this field, the `auto_increment: true` option only allows binding of one primary key.
+    * `:partition_key` - when `true`, marks this field as the partition key, only the first
+      explicitly defined field is available for this option.
+    * `:auto_increment` - when `true` and this field is non-partitioned key, Tablestore
+      automatically generates the primary key value, which is unique in the partition key, and which
+      increases progressively, when `true` and this field is a partition key, use `ex_aliyun_ots`'s
+      Sequence to build a serial number for this field, the `auto_increment: true` option only
+      allows binding of one primary key.
 
   """
   defmacro add(column, type, opts \\ []), do: _add_pk(column, type, opts)

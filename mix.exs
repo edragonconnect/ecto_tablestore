@@ -1,6 +1,8 @@
 defmodule EctoTablestore.MixProject do
   use Mix.Project
 
+  @source_url "https://github.com/edragonconnect/ecto_tablestore"
+
   def project do
     [
       app: :ecto_tablestore,
@@ -12,11 +14,10 @@ defmodule EctoTablestore.MixProject do
       package: package(),
       deps: deps(),
       docs: docs(),
-      source_url: "https://github.com/edragonconnect/ecto_tablestore"
+      source_url: @source_url
     ]
   end
 
-  # Run "mix help compile.app" to learn about applications.
   def application do
     [
       extra_applications: [:logger],
@@ -24,14 +25,14 @@ defmodule EctoTablestore.MixProject do
     ]
   end
 
-  # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
       {:ecto, "~> 3.2"},
-      {:jason, "~> 1.0"},
       {:ex_aliyun_ots, "~> 0.9"},
-      {:hashids, "~> 2.0", optional: true},
-      {:ex_doc, "~> 0.21", only: :dev, runtime: false}
+      {:jason, "~> 1.0"},
+
+      {:ex_doc, ">= 0.0.0", only: :dev, runtime: false},
+      {:hashids, "~> 2.0", optional: true}
     ]
   end
 
@@ -44,7 +45,7 @@ defmodule EctoTablestore.MixProject do
       files: ["lib", "mix.exs", "README.md", "LICENSE.md"],
       maintainers: ["Xin Zou"],
       licenses: ["MIT"],
-      links: %{"GitHub" => "https://github.com/edragonconnect/ecto_tablestore"}
+      links: %{"GitHub" => @source_url}
     ]
   end
 
