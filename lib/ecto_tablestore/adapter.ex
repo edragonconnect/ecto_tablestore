@@ -2,6 +2,7 @@ defmodule Ecto.Adapters.Tablestore do
   @moduledoc false
   @behaviour Ecto.Adapter
   @behaviour Ecto.Adapter.Schema
+  @behaviour Ecto.Adapter.Storage
 
   alias __MODULE__
 
@@ -1645,5 +1646,48 @@ defmodule Ecto.Adapters.Tablestore do
 
   defp splice_list(list1, list2) when is_list(list1) and is_list(list2) do
     List.flatten([list1 | list2])
+  end
+
+
+  ## Storage
+
+  defp error_msg_config_instance(), do: """
+
+        Please configure integration with ex_aliyun_ots in config.exs like:
+          config :my_app, MyRepo, instance: :my_ex_aliyun_ots_instance
+  """
+  defp error_msg_storage(action), do: """
+
+        Please #{action} tablestore instance/database by Aliyun Console.
+  """
+
+  @impl true
+  def storage_up(opts) do
+    instance = Keyword.get(opts, :instance)
+    msg = case instance do
+      nil -> error_msg_config_instance()
+      _ -> error_msg_storage("create")
+    end
+    {:error, msg}
+  end
+
+  @impl true
+  def storage_down(opts) do
+    instance = Keyword.get(opts, :instance)
+    msg = case instance do
+      nil -> error_msg_config_instance()
+      _ -> error_msg_storage("drop")
+    end
+    {:error, msg}
+  end
+
+  @impl true
+  def storage_status(opts) do
+    instance = Keyword.get(opts, :instance)
+    msg = case instance do
+      nil -> error_msg_config_instance()
+      _ -> error_msg_storage("check")
+    end
+    {:error, msg}
   end
 end
