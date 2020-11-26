@@ -1651,43 +1651,36 @@ defmodule Ecto.Adapters.Tablestore do
 
   ## Storage
 
-  defp error_msg_config_instance(), do: """
-
-        Please configure integration with ex_aliyun_ots in config.exs like:
-          config :my_app, MyRepo, instance: :my_ex_aliyun_ots_instance
-  """
-  defp error_msg_storage(action), do: """
-
-        Please #{action} tablestore instance/database by Aliyun Console.
-  """
-
   @impl true
   def storage_up(opts) do
-    instance = Keyword.get(opts, :instance)
-    msg = case instance do
-      nil -> error_msg_config_instance()
-      _ -> error_msg_storage("create")
-    end
-    {:error, msg}
+    impl_storage_tips(opts, "create")
   end
 
   @impl true
   def storage_down(opts) do
-    instance = Keyword.get(opts, :instance)
-    msg = case instance do
-      nil -> error_msg_config_instance()
-      _ -> error_msg_storage("drop")
-    end
-    {:error, msg}
+    impl_storage_tips(opts, "drop")
   end
 
   @impl true
   def storage_status(opts) do
-    instance = Keyword.get(opts, :instance)
-    msg = case instance do
-      nil -> error_msg_config_instance()
-      _ -> error_msg_storage("check")
-    end
+    impl_storage_tips(opts, "check")
+  end
+
+  defp impl_storage_tips(opts, action) do
+    msg =
+      opts
+      |> Keyword.get(:instance)
+      |> error_msg_to_storage_tips(action)
     {:error, msg}
   end
+
+  defp error_msg_to_storage_tips(nil, _action), do: """
+    \n\nPlease refer https://hexdocs.pm/ecto_tablestore/readme.html#usage to configure your instance.
+  """
+
+  defp error_msg_to_storage_tips(_instance, action), do: """
+    \n\nPlease #{action} tablestore instance/database visit Alibaba TableStore product console through
+    https://otsnext.console.aliyun.com/
+  """
+
 end
