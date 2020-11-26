@@ -2,6 +2,7 @@ defmodule Ecto.Adapters.Tablestore do
   @moduledoc false
   @behaviour Ecto.Adapter
   @behaviour Ecto.Adapter.Schema
+  @behaviour Ecto.Adapter.Storage
 
   alias __MODULE__
 
@@ -1646,4 +1647,40 @@ defmodule Ecto.Adapters.Tablestore do
   defp splice_list(list1, list2) when is_list(list1) and is_list(list2) do
     List.flatten([list1 | list2])
   end
+
+
+  ## Storage
+
+  @impl true
+  def storage_up(opts) do
+    impl_storage_tips(opts, "create")
+  end
+
+  @impl true
+  def storage_down(opts) do
+    impl_storage_tips(opts, "drop")
+  end
+
+  @impl true
+  def storage_status(opts) do
+    impl_storage_tips(opts, "check")
+  end
+
+  defp impl_storage_tips(opts, action) do
+    msg =
+      opts
+      |> Keyword.get(:instance)
+      |> error_msg_to_storage_tips(action)
+    {:error, msg}
+  end
+
+  defp error_msg_to_storage_tips(nil, _action), do: """
+    \n\nPlease refer https://hexdocs.pm/ecto_tablestore/readme.html#usage to configure your instance.
+  """
+
+  defp error_msg_to_storage_tips(_instance, action), do: """
+    \n\nPlease #{action} tablestore instance/database visit Alibaba TableStore product console through
+    https://otsnext.console.aliyun.com/
+  """
+
 end
