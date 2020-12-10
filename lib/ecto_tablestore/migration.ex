@@ -199,13 +199,15 @@ defmodule EctoTablestore.Migration do
               table.name <> " columns:\n" <> inspect(columns)
 
       # Only support to define one primary key as auto_increment integer
-      pk_count ->
-        left_columns = Enum.reject(columns, & &1.auto_increment)
-        auto_increment_count = pk_count - length(left_columns)
-        hashids_count = Enum.count(left_columns, &match?(:hashids, &1.type))
-        total_increment_count = auto_increment_count + hashids_count
+      _pk_count ->
+        %{hashids: hashids_count, auto_increment: auto_increment_count} =
+          Enum.reduce(columns, %{hashids: 0, auto_increment: 0, none: 0}, fn
+            %{type: :hashids}, acc -> Map.update!(acc, :hashids, &(&1 + 1))
+            %{auto_increment: true}, acc -> Map.update!(acc, :auto_increment, &(&1 + 1))
+            _, acc -> Map.update!(acc, :none, &(&1 + 1))
+          end)
 
-        if total_increment_count > 1 do
+        if (total_increment_count = auto_increment_count + hashids_count) > 1 do
           raise MigrationError,
             message:
               "The maximum number of [auto_increment & hashids] pk is 1, but now find #{

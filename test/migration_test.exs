@@ -127,14 +127,25 @@ defmodule EctoTablestore.MigrationTest do
   test "default_seq(hashids)" do
     table = table("table_name")
 
-    columns = [
+    columns1 = [
       add_pk(:id, :hashids, partition_key: true),
       add_pk(:age, :integer)
     ]
 
-    assert Migration.__create_table__(table, columns) == %{
+    assert Migration.__create_table__(table, columns1) == %{
              table: table,
-             columns: columns,
+             columns: columns1,
+             seq_type: :default_seq
+           }
+
+    columns2 = [
+      add_pk(:id, :hashids, partition_key: true, auto_increment: true),
+      add_pk(:age, :integer)
+    ]
+
+    assert Migration.__create_table__(table, columns2) == %{
+             table: table,
+             columns: columns2,
              seq_type: :default_seq
            }
   end
