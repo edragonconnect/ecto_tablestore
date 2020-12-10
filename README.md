@@ -134,9 +134,19 @@ Options:
 
   * The `primary_key` as true is required;
   * The `autogenerate` as true is required;
-  * The `salt`, `min_len`, and `alphabet` of hashids option is used for configuration options from
+  * The `salt`, `min_len` and `alphabet` of hashids options are used for configuration options from
     `Hashids.new/1`.
 
+Notice: the `salt`, `min_len` and `alphabet` of hashids options also can be configured in the `Config` file
+for each schema, for example:
+
+```elixir
+config :ecto_tablestore,
+  hashids: [
+    {Module, salt: "...", min_len: 16, alphabet: "..."},
+    ...
+  ]
+```
 
 ### Use in migration
 
@@ -151,7 +161,7 @@ defmodule EctoTablestore.TestRepo.Migrations.TestHashids do
 
   def change do
     create table("table_name") do
-      add :id, :hashids, partition_key: true, auto_increment: true
+      add :id, :hashids, partition_key: true
       add :oid, :integer
     end
   end
@@ -161,8 +171,8 @@ end
 
 Options:
 
-  * The `partition_key` as true is required;
-  * The `auto_increment` as true is required.
+  * The `partition_key` option as true is required;
+  * The `auto_increment` option is ignored when the partition key is `:hashids` type.
 
 ## References
 
