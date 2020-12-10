@@ -137,8 +137,8 @@ Options:
   * The `salt`, `min_len` and `alphabet` of hashids options are used for configuration options from
     `Hashids.new/1`.
 
-Notice: the `salt`, `min_len` and `alphabet` of hashids options also can be configured in the `Config` file
-for each schema, for example:
+Notice: the `salt`, `min_len` and `alphabet` of hashids options also can be configured in the `:ecto_tablestore`
+config for each defined schema, for example:
 
 ```elixir
 config :ecto_tablestore,
