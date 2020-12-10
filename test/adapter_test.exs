@@ -30,7 +30,7 @@ defmodule EctoTablestore.AdapterTest do
     opts = Tablestore.generate_filter_options(user, [])
 
     filter = Keyword.get(opts, :filter)
-    assert filter.filter_type == FilterType.composite_column()
+    assert filter.type == FilterType.composite_column()
     composite_filter = filter.filter
     assert composite_filter.combinator == LogicOperator.and()
     sub_filters = composite_filter.sub_filters
@@ -38,8 +38,8 @@ defmodule EctoTablestore.AdapterTest do
 
     for sub_filter <- sub_filters do
       sub_filter_item = sub_filter.filter
-      assert sub_filter_item.comparator == ComparatorType.eq()
-      assert sub_filter.filter_type == FilterType.single_column()
+      assert sub_filter_item.comparator == ComparatorType.equal()
+      assert sub_filter.type == FilterType.single_column()
 
       case sub_filter_item.column_name do
         "name" ->
@@ -71,7 +71,7 @@ defmodule EctoTablestore.AdapterTest do
 
     filter = Keyword.get(opts, :filter)
 
-    assert filter.filter_type == FilterType.composite_column()
+    assert filter.type == FilterType.composite_column()
     composite_filter = filter.filter
 
     assert composite_filter.combinator == LogicOperator.and()
@@ -93,7 +93,7 @@ defmodule EctoTablestore.AdapterTest do
     assert condition.row_existence == RowExistence.expect_exist()
 
     column_condition = condition.column_condition
-    assert column_condition.filter_type == FilterType.composite_column()
+    assert column_condition.type == FilterType.composite_column()
 
     filter = column_condition.filter
     assert filter.combinator == LogicOperator.and()
@@ -104,8 +104,8 @@ defmodule EctoTablestore.AdapterTest do
     for sub_filter <- sub_filters do
       sub_filter_item = sub_filter.filter
 
-      assert sub_filter_item.comparator == ComparatorType.eq()
-      assert sub_filter.filter_type == FilterType.single_column()
+      assert sub_filter_item.comparator == ComparatorType.equal()
+      assert sub_filter.type == FilterType.single_column()
 
       case sub_filter_item.column_name do
         "name" ->
@@ -139,7 +139,7 @@ defmodule EctoTablestore.AdapterTest do
 
     column_condition = condition.column_condition
 
-    assert column_condition.filter_type == FilterType.composite_column()
+    assert column_condition.type == FilterType.composite_column()
 
     column_condition_filter = column_condition.filter
 
@@ -150,15 +150,15 @@ defmodule EctoTablestore.AdapterTest do
     for sub_filter <- sub_filters do
       sub_filter_item = sub_filter.filter
 
-      assert sub_filter.filter_type == FilterType.single_column()
+      assert sub_filter.type == FilterType.single_column()
 
       case sub_filter_item.column_name do
         "name" ->
-          assert sub_filter_item.comparator == ComparatorType.eq()
+          assert sub_filter_item.comparator == ComparatorType.equal()
           assert sub_filter_item.column_value == "testname2"
 
         "level" ->
-          assert sub_filter_item.comparator == ComparatorType.gt()
+          assert sub_filter_item.comparator == ComparatorType.greater_than()
           assert sub_filter_item.column_value == 10
       end
     end
@@ -180,12 +180,12 @@ defmodule EctoTablestore.AdapterTest do
 
     column_condition = condition.column_condition
 
-    assert column_condition.filter_type == FilterType.single_column()
+    assert column_condition.type == FilterType.single_column()
 
     column_condition_filter = column_condition.filter
     assert column_condition_filter.column_name == "level"
     assert column_condition_filter.column_value == 10
-    assert column_condition_filter.comparator == ComparatorType.eq()
+    assert column_condition_filter.comparator == ComparatorType.equal()
 
     opts2 =
       Tablestore.generate_condition_options(user2,
@@ -197,7 +197,7 @@ defmodule EctoTablestore.AdapterTest do
 
     column_condition = condition.column_condition
 
-    assert column_condition.filter_type == FilterType.composite_column()
+    assert column_condition.type == FilterType.composite_column()
     column_condition_filter = column_condition.filter
     assert column_condition_filter.combinator == LogicOperator.and()
 
@@ -206,15 +206,15 @@ defmodule EctoTablestore.AdapterTest do
     for sub_filter <- sub_filters do
       sub_filter_item = sub_filter.filter
 
-      assert sub_filter.filter_type == FilterType.single_column()
+      assert sub_filter.type == FilterType.single_column()
 
       case sub_filter_item.column_name do
         "name" ->
-          assert sub_filter_item.comparator == ComparatorType.eq()
+          assert sub_filter_item.comparator == ComparatorType.equal()
           assert sub_filter_item.column_value == "myname"
 
         "level" ->
-          assert sub_filter_item.comparator == ComparatorType.gt()
+          assert sub_filter_item.comparator == ComparatorType.greater_than()
           assert sub_filter_item.column_value == 10
       end
     end

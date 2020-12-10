@@ -14,7 +14,8 @@ defmodule Ecto.Adapters.Tablestore do
     FilterType,
     LogicOperator,
     RowExistence,
-    OperationType
+    OperationType,
+    ComparatorType
   }
 
   require PKType
@@ -23,6 +24,7 @@ defmodule Ecto.Adapters.Tablestore do
   require LogicOperator
   require RowExistence
   require OperationType
+  require ComparatorType
 
   require Logger
 
@@ -541,47 +543,47 @@ defmodule Ecto.Adapters.Tablestore do
   end
 
   defp generate_filter_from_entity([], [
-         %ExAliyunOts.Var.Filter{filter_type: :FT_SINGLE_COLUMN_VALUE} = filter
+         %ExAliyunOts.TableStoreFilter.Filter{type: FilterType.single_column()} = filter
        ]) do
     filter
   end
 
   defp generate_filter_from_entity([], prepared) do
-    %ExAliyunOts.Var.Filter{
-      filter: %ExAliyunOts.Var.CompositeColumnValueFilter{
+    %ExAliyunOts.TableStoreFilter.Filter{
+      filter: %ExAliyunOts.TableStoreFilter.CompositeColumnValueFilter{
         combinator: :LO_AND,
         sub_filters: prepared
       },
-      filter_type: :FT_COMPOSITE_COLUMN_VALUE
+      type: FilterType.composite_column()
     }
   end
 
   defp generate_filter_from_entity([{field_name, value} | rest], prepared)
        when is_map(value) or is_list(value) do
-    filter = %ExAliyunOts.Var.Filter{
-      filter: %ExAliyunOts.Var.SingleColumnValueFilter{
+    filter = %ExAliyunOts.TableStoreFilter.Filter{
+      filter: %ExAliyunOts.TableStoreFilter.SingleColumnValueFilter{
         column_name: Atom.to_string(field_name),
         column_value: Jason.encode!(value),
-        comparator: :CT_EQUAL,
-        ignore_if_missing: false,
+        comparator: ComparatorType.equal(),
+        filter_if_missing: true,
         latest_version_only: true
       },
-      filter_type: :FT_SINGLE_COLUMN_VALUE
+      type: FilterType.single_column()
     }
 
     generate_filter_from_entity(rest, [filter | prepared])
   end
 
   defp generate_filter_from_entity([{field_name, value} | rest], prepared) do
-    filter = %ExAliyunOts.Var.Filter{
-      filter: %ExAliyunOts.Var.SingleColumnValueFilter{
+    filter = %ExAliyunOts.TableStoreFilter.Filter{
+      filter: %ExAliyunOts.TableStoreFilter.SingleColumnValueFilter{
         column_name: Atom.to_string(field_name),
         column_value: value,
-        comparator: :CT_EQUAL,
-        ignore_if_missing: false,
+        comparator: ComparatorType.equal(),
+        filter_if_missing: true,
         latest_version_only: true
       },
-      filter_type: :FT_SINGLE_COLUMN_VALUE
+      type: FilterType.single_column()
     }
 
     generate_filter_from_entity(rest, [filter | prepared])
@@ -601,30 +603,30 @@ defmodule Ecto.Adapters.Tablestore do
     nil
   end
 
-  defp do_generate_condition([], %ExAliyunOts.Var.Condition{} = condition_opt) do
+  defp do_generate_condition([], %ExAliyunOts.TableStore.Condition{} = condition_opt) do
     condition_opt
   end
 
   defp do_generate_condition([filter: filter_from_entity], nil) do
-    %ExAliyunOts.Var.Condition{
+    %ExAliyunOts.TableStore.Condition{
       column_condition: filter_from_entity,
       row_existence: RowExistence.expect_exist()
     }
   end
 
-  defp do_generate_condition([filter: filter_from_entity], %ExAliyunOts.Var.Condition{
+  defp do_generate_condition([filter: filter_from_entity], %ExAliyunOts.TableStore.Condition{
          column_condition: nil
        }) do
-    %ExAliyunOts.Var.Condition{
+    %ExAliyunOts.TableStore.Condition{
       column_condition: filter_from_entity,
       row_existence: RowExistence.expect_exist()
     }
   end
 
-  defp do_generate_condition([filter: filter_from_entity], %ExAliyunOts.Var.Condition{
+  defp do_generate_condition([filter: filter_from_entity], %ExAliyunOts.TableStore.Condition{
          column_condition: column_condition
        }) do
-    %ExAliyunOts.Var.Condition{
+    %ExAliyunOts.TableStore.Condition{
       column_condition: do_generate_filter(filter_from_entity, :and, column_condition),
       row_existence: RowExistence.expect_exist()
     }
@@ -643,28 +645,28 @@ defmodule Ecto.Adapters.Tablestore do
     filter_from_entity
   end
 
-  defp do_generate_filter(filter_from_entity, :and, %ExAliyunOts.Var.Filter{} = filter_from_opt) do
+  defp do_generate_filter(filter_from_entity, :and, %ExAliyunOts.TableStoreFilter.Filter{} = filter_from_opt) do
     filter_names_from_opt = do_generate_filter_iterate(filter_from_opt)
 
     filter_from_entity = do_drop_filter_from_entity(filter_from_entity, filter_names_from_opt)
 
     case filter_from_entity do
       filter_from_entity when is_list(filter_from_entity) ->
-        %ExAliyunOts.Var.Filter{
-          filter: %ExAliyunOts.Var.CompositeColumnValueFilter{
+        %ExAliyunOts.TableStoreFilter.Filter{
+          filter: %ExAliyunOts.TableStoreFilter.CompositeColumnValueFilter{
             combinator: LogicOperator.and(),
             sub_filters: Enum.reverse([filter_from_opt | filter_from_entity])
           },
-          filter_type: FilterType.composite_column()
+          type: FilterType.composite_column()
         }
 
-      %ExAliyunOts.Var.Filter{filter_type: :FT_SINGLE_COLUMN_VALUE} ->
-        %ExAliyunOts.Var.Filter{
-          filter: %ExAliyunOts.Var.CompositeColumnValueFilter{
+      %ExAliyunOts.TableStoreFilter.Filter{type: FilterType.single_column()} ->
+        %ExAliyunOts.TableStoreFilter.Filter{
+          filter: %ExAliyunOts.TableStoreFilter.CompositeColumnValueFilter{
             combinator: LogicOperator.and(),
             sub_filters: [filter_from_entity, filter_from_opt]
           },
-          filter_type: FilterType.composite_column()
+          type: FilterType.composite_column()
         }
 
       nil ->
@@ -672,13 +674,13 @@ defmodule Ecto.Adapters.Tablestore do
     end
   end
 
-  defp do_generate_filter(filter_from_entity, :or, %ExAliyunOts.Var.Filter{} = filter_from_opt) do
-    %ExAliyunOts.Var.Filter{
-      filter: %ExAliyunOts.Var.CompositeColumnValueFilter{
+  defp do_generate_filter(filter_from_entity, :or, %ExAliyunOts.TableStoreFilter.Filter{} = filter_from_opt) do
+    %ExAliyunOts.TableStoreFilter.Filter{
+      filter: %ExAliyunOts.TableStoreFilter.CompositeColumnValueFilter{
         combinator: LogicOperator.or(),
         sub_filters: [filter_from_entity, filter_from_opt]
       },
-      filter_type: FilterType.composite_column()
+      type: FilterType.composite_column()
     }
   end
 
@@ -686,9 +688,9 @@ defmodule Ecto.Adapters.Tablestore do
     raise("Invalid usecase - input invalid `:filter` option: #{inspect(filter_from_opt)}")
   end
 
-  defp do_generate_filter_iterate(%ExAliyunOts.Var.Filter{
+  defp do_generate_filter_iterate(%ExAliyunOts.TableStoreFilter.Filter{
          filter: %{sub_filters: sub_filters},
-         filter_type: :FT_COMPOSITE_COLUMN_VALUE
+         type: FilterType.composite_column()
        }) do
     sub_filters
     |> Enum.map(fn filter ->
@@ -697,17 +699,17 @@ defmodule Ecto.Adapters.Tablestore do
     |> List.flatten()
   end
 
-  defp do_generate_filter_iterate(%ExAliyunOts.Var.Filter{
+  defp do_generate_filter_iterate(%ExAliyunOts.TableStoreFilter.Filter{
          filter: %{column_name: column_name},
-         filter_type: :FT_SINGLE_COLUMN_VALUE
+         type: FilterType.single_column()
        }) do
     [column_name]
   end
 
   defp do_drop_filter_from_entity(
-         %ExAliyunOts.Var.Filter{
+         %ExAliyunOts.TableStoreFilter.Filter{
            filter: %{column_name: column_name},
-           filter_type: :FT_SINGLE_COLUMN_VALUE
+           type: FilterType.single_column()
          } = filter,
          fields
        ) do
@@ -715,9 +717,9 @@ defmodule Ecto.Adapters.Tablestore do
   end
 
   defp do_drop_filter_from_entity(
-         %ExAliyunOts.Var.Filter{
+         %ExAliyunOts.TableStoreFilter.Filter{
            filter: %{sub_filters: sub_filters},
-           filter_type: :FT_COMPOSITE_COLUMN_VALUE
+           type: FilterType.composite_column()
          },
          fields
        ) do
