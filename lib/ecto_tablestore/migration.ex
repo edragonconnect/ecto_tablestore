@@ -200,9 +200,9 @@ defmodule EctoTablestore.Migration do
 
       # Only support to define one primary key as auto_increment integer
       pk_count ->
-        left_columns = Enum.reject(columns, & &1.auto_increment)
-        auto_increment_count = pk_count - length(left_columns)
-        hashids_count = Enum.count(left_columns, &match?(:hashids, &1.type))
+        left_columns = Enum.reject(columns, &match?(:hashids, &1.type))
+        hashids_count = pk_count - length(left_columns)
+        auto_increment_count = Enum.count(left_columns, & &1.auto_increment)
         total_increment_count = auto_increment_count + hashids_count
 
         if total_increment_count > 1 do
