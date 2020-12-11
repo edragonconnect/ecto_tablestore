@@ -255,7 +255,7 @@ defmodule Ecto.Adapters.Tablestore do
 
       {:error, error} ->
         case error do
-          %Error{code: code} when code == @ots_condition_check_fail ->
+          %Error{code: @ots_condition_check_fail} ->
             {:error, :stale}
 
           _ ->
@@ -293,7 +293,7 @@ defmodule Ecto.Adapters.Tablestore do
 
       {:error, error} ->
         case error do
-          %Error{code: code} when code == @ots_condition_check_fail ->
+          %Error{code: @ots_condition_check_fail} ->
             {:error, :stale}
 
           _ ->
