@@ -71,13 +71,20 @@ defmodule EctoTablestore.Repo do
   * BoolQuery
   * NestedQuery
   * ExistsQuery
-
-  Currently, not supported search index features which are depended by
-  [`ex_aliyun_ots`](https://hex.pm/packages/ex_aliyun_ots)
-
   * GeoBoundingBoxQuery
   * GeoDistanceQuery
   * GeoPolygonQuery
+
+  Please refer [ExAliyunOts.Search](https://hexdocs.pm/ex_aliyun_ots/ExAliyunOts.Search.html#query) query section
+  for details, they are similar options for use, for example:
+
+  ```
+  MyRepo.search(MySchema, "index_name",
+    search_query: [
+      query: exists_query("comment")
+    ]
+  )
+  ```
   """
   @callback search(schema :: Ecto.Schema.t(), index_name :: String.t(), options :: Keyword.t()) ::
               {:ok, search_result} | {:error, term()}
