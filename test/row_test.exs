@@ -1,7 +1,7 @@
 defmodule EctoTablestore.RowTest do
   use ExUnit.Case
 
-  alias EctoTablestore.TestSchema.{Order, User, User2, User3}
+  alias EctoTablestore.TestSchema.{Order, User, User2, User3, User4, EmbedItem}
   alias EctoTablestore.TestRepo
   alias Ecto.Changeset
 
@@ -14,15 +14,65 @@ defmodule EctoTablestore.RowTest do
     EctoTablestore.Support.Table.create_user()
     EctoTablestore.Support.Table.create_user2()
     EctoTablestore.Support.Table.create_user3()
+    EctoTablestore.Support.Table.create_user4()
 
     on_exit(fn ->
       EctoTablestore.Support.Table.delete_order()
       EctoTablestore.Support.Table.delete_user()
       EctoTablestore.Support.Table.delete_user2()
       EctoTablestore.Support.Table.delete_user3()
+      EctoTablestore.Support.Table.delete_user4()
     end)
 
     Process.sleep(3_000)
+  end
+
+  test "repo - embed schema c/r/u/d" do
+    user4 = %User4{
+      id: "1",
+      cars: [
+        %User4.Car{name: "car1", status: :bar},
+        %User4.Car{name: "car2", status: :foo}
+      ],
+      info: %User4.Info{
+        name: "Mike",
+        status: :baz,
+        money: Decimal.new(1)
+      },
+      item: %EmbedItem{name: "item1"}
+    }
+
+    {status, _inserted_result} =
+      TestRepo.insert(user4, condition: condition(:ignore), return_type: :pk)
+
+    assert :ok == status
+
+    one_result = TestRepo.one(user4)
+    assert user4 == one_result
+
+    info = %{
+      name: "Ben"
+    }
+
+    embed_item = %{
+      name: "item2"
+    }
+
+    changeset =
+      user4
+      |> Ecto.Changeset.change()
+      |> Ecto.Changeset.put_embed(:info, info)
+      |> Ecto.Changeset.put_embed(:item, embed_item)
+
+    {status, _updated_result} =
+      TestRepo.update(changeset, condition: condition(:expect_exist), return_type: :pk)
+
+    assert :ok == status
+
+    {status, _updated_result} =
+      TestRepo.delete(%User4{id: "1"}, condition: condition(:expect_exist))
+
+    assert :ok == status
   end
 
   test "repo - insert/get/delete" do
@@ -162,7 +212,7 @@ defmodule EctoTablestore.RowTest do
 
     # 1, atom increment `num` field
     # 2, delete `desc` field
-    # 3, update `name` field as "new_order" 
+    # 3, update `name` field as "new_order"
     updated_order_name = "new_order_name"
 
     changeset =
@@ -486,9 +536,9 @@ defmodule EctoTablestore.RowTest do
     assert length(result_users) == 1
 
     assert_raise RuntimeError, fn ->
-      # When use `entity_full_match: true`, one schema provides `name` attribute, 
+      # When use `entity_full_match: true`, one schema provides `name` attribute,
       # another schema only has primary key,
-      # in this case, there exist conflict will raise a RuntimeError for 
+      # in this case, there exist conflict will raise a RuntimeError for
       requests_invalid = [
         {[%User{id: 1, name: "name1"}, %User{id: 2}], entity_full_match: true}
       ]
