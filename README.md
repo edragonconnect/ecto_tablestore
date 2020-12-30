@@ -36,7 +36,7 @@ Supported features:
   * Set any attribute(s) of schema changeset as `nil` will `:delete_all` that attribute-column
     field(s);
   * Set existed attribute(s) in schema changeset will `:put` to save.
-* Support [embedded schema](https://hexdocs.pm/ecto/Ecto.Schema.html#embeds_one/3).
+* Support embedded schema, please refer full functions of `Ecto.Schema` for details.
 
 Implement Tablestore row related functions in `EctoTablestore.Repo` module, please see
 [document](https://hexdocs.pm/ecto_tablestore/readme.html) for details:
