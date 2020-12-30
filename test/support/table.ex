@@ -1,7 +1,7 @@
 defmodule EctoTablestore.Support.Table do
   @instance EDCEXTestInstance
 
-  alias EctoTablestore.TestSchema.{Order, User, User2, User3, Page}
+  alias EctoTablestore.TestSchema.{Order, User, User2, User3, Page, User4}
 
   def create_order() do
     table = Order.__schema__(:source)
@@ -32,6 +32,11 @@ defmodule EctoTablestore.Support.Table do
     EctoTablestore.Sequence.create(@instance, seq_name)
   end
 
+  def create_user4() do
+    table = User4.__schema__(:source)
+    ExAliyunOts.create_table(@instance, table, [{"id", :string}])
+  end
+
   def delete_order() do
     table = Order.__schema__(:source)
     ExAliyunOts.delete_table(@instance, table)
@@ -58,5 +63,10 @@ defmodule EctoTablestore.Support.Table do
 
     seq_name = Ecto.Adapters.Tablestore.bound_sequence_table_name(table)
     ExAliyunOts.delete_table(@instance, seq_name)
+  end
+
+  def delete_user4() do
+    table = User4.__schema__(:source)
+    ExAliyunOts.delete_table(@instance, table)
   end
 end

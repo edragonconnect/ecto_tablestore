@@ -646,7 +646,11 @@ defmodule Ecto.Adapters.Tablestore do
     filter_from_entity
   end
 
-  defp do_generate_filter(filter_from_entity, :and, %ExAliyunOts.TableStoreFilter.Filter{} = filter_from_opt) do
+  defp do_generate_filter(
+         filter_from_entity,
+         :and,
+         %ExAliyunOts.TableStoreFilter.Filter{} = filter_from_opt
+       ) do
     filter_names_from_opt = do_generate_filter_iterate(filter_from_opt)
 
     filter_from_entity = do_drop_filter_from_entity(filter_from_entity, filter_names_from_opt)
@@ -675,7 +679,11 @@ defmodule Ecto.Adapters.Tablestore do
     end
   end
 
-  defp do_generate_filter(filter_from_entity, :or, %ExAliyunOts.TableStoreFilter.Filter{} = filter_from_opt) do
+  defp do_generate_filter(
+         filter_from_entity,
+         :or,
+         %ExAliyunOts.TableStoreFilter.Filter{} = filter_from_opt
+       ) do
     %ExAliyunOts.TableStoreFilter.Filter{
       filter: %ExAliyunOts.TableStoreFilter.CompositeColumnValueFilter{
         combinator: LogicOperator.or(),
@@ -984,6 +992,14 @@ defmodule Ecto.Adapters.Tablestore do
     {Atom.to_string(key), Jason.encode!(value)}
   end
 
+  defp do_map_attr_to_row_item({:parameterized, Ecto.Embedded, %{cardinality: :one}}, key, value) do
+    {Atom.to_string(key), Jason.encode!(value)}
+  end
+
+  defp do_map_attr_to_row_item({:parameterized, Ecto.Embedded, %{cardinality: :many}}, key, value) do
+    {Atom.to_string(key), Jason.encode!(value)}
+  end
+
   defp do_map_attr_to_row_item(_, key, value) do
     {Atom.to_string(key), value}
   end
@@ -1048,6 +1064,34 @@ defmodule Ecto.Adapters.Tablestore do
 
   defp do_map_row_item_to_attr({:map, _}, key, value) when is_atom(key) do
     {key, Jason.decode!(value)}
+  end
+
+  defp do_map_row_item_to_attr(
+         {:parameterized, Ecto.Embedded, %{cardinality: :many, related: related}},
+         key,
+         value
+       )
+       when is_atom(key) do
+    return =
+      value
+      |> Jason.decode!()
+      |> Enum.map(&Ecto.embedded_load(related, &1, :json))
+
+    {key, return}
+  end
+
+  defp do_map_row_item_to_attr(
+         {:parameterized, Ecto.Embedded, %{cardinality: :one, related: related}},
+         key,
+         value
+       )
+       when is_atom(key) do
+    return =
+      value
+      |> Jason.decode!()
+      |> (fn a -> Ecto.embedded_load(related, a, :json) end).()
+
+    {key, return}
   end
 
   defp do_map_row_item_to_attr(_type, key, value) when is_atom(key) do
@@ -1650,7 +1694,6 @@ defmodule Ecto.Adapters.Tablestore do
     List.flatten([list1 | list2])
   end
 
-
   ## Storage
 
   @impl true
@@ -1673,16 +1716,18 @@ defmodule Ecto.Adapters.Tablestore do
       opts
       |> Keyword.get(:instance)
       |> error_msg_to_storage_tips(action)
+
     {:error, msg}
   end
 
-  defp error_msg_to_storage_tips(nil, _action), do: """
-    \n\nPlease refer https://hexdocs.pm/ecto_tablestore/readme.html#usage to configure your instance.
-  """
+  defp error_msg_to_storage_tips(nil, _action),
+    do: """
+      \n\nPlease refer https://hexdocs.pm/ecto_tablestore/readme.html#usage to configure your instance.
+    """
 
-  defp error_msg_to_storage_tips(_instance, action), do: """
-    \n\nPlease #{action} tablestore instance/database visit Alibaba TableStore product console through
-    https://otsnext.console.aliyun.com/
-  """
-
+  defp error_msg_to_storage_tips(_instance, action),
+    do: """
+      \n\nPlease #{action} tablestore instance/database visit Alibaba TableStore product console through
+      https://otsnext.console.aliyun.com/
+    """
 end

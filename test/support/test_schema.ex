@@ -87,6 +87,35 @@ defmodule EctoTablestore.TestSchema.User3 do
   end
 end
 
+defmodule EctoTablestore.TestSchema.User4 do
+  use EctoTablestore.Schema
+
+  tablestore_schema "test_embed_user4" do
+    field(:id, :string, primary_key: true)
+
+    embeds_many :cars, Car, primary_key: false do
+      field(:name, :string)
+      field(:status, Ecto.Enum, values: [:foo, :bar, :baz])
+    end
+
+    embeds_one :info, Info, primary_key: false, on_replace: :update do
+      field(:name, :string)
+      field(:money, :decimal)
+      field(:status, Ecto.Enum, values: [:foo, :bar, :baz])
+    end
+
+    embeds_one(:item, EctoTablestore.TestSchema.EmbedItem, on_replace: :update)
+  end
+end
+
+defmodule EctoTablestore.TestSchema.EmbedItem do
+  use Ecto.Schema
+  @primary_key false
+  embedded_schema do
+    field(:name, :string)
+  end
+end
+
 defmodule EctoTablestore.TestSchema.Post do
   use EctoTablestore.Schema
 
