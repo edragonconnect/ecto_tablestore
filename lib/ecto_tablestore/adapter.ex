@@ -1067,34 +1067,25 @@ defmodule Ecto.Adapters.Tablestore do
   end
 
   defp do_map_row_item_to_attr(
-         {:parameterized, Ecto.Embedded, %{cardinality: :many, related: related}},
+         {:parameterized, Ecto.Embedded, %{cardinality: embedded_type, related: schema}},
          key,
          value
        )
        when is_atom(key) do
-    {key, json_embedded(:many, related, value)}
-  end
-
-  defp do_map_row_item_to_attr(
-         {:parameterized, Ecto.Embedded, %{cardinality: :one, related: related}},
-         key,
-         value
-       )
-       when is_atom(key) do
-    {key, json_embedded(:one, related, value)}
+    {key, decode_json_to_embedded(embedded_type, schema, value)}
   end
 
   defp do_map_row_item_to_attr(_type, key, value) when is_atom(key) do
     {key, value}
   end
 
-  defp json_embedded(:one, schema, value) do
+  defp decode_json_to_embedded(:one, schema, value) do
     value
     |> Jason.decode!()
     |> embedded_load(schema)
   end
 
-  defp json_embedded(:many, schema, value) do
+  defp decode_json_to_embedded(:many, schema, value) do
     value
     |> Jason.decode!()
     |> Enum.map(&embedded_load(&1, schema))
