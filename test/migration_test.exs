@@ -25,7 +25,7 @@ defmodule EctoTablestore.MigrationTest do
   # The partition key only can define one
   test "only one partition_key" do
     assert_raise MigrationError,
-                 ~r/^The maximum number of partition primary keys is 4, now is 2 defined on table:/,
+                 ~r/^The maximum number of partition primary keys is 1, now is 2 defined on table:/,
                  fn ->
                    Migration.__create_table__(table("table_name"), [
                      add_pk(:id1, :integer, partition_key: true),

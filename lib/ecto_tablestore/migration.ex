@@ -186,7 +186,7 @@ defmodule EctoTablestore.Migration do
         true ->
           raise MigrationError,
             message:
-              "The maximum number of partition primary keys is 4, now is #{partition_key_count} defined on table: " <>
+              "The maximum number of partition primary keys is 1, now is #{partition_key_count} defined on table: " <>
                 table.name <> " columns:\n" <> inspect(columns)
       end
 
