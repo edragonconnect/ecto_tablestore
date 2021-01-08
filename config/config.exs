@@ -1,3 +1,5 @@
 use Mix.Config
 
-import_config "ecto_tablestore.secret.exs"
+if Mix.env() == :test do
+  import_config "test.exs"
+end

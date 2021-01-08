@@ -15,7 +15,7 @@ defmodule EctoTablestore.Migration.Runner do
     log(level, "== Running #{version} #{inspect(module)}.#{operation}/0")
 
     {time, _} = :timer.tc(fn -> perform_operation(module, operation) end)
-    time = System.convert_time_unit(time, :microsecond, :second)
+    time = System.convert_time_unit(time, :microsecond, :millisecond) / 1000
 
     log(level, "== Migrated #{version} in #{time}s")
 
@@ -38,18 +38,6 @@ defmodule EctoTablestore.Migration.Runner do
 
   def repo do
     Agent.get(runner(), & &1.repo)
-  end
-
-  def list_table_names(instance) do
-    case Process.get(:ecto_tablestore_table_names) do
-      nil ->
-        {:ok, %{table_names: table_names}} = ExAliyunOts.list_table(instance)
-        Process.put(:ecto_tablestore_table_names, table_names)
-        table_names
-
-      table_names when is_list(table_names) ->
-        table_names
-    end
   end
 
   def repo_config(key, default) do

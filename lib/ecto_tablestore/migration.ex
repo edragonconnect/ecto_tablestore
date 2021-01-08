@@ -38,8 +38,7 @@ defmodule EctoTablestore.Migration do
   """
   require ExAliyunOts.Const.PKType, as: PKType
   require Logger
-  alias EctoTablestore.Migration.Runner
-  alias EctoTablestore.Sequence
+  alias EctoTablestore.{Sequence, Migrator, Migration.Runner}
   alias Ecto.MigrationError
 
   defmodule Table do
@@ -49,7 +48,7 @@ defmodule EctoTablestore.Migration do
 
     @type t :: %__MODULE__{
             name: String.t(),
-            prefix: atom | nil,
+            prefix: String.t() | nil,
             partition_key: boolean(),
             meta: Keyword.t()
           }
@@ -210,9 +209,9 @@ defmodule EctoTablestore.Migration do
         if (total_increment_count = auto_increment_count + hashids_count) > 1 do
           raise MigrationError,
             message:
-              "The maximum number of [auto_increment & hashids] pk is 1, but now find #{
+              "The maximum number of [auto_increment & hashids] primary keys is 1, but now find #{
                 total_increment_count
-              } pks defined on table: " <> table.name
+              } primary keys defined on table: " <> table.name
         else
           seq_type =
             cond do
@@ -231,7 +230,7 @@ defmodule EctoTablestore.Migration do
     table_name = get_table_name(table, repo.config())
     repo_meta = Ecto.Adapter.lookup_meta(repo)
     instance = repo_meta.instance
-    table_names = Runner.list_table_names(instance)
+    table_names = Migrator.list_table_names(instance)
 
     # check if not exists
     if table_name not in table_names do
@@ -243,6 +242,7 @@ defmodule EctoTablestore.Migration do
 
       case ExAliyunOts.create_table(instance, table_name, primary_keys, options) do
         :ok ->
+          Migrator.add_table(instance, table_name)
           result_str = IO.ANSI.format([:green, "ok", :reset])
           Logger.info(fn -> "create table: #{table_name} result: #{result_str}" end)
           :ok

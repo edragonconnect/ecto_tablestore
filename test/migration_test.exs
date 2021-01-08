@@ -1,24 +1,24 @@
 defmodule EctoTablestore.MigrationTest do
   use ExUnit.Case
   import EctoTablestore.Migration, only: [table: 1, table: 2, create: 2, add_pk: 2, add_pk: 3]
-  alias EctoTablestore.Migration
+  alias EctoTablestore.{Migrator, Migration, Migration.SchemaMigration}
   alias Ecto.MigrationError
 
   @repo EctoTablestore.TestRepo
   @instance EDCEXTestInstance
+  @used_tables ["migration_test", "migration_test1", "migration_test2", "schema_migrations"]
 
   setup_all do
     TestHelper.setup_all()
-    table_name = "migration_test"
+    Migrator.ensure_table_names_ets()
 
-    {:ok, %{table_names: table_names}} = ExAliyunOts.list_table(@instance)
-
-    if table_name in table_names do
-      ExAliyunOts.delete_table(@instance, table_name)
-    end
+    @instance
+    |> Migrator.initialize_table_names()
+    |> cleanup_tables()
 
     on_exit(fn ->
-      ExAliyunOts.delete_table(@instance, table_name)
+      {:ok, %{table_names: table_names}} = ExAliyunOts.list_table(@instance)
+      cleanup_tables(table_names)
     end)
   end
 
@@ -66,7 +66,7 @@ defmodule EctoTablestore.MigrationTest do
   # Only support to define one primary key as auto_increment integer
   test "more then one [auto_increment & hashids] pk" do
     assert_raise MigrationError,
-                 "The maximum number of [auto_increment & hashids] pk is 1, but now find 2 pks defined on table: table_name",
+                 "The maximum number of [auto_increment & hashids] primary keys is 1, but now find 2 primary keys defined on table: table_name",
                  fn ->
                    Migration.__create_table__(table("table_name"), [
                      add_pk(:id1, :integer, partition_key: true),
@@ -76,7 +76,7 @@ defmodule EctoTablestore.MigrationTest do
                  end
 
     assert_raise MigrationError,
-                 "The maximum number of [auto_increment & hashids] pk is 1, but now find 2 pks defined on table: table_name",
+                 "The maximum number of [auto_increment & hashids] primary keys is 1, but now find 2 primary keys defined on table: table_name",
                  fn ->
                    Migration.__create_table__(table("table_name"), [
                      add_pk(:id1, :hashids, partition_key: true, auto_increment: true),
@@ -223,6 +223,85 @@ defmodule EctoTablestore.MigrationTest do
     stop_runner(runner)
   end
 
+  test "schema_migration: ensure_table" do
+    table_names = Migrator.list_table_names(@instance)
+    assert :ok = SchemaMigration.ensure_schema_migrations_table!(@repo, table_names)
+  end
+
+  test "schema_migration: versions" do
+    assert [] = SchemaMigration.versions(@repo)
+    assert {:ok, _} = SchemaMigration.up(@repo, 1)
+    assert [1] = SchemaMigration.versions(@repo)
+  end
+
+  test "schema_migration: lock_version" do
+    assert old = SchemaMigration.versions(@repo)
+
+    assert_raise MigrationError, "execute failed", fn ->
+      SchemaMigration.lock_version!(@repo, 2, fn ->
+        {:error, MigrationError.exception("execute failed")}
+      end)
+    end
+
+    assert :ok = SchemaMigration.lock_version!(@repo, 2, fn -> :ok end)
+    assert [2] = SchemaMigration.versions(@repo) -- old
+
+    assert_raise MigrationError,
+                 "lock_version failed because of the version: 2 already have",
+                 fn ->
+                   SchemaMigration.lock_version!(@repo, 2, fn -> :ok end)
+                 end
+
+    assert [2] = SchemaMigration.versions(@repo) -- old
+  end
+
+  test "with_repo: ensure version or name no duplication" do
+    old = SchemaMigration.versions(@repo)
+    path = "test/support/migrations/duplicate_name"
+
+    assert_raise MigrationError,
+                 "migrations can't be executed, migration name duplicate_name is duplicated",
+                 fn ->
+                   Migrator.with_repo(@repo, &Migrator.run(&1, path, []), mode: :temporary)
+                 end
+
+    path = "test/support/migrations/duplicate_version"
+
+    assert_raise MigrationError,
+                 "migrations can't be executed, migration version 3 is duplicated",
+                 fn ->
+                   Migrator.with_repo(@repo, &Migrator.run(&1, path, []), mode: :temporary)
+                 end
+
+    assert ^old = SchemaMigration.versions(@repo)
+  end
+
+  test "with_repo: operation function not exported" do
+    old = SchemaMigration.versions(@repo)
+    path = "test/support/migrations/not_exported"
+    module = EctoTablestore.Repo.Migrations.NotExported
+
+    assert_raise MigrationError,
+                 "#{inspect(module)} does not implement a `change/0` function",
+                 fn ->
+                   Migrator.with_repo(@repo, &Migrator.run(&1, path, []), mode: :temporary)
+                 end
+
+    assert ^old = SchemaMigration.versions(@repo)
+  end
+
+  test "with_repo: filter already executed versions" do
+    old = SchemaMigration.versions(@repo)
+    path = "test/support/migrations/success"
+
+    assert {:ok, [3, 4], _started} =
+             Migrator.with_repo(@repo, &Migrator.run(&1, path, []), mode: :temporary)
+
+    assert old ++ [3, 4] == SchemaMigration.versions(@repo)
+    {:ok, %{table_names: table_names}} = ExAliyunOts.list_table(@instance)
+    assert true = Enum.all?(["migration_test1", "migration_test2"], &(&1 in table_names))
+  end
+
   defp setup_runner(repo) do
     args = {self(), repo, __MODULE__, %{level: :debug}}
 
@@ -238,5 +317,13 @@ defmodule EctoTablestore.MigrationTest do
 
   defp stop_runner(runner) do
     Agent.stop(runner)
+  end
+
+  defp cleanup_tables(table_names) do
+    Enum.each(@used_tables, fn table_name ->
+      if table_name in table_names do
+        ExAliyunOts.delete_table(@instance, table_name)
+      end
+    end)
   end
 end
