@@ -1,6 +1,9 @@
 defmodule EctoTablestore.MigrationTest do
   use ExUnit.Case
-  import EctoTablestore.Migration, only: [table: 1, table: 2, create: 2, add_pk: 2, add_pk: 3]
+
+  import EctoTablestore.Migration,
+    only: [table: 1, table: 2, create: 2, add_pk: 2, add_pk: 3, add_attr: 2, add_index: 3]
+
   alias EctoTablestore.{Migrator, Migration, Migration.SchemaMigration}
   alias Ecto.MigrationError
 
@@ -89,19 +92,19 @@ defmodule EctoTablestore.MigrationTest do
   # Make the partition key as `:id` and in an increment integer sequence
   test "auto generate partition_key" do
     table = table("table_name")
-
     runner = setup_runner(@repo)
 
-    assert Migration.__create_table__(table, [
-             add_pk(:age, :integer)
-           ]) == %{
-             table: table,
-             columns: [
-               add_pk(:id, :integer, auto_increment: true, partition_key: true),
-               add_pk(:age, :integer)
-             ],
+    columns = [
+      add_pk(:id, :integer, auto_increment: true, partition_key: true),
+      add_pk(:age, :integer)
+    ]
+
+    assert %{
+             table: ^table,
+             pk_columns: ^columns,
+             attr_columns: [],
              seq_type: :self_seq
-           }
+           } = Migration.__create_table__(table, [add_pk(:age, :integer)])
 
     stop_runner(runner)
   end
@@ -115,11 +118,12 @@ defmodule EctoTablestore.MigrationTest do
       add_pk(:age, :integer)
     ]
 
-    assert Migration.__create_table__(table, columns) == %{
-             table: table,
-             columns: columns,
+    assert %{
+             table: ^table,
+             pk_columns: ^columns,
+             attr_columns: [],
              seq_type: :self_seq
-           }
+           } = Migration.__create_table__(table, columns)
 
     stop_runner(runner)
   end
@@ -132,22 +136,24 @@ defmodule EctoTablestore.MigrationTest do
       add_pk(:age, :integer)
     ]
 
-    assert Migration.__create_table__(table, columns1) == %{
-             table: table,
-             columns: columns1,
+    assert %{
+             table: ^table,
+             pk_columns: ^columns1,
+             attr_columns: [],
              seq_type: :default_seq
-           }
+           } = Migration.__create_table__(table, columns1)
 
     columns2 = [
       add_pk(:id, :hashids, partition_key: true, auto_increment: true),
       add_pk(:age, :integer)
     ]
 
-    assert Migration.__create_table__(table, columns2) == %{
-             table: table,
-             columns: columns2,
+    assert %{
+             table: ^table,
+             pk_columns: ^columns2,
+             attr_columns: [],
              seq_type: :default_seq
-           }
+           } = Migration.__create_table__(table, columns2)
   end
 
   test "none_seq" do
@@ -160,11 +166,74 @@ defmodule EctoTablestore.MigrationTest do
       add_pk(:other, :binary)
     ]
 
-    assert Migration.__create_table__(table, columns) == %{
-             table: table,
-             columns: columns,
+    assert %{
+             table: ^table,
+             pk_columns: ^columns,
+             attr_columns: [],
              seq_type: :none_seq
-           }
+           } = Migration.__create_table__(table, columns)
+  end
+
+  test "create table: add attribute columns" do
+    table = table("table_name")
+
+    pk_columns = [
+      add_pk(:id, :integer, partition_key: true),
+      add_pk(:age, :integer),
+      add_pk(:name, :string),
+      add_pk(:other, :binary)
+    ]
+
+    attr_columns = [
+      add_attr(:attr1, :integer),
+      add_attr(:attr2, :double),
+      add_attr(:attr3, :boolean),
+      add_attr(:attr4, :string),
+      add_attr(:attr5, :binary)
+    ]
+
+    columns = pk_columns ++ attr_columns
+
+    assert %{
+             table: ^table,
+             pk_columns: ^pk_columns,
+             attr_columns: ^attr_columns,
+             seq_type: :none_seq
+           } = Migration.__create_table__(table, columns)
+  end
+
+  test "create table: add secondary index" do
+    table = table("table_name")
+
+    pk_columns = [
+      add_pk(:id, :integer, partition_key: true),
+      add_pk(:age, :integer),
+      add_pk(:name, :string),
+      add_pk(:other, :binary)
+    ]
+
+    attr_columns = [
+      add_attr(:attr1, :integer),
+      add_attr(:attr2, :double),
+      add_attr(:attr3, :boolean),
+      add_attr(:attr4, :string),
+      add_attr(:attr5, :binary)
+    ]
+
+    index_metas = [
+      add_index("table_name_index1", [:attr1, :id], [:attr2]),
+      add_index("table_name_index2", [:attr4, :id], [:attr1, :attr2, :attr3, :attr5])
+    ]
+
+    columns = pk_columns ++ attr_columns ++ index_metas
+
+    assert %{
+             table: ^table,
+             pk_columns: ^pk_columns,
+             attr_columns: ^attr_columns,
+             index_metas: ^index_metas,
+             seq_type: :none_seq
+           } = Migration.__create_table__(table, columns)
   end
 
   test "create table" do

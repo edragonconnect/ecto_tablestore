@@ -65,7 +65,9 @@ defmodule EctoTablestore.Migration do
           add: 2,
           add: 3,
           add_pk: 2,
-          add_pk: 3
+          add_pk: 3,
+          add_attr: 2,
+          add_index: 3
         ]
 
       def __migration__, do: :ok
@@ -162,19 +164,34 @@ defmodule EctoTablestore.Migration do
   end
 
   def __create_table__(%Table{} = table, columns) do
-    partition_key_count = Enum.count(columns, & &1.partition_key)
+    {index_metas, columns} = Enum.split_with(columns, &is_tuple(&1))
 
-    columns =
+    %{primary_key: pk_columns, attribute: attr_columns} =
+      Map.merge(%{primary_key: [], attribute: []}, Enum.group_by(columns, & &1.column_type))
+
+    partition_key_count = Enum.count(pk_columns, & &1.partition_key)
+
+    pk_columns =
       cond do
         partition_key_count == 1 ->
-          columns
+          pk_columns
 
         # Make the partition key as `:id` and in an increment integer sequence
         partition_key_count == 0 and table.partition_key ->
           opts = Runner.repo_config(:migration_primary_key, [])
-          {name, opts} = Keyword.pop(opts, :name, :id)
+          {name, opts} = Keyword.pop(opts, :name, "id")
           {type, _opts} = Keyword.pop(opts, :type, :integer)
-          [%{pk_name: name, type: type, partition_key: true, auto_increment: true} | columns]
+
+          [
+            %{
+              name: name,
+              type: type,
+              column_type: :primary_key,
+              partition_key: true,
+              auto_increment: true
+            }
+            | pk_columns
+          ]
 
         # No partition key defined
         partition_key_count == 0 ->
@@ -186,21 +203,21 @@ defmodule EctoTablestore.Migration do
           raise MigrationError,
             message:
               "The maximum number of partition primary keys is 1, now is #{partition_key_count} defined on table: " <>
-                table.name <> " columns:\n" <> inspect(columns)
+                table.name <> " columns:\n" <> inspect(pk_columns)
       end
 
-    case Enum.count(columns) do
+    case Enum.count(pk_columns) do
       # The number of primary keys can not be more than 4
       pk_count when pk_count > 4 ->
         raise MigrationError,
           message:
             "The maximum number of primary keys is 4, now is #{pk_count} defined on table: " <>
-              table.name <> " columns:\n" <> inspect(columns)
+              table.name <> " columns:\n" <> inspect(pk_columns)
 
       # Only support to define one primary key as auto_increment integer
       _pk_count ->
         %{hashids: hashids_count, auto_increment: auto_increment_count} =
-          Enum.reduce(columns, %{hashids: 0, auto_increment: 0, none: 0}, fn
+          Enum.reduce(pk_columns, %{hashids: 0, auto_increment: 0, none: 0}, fn
             %{type: :hashids}, acc -> Map.update!(acc, :hashids, &(&1 + 1))
             %{auto_increment: true}, acc -> Map.update!(acc, :auto_increment, &(&1 + 1))
             _, acc -> Map.update!(acc, :none, &(&1 + 1))
@@ -220,40 +237,74 @@ defmodule EctoTablestore.Migration do
               true -> :none_seq
             end
 
-          %{table: table, columns: columns, seq_type: seq_type}
+          %{
+            table: table,
+            pk_columns: pk_columns,
+            attr_columns: attr_columns,
+            index_metas: index_metas,
+            seq_type: seq_type
+          }
         end
     end
   end
 
   @doc false
-  def do_create_table(repo, %{table: table, columns: columns, seq_type: seq_type}) do
+  def do_create_table(repo, %{
+        table: table,
+        pk_columns: pk_columns,
+        attr_columns: attr_columns,
+        index_metas: index_metas,
+        seq_type: seq_type
+      }) do
     table_name = get_table_name(table, repo.config())
+    table_name_str = IO.ANSI.format([:green, table_name, :reset])
     repo_meta = Ecto.Adapter.lookup_meta(repo)
     instance = repo_meta.instance
     table_names = Migrator.list_table_names(instance)
 
     # check if not exists
     if table_name not in table_names do
-      primary_keys = Enum.map(columns, &transform_table_column/1)
+      primary_keys = Enum.map(pk_columns, &transform_table_column/1)
+      defined_columns = Enum.map(attr_columns, &transform_table_column/1)
 
-      Logger.info(fn -> ">> table: #{table_name}, primary_keys: #{inspect(primary_keys)}" end)
+      print_list =
+        Enum.reject(
+          [
+            primary_keys: primary_keys,
+            defined_columns: defined_columns,
+            index_metas: index_metas
+          ],
+          &match?({_, []}, &1)
+        )
 
-      options = Keyword.put(table.meta, :max_versions, 1)
+      Logger.info(fn ->
+        ">> creating table: #{table_name_str} by #{
+          inspect(print_list, pretty: true, limit: :infinity)
+        } "
+      end)
+
+      options =
+        Keyword.merge(table.meta,
+          max_versions: 1,
+          defined_columns: defined_columns,
+          index_metas: index_metas
+        )
 
       case ExAliyunOts.create_table(instance, table_name, primary_keys, options) do
         :ok ->
           Migrator.add_table(instance, table_name)
           result_str = IO.ANSI.format([:green, "ok", :reset])
-          Logger.info(fn -> "create table: #{table_name} result: #{result_str}" end)
+          Logger.info(fn -> ">>>> create table: #{table_name_str} result: #{result_str}" end)
           :ok
 
         result ->
-          Logger.error(fn -> "create table: #{table_name} result: #{inspect(result)}" end)
+          Logger.error(fn -> ">>>> create table: #{table_name_str} result: #{inspect(result)}" end)
+
           elem(result, 0)
       end
     else
       result_str = IO.ANSI.format([:yellow, "exists", :reset])
-      Logger.info(fn -> ">> table: #{table_name} already #{result_str}" end)
+      Logger.info(fn -> ">> table: #{table_name_str} already #{result_str}" end)
       :already_exists
     end
     |> case do
@@ -300,19 +351,17 @@ defmodule EctoTablestore.Migration do
     end
   end
 
+  defp transform_table_column(%{column_type: :attribute, name: field_name, type: type}) do
+    {field_name, type}
+  end
+
   defp transform_table_column(%{
+         column_type: :primary_key,
+         name: field_name,
          type: type,
-         pk_name: field_name,
          partition_key: partition_key?,
          auto_increment: auto_increment?
        }) do
-    field_name =
-      if is_binary(field_name) do
-        field_name
-      else
-        Atom.to_string(field_name)
-      end
-
     case type do
       :integer when auto_increment? and not partition_key? ->
         {field_name, PKType.integer(), PKType.auto_increment()}
@@ -414,6 +463,7 @@ defmodule EctoTablestore.Migration do
   """
   defmacro add(column, type, opts \\ []), do: _add_pk(column, type, opts)
   defmacro add_pk(column, type, opts \\ []), do: _add_pk(column, type, opts)
+  defmacro add_attr(column, type), do: _add_attr(column, type)
 
   defp _add_pk(column, type, opts)
        when (is_atom(column) or is_binary(column)) and is_list(opts) do
@@ -421,8 +471,9 @@ defmodule EctoTablestore.Migration do
 
     quote location: :keep do
       %{
-        pk_name: unquote(column),
+        name: unquote(to_string(column)),
         type: unquote(type),
+        column_type: :primary_key,
         partition_key: Keyword.get(unquote(opts), :partition_key, false),
         auto_increment: Keyword.get(unquote(opts), :auto_increment, false)
       }
@@ -430,12 +481,63 @@ defmodule EctoTablestore.Migration do
   end
 
   defp validate_pk_type!(column, type) do
+    # more about can see here: https://help.aliyun.com/document_detail/106536.html
     if type in [:integer, :string, :binary, :hashids] do
       :ok
     else
       raise ArgumentError,
             "#{inspect(type)} is not a valid primary key type for column: `#{inspect(column)}`, " <>
               "please use an atom as :integer | :string | :binary | :hashids ."
+    end
+  end
+
+  defp _add_attr(column, type) when is_atom(column) or is_binary(column) do
+    validate_attr_type!(column, type)
+
+    quote location: :keep do
+      %{
+        name: unquote(to_string(column)),
+        type: unquote(type),
+        column_type: :attribute
+      }
+    end
+  end
+
+  defp validate_attr_type!(column, type) do
+    # more about can see here: https://help.aliyun.com/document_detail/106536.html
+    if type in [:integer, :double, :boolean, :string, :binary] do
+      :ok
+    else
+      raise ArgumentError,
+            "#{inspect(type)} is not a valid attribute type for column: `#{inspect(column)}`, " <>
+              "please use an atom as :integer | :double | :boolean | :string | :binary ."
+    end
+  end
+
+  defmacro add_index(index_name, primary_keys, defined_columns)
+           when is_binary(index_name) and is_list(primary_keys) and is_list(defined_columns) do
+    check_and_transform_columns = fn columns ->
+      columns
+      |> Macro.prewalk(&Macro.expand(&1, __CALLER__))
+      |> Enum.map(fn
+        column when is_binary(column) ->
+          column
+
+        column when is_atom(column) ->
+          Atom.to_string(column)
+
+        column ->
+          raise ArgumentError,
+                "error type when defining column: #{inspect(column)} for add_index: #{index_name}, " <>
+                  "only supported one of type: [:binary, :atom]"
+      end)
+    end
+
+    primary_keys = check_and_transform_columns.(primary_keys)
+    defined_columns = check_and_transform_columns.(defined_columns)
+
+    quote location: :keep do
+      {unquote(index_name), unquote(primary_keys), unquote(defined_columns)}
     end
   end
 end

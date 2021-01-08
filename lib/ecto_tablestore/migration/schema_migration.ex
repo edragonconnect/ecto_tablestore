@@ -24,18 +24,21 @@ defmodule EctoTablestore.Migration.SchemaMigration do
       repo_meta = Ecto.Adapter.lookup_meta(repo)
       instance = repo_meta.instance
       primary_keys = [{"version", :integer}]
+      table_name_str = IO.ANSI.format([:green, table_name, :reset])
 
-      Logger.info(fn -> ">> table: #{table_name}, primary_keys: #{inspect(primary_keys)}" end)
+      Logger.info(fn ->
+        ">> creating table: #{table_name_str} by [primary_keys: #{inspect(primary_keys)}]"
+      end)
 
       case ExAliyunOts.create_table(instance, table_name, primary_keys) do
         :ok ->
           result_str = IO.ANSI.format([:green, "ok", :reset])
-          Logger.info(fn -> "create migrations table: #{table_name} result: #{result_str}" end)
+          Logger.info(fn -> ">>>> create migrations table: #{table_name_str} result: #{result_str}" end)
           :ok
 
         result ->
           raise MigrationError,
-                "create migrations table: #{table_name} result: #{inspect(result)}"
+                "create migrations table: #{table_name_str} result: #{inspect(result)}"
       end
     end
   end
