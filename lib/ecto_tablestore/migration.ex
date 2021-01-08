@@ -54,6 +54,26 @@ defmodule EctoTablestore.Migration do
           }
   end
 
+  defmodule SecondaryIndex do
+    @moduledoc false
+
+    defstruct table: nil,
+              name: nil,
+              prefix: nil,
+              primary_keys: [],
+              defined_columns: [],
+              include_base_data: true
+
+    @type t :: %__MODULE__{
+            table: String.t(),
+            name: String.t(),
+            prefix: String.t() | nil,
+            primary_keys: [String.t()],
+            defined_columns: [String.t()],
+            include_base_data: boolean()
+          }
+  end
+
   @doc false
   defmacro __using__(_) do
     quote location: :keep do
@@ -61,6 +81,9 @@ defmodule EctoTablestore.Migration do
         only: [
           table: 1,
           table: 2,
+          secondary_index: 4,
+          secondary_index: 5,
+          create: 1,
           create: 2,
           add: 2,
           add: 3,
@@ -125,6 +148,92 @@ defmodule EctoTablestore.Migration do
     struct(%Table{name: name}, opts)
   end
 
+  def secondary_index(table_name, index_name, primary_keys, defined_columns, opts \\ [])
+
+  def secondary_index(table_name, index_name, primary_keys, defined_columns, opts)
+      when is_binary(table_name) and is_binary(index_name) and is_list(opts) and
+             is_list(primary_keys) and is_list(defined_columns) do
+    check_and_transform_columns =
+      &Enum.map(&1, fn
+        column when is_binary(column) ->
+          column
+
+        column when is_atom(column) ->
+          Atom.to_string(column)
+
+        column ->
+          raise ArgumentError,
+                "error type when defining column: #{inspect(column)} for secondary_index: " <>
+                  "#{table_name}-#{index_name}, only supported one of type: [:binary, :atom]"
+      end)
+
+    struct(
+      %SecondaryIndex{
+        table: table_name,
+        name: index_name,
+        primary_keys: check_and_transform_columns.(primary_keys),
+        defined_columns: check_and_transform_columns.(defined_columns)
+      },
+      opts
+    )
+  end
+
+  def create(%SecondaryIndex{} = secondary_index) do
+    Runner.push_command(&__MODULE__.do_create_secondary_index(&1, secondary_index))
+  end
+
+  def do_create_secondary_index(repo, secondary_index) do
+    table_name = secondary_index.table
+    table_name_str = IO.ANSI.format([:green, table_name, :reset])
+    index_name = secondary_index.name
+    index_name_str = IO.ANSI.format([:green, index_name, :reset])
+    repo_meta = Ecto.Adapter.lookup_meta(repo)
+    instance = repo_meta.instance
+
+    Logger.info(fn ->
+      ">> creating secondary_index: #{index_name_str} for table: #{table_name_str} by #{
+        inspect(
+          [
+            primary_keys: secondary_index.primary_keys,
+            defined_columns: secondary_index.defined_columns,
+            include_base_data: secondary_index.include_base_data
+          ],
+          pretty: true,
+          limit: :infinity
+        )
+      } "
+    end)
+
+    case ExAliyunOts.create_index(
+           instance,
+           table_name,
+           index_name,
+           secondary_index.primary_keys,
+           secondary_index.defined_columns,
+           include_base_data: secondary_index.include_base_data
+         ) do
+      :ok ->
+        result_str = IO.ANSI.format([:green, "ok", :reset])
+
+        Logger.info(fn ->
+          ">>>> create secondary_index: #{index_name_str} for table: #{table_name_str} result: #{
+            result_str
+          }"
+        end)
+
+        :ok
+
+      result ->
+        Logger.error(fn ->
+          ">>>> create secondary_index: #{index_name_str} for table: #{table_name_str} result: #{
+            inspect(result)
+          }"
+        end)
+
+        elem(result, 0)
+    end
+  end
+
   @doc """
   Define the primary key(s) of the table to create.
 
@@ -148,9 +257,9 @@ defmodule EctoTablestore.Migration do
       end
 
   """
-  defmacro create(table, do: block), do: _create_table(table, block)
+  defmacro create(object, do: block), do: expand_create(object, block)
 
-  defp _create_table(table, block) do
+  defp expand_create(table, block) do
     columns =
       case block do
         {:__block__, _, columns} -> columns
@@ -533,11 +642,12 @@ defmodule EctoTablestore.Migration do
       end)
     end
 
-    primary_keys = check_and_transform_columns.(primary_keys)
-    defined_columns = check_and_transform_columns.(defined_columns)
-
     quote location: :keep do
-      {unquote(index_name), unquote(primary_keys), unquote(defined_columns)}
+      {
+        unquote(index_name),
+        unquote(check_and_transform_columns.(primary_keys)),
+        unquote(check_and_transform_columns.(defined_columns))
+      }
     end
   end
 end

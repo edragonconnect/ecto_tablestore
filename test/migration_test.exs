@@ -1,9 +1,6 @@
 defmodule EctoTablestore.MigrationTest do
   use ExUnit.Case
-
-  import EctoTablestore.Migration,
-    only: [table: 1, table: 2, create: 2, add_pk: 2, add_pk: 3, add_attr: 2, add_index: 3]
-
+  use EctoTablestore.Migration
   alias EctoTablestore.{Migrator, Migration, Migration.SchemaMigration}
   alias Ecto.MigrationError
 
