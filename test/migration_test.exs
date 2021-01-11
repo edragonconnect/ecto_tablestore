@@ -368,6 +368,23 @@ defmodule EctoTablestore.MigrationTest do
     assert true = Enum.all?(["migration_test1", "migration_test2"], &(&1 in table_names))
   end
 
+  test "with_repo: drop" do
+    old = SchemaMigration.versions(@repo)
+    path = "test/support/migrations/drop"
+
+    {:ok, %{table_names: table_names}} = ExAliyunOts.list_table(@instance)
+    assert true = Enum.all?(["migration_test1", "migration_test2"], &(&1 in table_names))
+    assert {:ok, %{index_metas: [_, _]}} = ExAliyunOts.describe_table(@instance, "migration_test2")
+
+    assert {:ok, [5], _started} =
+             Migrator.with_repo(@repo, &Migrator.run(&1, path, []), mode: :temporary)
+
+    assert old ++ [5] == SchemaMigration.versions(@repo)
+    {:ok, %{table_names: table_names}} = ExAliyunOts.list_table(@instance)
+    assert true = "migration_test1" not in table_names
+    assert {:ok, %{index_metas: []}} = ExAliyunOts.describe_table(@instance, "migration_test2")
+  end
+
   defp setup_runner(repo) do
     args = {self(), repo, __MODULE__, %{level: :debug}}
 

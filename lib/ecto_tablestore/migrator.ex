@@ -108,6 +108,10 @@ defmodule EctoTablestore.Migrator do
     :ets.insert(@table_names_ets, {instance, table_name})
   end
 
+  def delete_table(instance, table_name) do
+    :ets.delete_object(@table_names_ets, {instance, table_name})
+  end
+
   # This function will match directories passed into `Migrator.run`.
   defp migrations_for(migration_source) when is_binary(migration_source) do
     Path.join([migration_source, "**", "*.exs"])

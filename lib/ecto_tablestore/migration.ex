@@ -57,14 +57,14 @@ defmodule EctoTablestore.Migration do
   defmodule SecondaryIndex do
     @moduledoc false
 
-    defstruct table: nil,
-              name: nil,
+    defstruct table_name: nil,
+              index_name: nil,
               prefix: nil,
               include_base_data: true
 
     @type t :: %__MODULE__{
-            table: String.t(),
-            name: String.t(),
+            table_name: String.t(),
+            index_name: String.t(),
             prefix: String.t() | nil,
             include_base_data: boolean()
           }
@@ -80,6 +80,7 @@ defmodule EctoTablestore.Migration do
           secondary_index: 2,
           secondary_index: 3,
           create: 2,
+          drop: 1,
           add: 2,
           add: 3,
           add_pk: 1,
@@ -168,7 +169,7 @@ defmodule EctoTablestore.Migration do
   """
   def secondary_index(table_name, index_name, opts \\ [])
       when is_binary(table_name) and is_binary(index_name) and is_list(opts) do
-    struct(%SecondaryIndex{table: table_name, name: index_name}, opts)
+    struct(%SecondaryIndex{table_name: table_name, index_name: index_name}, opts)
   end
 
   @doc """
@@ -349,6 +350,7 @@ defmodule EctoTablestore.Migration do
   end
 
   @doc false
+  # create table
   def do_create(repo, %{
         table: table,
         pk_columns: pk_columns,
@@ -404,7 +406,7 @@ defmodule EctoTablestore.Migration do
       end
     else
       result_str = IO.ANSI.format([:yellow, "exists", :reset])
-      Logger.info(fn -> ">> table: #{table_name_str} already #{result_str}" end)
+      Logger.info(fn -> ">>>> table: #{table_name_str} already #{result_str}" end)
       :already_exists
     end
     |> case do
@@ -418,16 +420,17 @@ defmodule EctoTablestore.Migration do
     end
   end
 
+  # create secondary_index
   def do_create(repo, %{
         secondary_index: secondary_index,
         primary_keys: primary_keys,
         defined_columns: defined_columns
       }) do
-    %{table: table_name, name: index_name, include_base_data: include_base_data} = secondary_index
+    {table_name, index_name} = get_secondary_index_name(secondary_index, repo.config())
     table_name_str = IO.ANSI.format([:green, table_name, :reset])
     index_name_str = IO.ANSI.format([:green, index_name, :reset])
+    include_base_data = secondary_index.include_base_data
     repo_meta = Ecto.Adapter.lookup_meta(repo)
-    instance = repo_meta.instance
 
     Logger.info(fn ->
       ">> creating secondary_index: #{index_name_str} for table: #{table_name_str} by #{
@@ -443,7 +446,12 @@ defmodule EctoTablestore.Migration do
       } "
     end)
 
-    case ExAliyunOts.create_index(instance, table_name, index_name, primary_keys, defined_columns,
+    case ExAliyunOts.create_index(
+           repo_meta.instance,
+           table_name,
+           index_name,
+           primary_keys,
+           defined_columns,
            include_base_data: include_base_data
          ) do
       :ok ->
@@ -468,10 +476,10 @@ defmodule EctoTablestore.Migration do
     end
   end
 
-  def create_seq_table_by_type(:none_seq, _table_name, _table_names, _repo, _instance),
+  defp create_seq_table_by_type(:none_seq, _table_name, _table_names, _repo, _instance),
     do: :ignore
 
-  def create_seq_table_by_type(seq_type, table_name, table_names, repo, instance) do
+  defp create_seq_table_by_type(seq_type, table_name, table_names, repo, instance) do
     seq_table_name =
       case seq_type do
         :self_seq -> repo.__adapter__.bound_sequence_table_name(table_name)
@@ -491,13 +499,26 @@ defmodule EctoTablestore.Migration do
   end
 
   @doc false
-  defp get_table_name(table, repo_config) do
-    prefix = table.prefix || Keyword.get(repo_config, :migration_default_prefix)
+  defp get_table_name(%{prefix: prefix, name: name}, repo_config) do
+    prefix = prefix || Keyword.get(repo_config, :migration_default_prefix)
 
     if prefix do
-      prefix <> table.name
+      prefix <> name
     else
-      table.name
+      name
+    end
+  end
+
+  defp get_secondary_index_name(
+         %{prefix: prefix, table_name: table_name, index_name: index_name},
+         repo_config
+       ) do
+    prefix = prefix || Keyword.get(repo_config, :migration_default_prefix)
+
+    if prefix do
+      {prefix <> table_name, prefix <> index_name}
+    else
+      {table_name, index_name}
     end
   end
 
@@ -733,5 +754,86 @@ defmodule EctoTablestore.Migration do
         unquote(check_and_transform_columns.(defined_columns))
       }
     end
+  end
+
+  @doc """
+  Drops one of the following:
+
+    * a table
+    * a secondary index
+
+  ## Examples
+
+      drop table("posts")
+      drop secondary_index("posts", "posts_owner")
+
+  """
+  def drop(%Table{} = table) do
+    Runner.push_command(fn repo ->
+      table_name = get_table_name(table, repo.config())
+      table_name_str = IO.ANSI.format([:green, table_name, :reset])
+      repo_meta = Ecto.Adapter.lookup_meta(repo)
+      instance = repo_meta.instance
+      table_names = Migrator.list_table_names(instance)
+
+      Logger.info(fn -> ">> dropping table: #{table_name_str}" end)
+
+      # check if not exists
+      if table_name in table_names do
+        case ExAliyunOts.delete_table(instance, table_name) do
+          :ok ->
+            Migrator.delete_table(instance, table_name)
+            result_str = IO.ANSI.format([:green, "ok", :reset])
+            Logger.info(fn -> ">>>> dropping table: #{table_name_str} result: #{result_str}" end)
+            :ok
+
+          result ->
+            Logger.error(fn ->
+              ">>>> dropping table: #{table_name_str} result: #{inspect(result)}"
+            end)
+
+            elem(result, 0)
+        end
+      else
+        result_str = IO.ANSI.format([:yellow, "not exists", :reset])
+        Logger.info(fn -> ">>>> table: #{table_name_str} #{result_str}" end)
+        :not_exists
+      end
+    end)
+  end
+
+  def drop(%SecondaryIndex{} = secondary_index) do
+    Runner.push_command(fn repo ->
+      {table_name, index_name} = get_secondary_index_name(secondary_index, repo.config())
+      table_name_str = IO.ANSI.format([:green, table_name, :reset])
+      index_name_str = IO.ANSI.format([:green, index_name, :reset])
+      repo_meta = Ecto.Adapter.lookup_meta(repo)
+
+      Logger.info(fn ->
+        ">> dropping secondary_index table: #{table_name_str}, index: #{index_name_str}"
+      end)
+
+      case ExAliyunOts.delete_index(repo_meta.instance, table_name, index_name) do
+        :ok ->
+          result_str = IO.ANSI.format([:green, "ok", :reset])
+
+          Logger.info(fn ->
+            ">>>> dropping secondary_index table: #{table_name_str}, index: #{index_name_str} result: #{
+              result_str
+            }"
+          end)
+
+          :ok
+
+        result ->
+          Logger.error(fn ->
+            ">>>> dropping secondary_index table: #{table_name_str}, index: #{index_name_str} result: #{
+              inspect(result)
+            }"
+          end)
+
+          elem(result, 0)
+      end
+    end)
   end
 end
