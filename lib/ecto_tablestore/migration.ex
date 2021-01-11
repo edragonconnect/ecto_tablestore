@@ -40,6 +40,7 @@ defmodule EctoTablestore.Migration do
   require Logger
   alias EctoTablestore.{Sequence, Migrator, Migration.Runner}
   alias Ecto.MigrationError
+  alias ExAliyunOts.Var.Search
 
   defmodule Table do
     @moduledoc false
@@ -57,16 +58,25 @@ defmodule EctoTablestore.Migration do
   defmodule SecondaryIndex do
     @moduledoc false
 
-    defstruct table_name: nil,
-              index_name: nil,
-              prefix: nil,
-              include_base_data: true
+    defstruct table_name: nil, index_name: nil, prefix: nil, include_base_data: true
 
     @type t :: %__MODULE__{
             table_name: String.t(),
             index_name: String.t(),
             prefix: String.t() | nil,
             include_base_data: boolean()
+          }
+  end
+
+  defmodule SearchIndex do
+    @moduledoc false
+
+    defstruct table_name: nil, index_name: nil, prefix: nil
+
+    @type t :: %__MODULE__{
+            table_name: String.t(),
+            index_name: String.t(),
+            prefix: String.t() | nil
           }
   end
 
@@ -79,6 +89,8 @@ defmodule EctoTablestore.Migration do
           table: 2,
           secondary_index: 2,
           secondary_index: 3,
+          search_index: 2,
+          search_index: 3,
           create: 2,
           drop: 1,
           add: 2,
@@ -90,6 +102,8 @@ defmodule EctoTablestore.Migration do
           add_column: 2,
           add_index: 3
         ]
+
+      import ExAliyunOts.Search
 
       def __migration__, do: :ok
     end
@@ -170,6 +184,25 @@ defmodule EctoTablestore.Migration do
   def secondary_index(table_name, index_name, opts \\ [])
       when is_binary(table_name) and is_binary(index_name) and is_list(opts) do
     struct(%SecondaryIndex{table_name: table_name, index_name: index_name}, opts)
+  end
+
+  @doc """
+  Returns a search index struct that can be given to `create/2`.
+
+  For more information see the  [Chinese Docs](https://help.aliyun.com/document_detail/117452.html) | [English Docs](https://www.alibabacloud.com/help/doc-detail/117452.html)
+
+  ## Examples
+
+      create search_index("posts", "posts_owner") do
+        field_schema_keyword("title")
+        field_schema_keyword("content")
+        field_sort("title")
+      end
+
+  """
+  def search_index(table_name, index_name, opts \\ [])
+      when is_binary(table_name) and is_binary(index_name) and is_list(opts) do
+    struct(%SearchIndex{table_name: table_name, index_name: index_name}, opts)
   end
 
   @doc """
@@ -333,19 +366,47 @@ defmodule EctoTablestore.Migration do
 
       [missing] ->
         raise MigrationError,
-              "Missing #{missing} definition when creating : #{inspect(secondary_index)}, please use add_#{
+              "Missing #{missing} definition when creating: #{inspect(secondary_index)}, please use add_#{
                 missing
               }/1 when creating secondary index."
 
       _ ->
         raise MigrationError,
-              "Missing pk & column definition when creating : #{inspect(secondary_index)}, please use add_pk/1 and add_column/1 when creating secondary index."
+              "Missing pk & column definition when creating: #{inspect(secondary_index)}, please use add_pk/1 and add_column/1 when creating secondary index."
     end
 
     %{
       secondary_index: secondary_index,
       primary_keys: g_columns.pk,
       defined_columns: g_columns.column
+    }
+  end
+
+  def __create__(%SearchIndex{} = search_index, columns) do
+    group_key = fn column ->
+      if column.__struct__ in [
+           Search.PrimaryKeySort,
+           Search.FieldSort,
+           Search.GeoDistanceSort,
+           Search.ScoreSort
+         ] do
+        :index_sorts
+      else
+        :field_schemas
+      end
+    end
+
+    g_columns = Enum.group_by(columns, group_key)
+
+    unless Map.get(g_columns, :field_schemas) do
+      raise MigrationError,
+            "Missing field_schemas definition when creating: #{inspect(search_index)}, please use field_schema_* functions when creating search index."
+    end
+
+    %{
+      search_index: search_index,
+      field_schemas: g_columns.field_schemas,
+      index_sorts: g_columns[:index_sorts] || []
     }
   end
 
@@ -426,7 +487,7 @@ defmodule EctoTablestore.Migration do
         primary_keys: primary_keys,
         defined_columns: defined_columns
       }) do
-    {table_name, index_name} = get_secondary_index_name(secondary_index, repo.config())
+    {table_name, index_name} = get_index_name(secondary_index, repo.config())
     table_name_str = IO.ANSI.format([:green, table_name, :reset])
     index_name_str = IO.ANSI.format([:green, index_name, :reset])
     include_base_data = secondary_index.include_base_data
@@ -476,6 +537,56 @@ defmodule EctoTablestore.Migration do
     end
   end
 
+  # create search_index
+  def do_create(repo, %{
+        search_index: search_index,
+        field_schemas: field_schemas,
+        index_sorts: index_sorts
+      }) do
+    {table_name, index_name} = get_index_name(search_index, repo.config())
+    table_name_str = IO.ANSI.format([:green, table_name, :reset])
+    index_name_str = IO.ANSI.format([:green, index_name, :reset])
+    repo_meta = Ecto.Adapter.lookup_meta(repo)
+
+    Logger.info(fn ->
+      ">> creating search index: #{index_name_str} for table: #{table_name_str} by #{
+        inspect(
+          [field_schemas: field_schemas, index_sorts: index_sorts],
+          pretty: true,
+          limit: :infinity
+        )
+      } "
+    end)
+
+    case ExAliyunOts.create_search_index(
+           repo_meta.instance,
+           table_name,
+           index_name,
+           field_schemas: field_schemas,
+           index_sorts: index_sorts
+         ) do
+      {:ok, _} ->
+        result_str = IO.ANSI.format([:green, "ok", :reset])
+
+        Logger.info(fn ->
+          ">>>> create search index: #{index_name_str} for table: #{table_name_str} result: #{
+            result_str
+          }"
+        end)
+
+        :ok
+
+      result ->
+        Logger.error(fn ->
+          ">>>> create search index: #{index_name_str} for table: #{table_name_str} result: #{
+            inspect(result)
+          }"
+        end)
+
+        elem(result, 0)
+    end
+  end
+
   defp create_seq_table_by_type(:none_seq, _table_name, _table_names, _repo, _instance),
     do: :ignore
 
@@ -509,7 +620,7 @@ defmodule EctoTablestore.Migration do
     end
   end
 
-  defp get_secondary_index_name(
+  defp get_index_name(
          %{prefix: prefix, table_name: table_name, index_name: index_name},
          repo_config
        ) do
@@ -766,6 +877,7 @@ defmodule EctoTablestore.Migration do
 
       drop table("posts")
       drop secondary_index("posts", "posts_owner")
+      drop search_index("posts", "posts_index")
 
   """
   def drop(%Table{} = table) do
@@ -804,7 +916,7 @@ defmodule EctoTablestore.Migration do
 
   def drop(%SecondaryIndex{} = secondary_index) do
     Runner.push_command(fn repo ->
-      {table_name, index_name} = get_secondary_index_name(secondary_index, repo.config())
+      {table_name, index_name} = get_index_name(secondary_index, repo.config())
       table_name_str = IO.ANSI.format([:green, table_name, :reset])
       index_name_str = IO.ANSI.format([:green, index_name, :reset])
       repo_meta = Ecto.Adapter.lookup_meta(repo)
@@ -828,6 +940,41 @@ defmodule EctoTablestore.Migration do
         result ->
           Logger.error(fn ->
             ">>>> dropping secondary_index table: #{table_name_str}, index: #{index_name_str} result: #{
+              inspect(result)
+            }"
+          end)
+
+          elem(result, 0)
+      end
+    end)
+  end
+
+  def drop(%SearchIndex{} = search_index) do
+    Runner.push_command(fn repo ->
+      {table_name, index_name} = get_index_name(search_index, repo.config())
+      table_name_str = IO.ANSI.format([:green, table_name, :reset])
+      index_name_str = IO.ANSI.format([:green, index_name, :reset])
+      repo_meta = Ecto.Adapter.lookup_meta(repo)
+
+      Logger.info(fn ->
+        ">> dropping search index table: #{table_name_str}, index: #{index_name_str}"
+      end)
+
+      case ExAliyunOts.delete_search_index(repo_meta.instance, table_name, index_name) do
+        {:ok, _} ->
+          result_str = IO.ANSI.format([:green, "ok", :reset])
+
+          Logger.info(fn ->
+            ">>>> dropping search index table: #{table_name_str}, index: #{index_name_str} result: #{
+              result_str
+            }"
+          end)
+
+          :ok
+
+        result ->
+          Logger.error(fn ->
+            ">>>> dropping search index table: #{table_name_str}, index: #{index_name_str} result: #{
               inspect(result)
             }"
           end)
