@@ -27,7 +27,7 @@ defmodule EctoTablestore.MigrationTest do
     assert_raise MigrationError,
                  ~r/^The maximum number of partition primary keys is 1, now is 2 defined on table:/,
                  fn ->
-                   Migration.__create_table__(table("table_name"), [
+                   Migration.__create__(table("table_name"), [
                      add_pk(:id1, :integer, partition_key: true),
                      add_pk(:id2, :integer, partition_key: true)
                    ])
@@ -39,7 +39,7 @@ defmodule EctoTablestore.MigrationTest do
     assert_raise MigrationError,
                  ~r/^The maximum number of primary keys is 4, now is 5 defined on table:/,
                  fn ->
-                   Migration.__create_table__(table("table_name"), [
+                   Migration.__create__(table("table_name"), [
                      add_pk(:id1, :integer, partition_key: true),
                      add_pk(:id2, :integer),
                      add_pk(:id3, :integer),
@@ -54,7 +54,7 @@ defmodule EctoTablestore.MigrationTest do
     assert_raise MigrationError,
                  "Please define at least one partition primary keys for table: table_name",
                  fn ->
-                   Migration.__create_table__(table("table_name", partition_key: false), [
+                   Migration.__create__(table("table_name", partition_key: false), [
                      add_pk(:id1, :integer),
                      add_pk(:id2, :integer),
                      add_pk(:id3, :integer),
@@ -68,7 +68,7 @@ defmodule EctoTablestore.MigrationTest do
     assert_raise MigrationError,
                  "The maximum number of [auto_increment & hashids] primary keys is 1, but now find 2 primary keys defined on table: table_name",
                  fn ->
-                   Migration.__create_table__(table("table_name"), [
+                   Migration.__create__(table("table_name"), [
                      add_pk(:id1, :integer, partition_key: true),
                      add_pk(:id2, :integer, auto_increment: true),
                      add_pk(:id3, :integer, auto_increment: true)
@@ -78,7 +78,7 @@ defmodule EctoTablestore.MigrationTest do
     assert_raise MigrationError,
                  "The maximum number of [auto_increment & hashids] primary keys is 1, but now find 2 primary keys defined on table: table_name",
                  fn ->
-                   Migration.__create_table__(table("table_name"), [
+                   Migration.__create__(table("table_name"), [
                      add_pk(:id1, :hashids, partition_key: true, auto_increment: true),
                      add_pk(:id2, :integer, auto_increment: true),
                      add_pk(:id3, :integer)
@@ -99,9 +99,9 @@ defmodule EctoTablestore.MigrationTest do
     assert %{
              table: ^table,
              pk_columns: ^columns,
-             attr_columns: [],
+             pre_defined_columns: [],
              seq_type: :self_seq
-           } = Migration.__create_table__(table, [add_pk(:age, :integer)])
+           } = Migration.__create__(table, [add_pk(:age, :integer)])
 
     stop_runner(runner)
   end
@@ -118,9 +118,9 @@ defmodule EctoTablestore.MigrationTest do
     assert %{
              table: ^table,
              pk_columns: ^columns,
-             attr_columns: [],
+             pre_defined_columns: [],
              seq_type: :self_seq
-           } = Migration.__create_table__(table, columns)
+           } = Migration.__create__(table, columns)
 
     stop_runner(runner)
   end
@@ -136,9 +136,9 @@ defmodule EctoTablestore.MigrationTest do
     assert %{
              table: ^table,
              pk_columns: ^columns1,
-             attr_columns: [],
+             pre_defined_columns: [],
              seq_type: :default_seq
-           } = Migration.__create_table__(table, columns1)
+           } = Migration.__create__(table, columns1)
 
     columns2 = [
       add_pk(:id, :hashids, partition_key: true, auto_increment: true),
@@ -148,9 +148,9 @@ defmodule EctoTablestore.MigrationTest do
     assert %{
              table: ^table,
              pk_columns: ^columns2,
-             attr_columns: [],
+             pre_defined_columns: [],
              seq_type: :default_seq
-           } = Migration.__create_table__(table, columns2)
+           } = Migration.__create__(table, columns2)
   end
 
   test "none_seq" do
@@ -166,12 +166,12 @@ defmodule EctoTablestore.MigrationTest do
     assert %{
              table: ^table,
              pk_columns: ^columns,
-             attr_columns: [],
+             pre_defined_columns: [],
              seq_type: :none_seq
-           } = Migration.__create_table__(table, columns)
+           } = Migration.__create__(table, columns)
   end
 
-  test "create table: add attribute columns" do
+  test "create table: add pre-defined columns" do
     table = table("table_name")
 
     pk_columns = [
@@ -181,22 +181,22 @@ defmodule EctoTablestore.MigrationTest do
       add_pk(:other, :binary)
     ]
 
-    attr_columns = [
-      add_attr(:attr1, :integer),
-      add_attr(:attr2, :double),
-      add_attr(:attr3, :boolean),
-      add_attr(:attr4, :string),
-      add_attr(:attr5, :binary)
+    pre_defined_columns = [
+      add_column(:col1, :integer),
+      add_column(:col2, :double),
+      add_column(:col3, :boolean),
+      add_column(:col4, :string),
+      add_column(:col5, :binary)
     ]
 
-    columns = pk_columns ++ attr_columns
+    columns = pk_columns ++ pre_defined_columns
 
     assert %{
              table: ^table,
              pk_columns: ^pk_columns,
-             attr_columns: ^attr_columns,
+             pre_defined_columns: ^pre_defined_columns,
              seq_type: :none_seq
-           } = Migration.__create_table__(table, columns)
+           } = Migration.__create__(table, columns)
   end
 
   test "create table: add secondary index" do
@@ -209,28 +209,28 @@ defmodule EctoTablestore.MigrationTest do
       add_pk(:other, :binary)
     ]
 
-    attr_columns = [
-      add_attr(:attr1, :integer),
-      add_attr(:attr2, :double),
-      add_attr(:attr3, :boolean),
-      add_attr(:attr4, :string),
-      add_attr(:attr5, :binary)
+    pre_defined_columns = [
+      add_column(:col1, :integer),
+      add_column(:col2, :double),
+      add_column(:col3, :boolean),
+      add_column(:col4, :string),
+      add_column(:col5, :binary)
     ]
 
     index_metas = [
-      add_index("table_name_index1", [:attr1, :id], [:attr2]),
-      add_index("table_name_index2", [:attr4, :id], [:attr1, :attr2, :attr3, :attr5])
+      add_index("table_name_index1", [:col1, :id], [:col2]),
+      add_index("table_name_index2", [:col4, :id], [:col1, :col2, :col3, :col5])
     ]
 
-    columns = pk_columns ++ attr_columns ++ index_metas
+    columns = pk_columns ++ pre_defined_columns ++ index_metas
 
     assert %{
              table: ^table,
              pk_columns: ^pk_columns,
-             attr_columns: ^attr_columns,
+             pre_defined_columns: ^pre_defined_columns,
              index_metas: ^index_metas,
              seq_type: :none_seq
-           } = Migration.__create_table__(table, columns)
+           } = Migration.__create__(table, columns)
   end
 
   test "create table" do
