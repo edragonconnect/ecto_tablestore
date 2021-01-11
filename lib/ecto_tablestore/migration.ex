@@ -148,6 +148,22 @@ defmodule EctoTablestore.Migration do
     struct(%Table{name: name}, opts)
   end
 
+  @doc """
+  Returns a secondary index struct that can be given to `create/1`.
+
+  For more information see the  [Chinese Docs](https://help.aliyun.com/document_detail/91947.html) | [English Docs](https://www.alibabacloud.com/help/doc-detail/91947.html)
+
+  ## Examples
+
+      create secondary_index("posts", "posts_owner", [:owner_id, :id], [:title, :content])
+
+  ## Options
+
+    * `:include_base_data`, specifies whether the index table includes the existing data in the base table, if set it to
+    `true` means the index includes the existing data, if set it to `false` means the index excludes the existing data,
+    optional, by default it is `true`.
+
+  """
   def secondary_index(table_name, index_name, primary_keys, defined_columns, opts \\ [])
 
   def secondary_index(table_name, index_name, primary_keys, defined_columns, opts)
@@ -571,7 +587,31 @@ defmodule EctoTablestore.Migration do
 
   """
   defmacro add(column, type, opts \\ []), do: _add_pk(column, type, opts)
+
+  @doc """
+  Adds a primary key when creating a table.
+
+  Same as `add/2`, see `add/2` for more information.
+  """
   defmacro add_pk(column, type, opts \\ []), do: _add_pk(column, type, opts)
+
+  @doc """
+  Adds a pre-defined column when creating a table.
+
+  This function only accepts types as `:integer` | `:double` | `:boolean` | `:string` | `:binary`.
+
+  For more information see the  [Chinese Docs](https://help.aliyun.com/document_detail/91947.html) | [English Docs](https://www.alibabacloud.com/help/doc-detail/91947.html)
+
+  ## Examples
+
+      create table("posts") do
+        add_pk(:id, :integer, partition_key: true)
+        add_pk(:owner_id, :string)
+        add_attr(:title, :string)
+        add_attr(:content, :string)
+      end
+
+  """
   defmacro add_attr(column, type), do: _add_attr(column, type)
 
   defp _add_pk(column, type, opts)
@@ -590,7 +630,7 @@ defmodule EctoTablestore.Migration do
   end
 
   defp validate_pk_type!(column, type) do
-    # more about can see here: https://help.aliyun.com/document_detail/106536.html
+    # more information can be found in the [documentation](https://help.aliyun.com/document_detail/106536.html)
     if type in [:integer, :string, :binary, :hashids] do
       :ok
     else
@@ -613,7 +653,7 @@ defmodule EctoTablestore.Migration do
   end
 
   defp validate_attr_type!(column, type) do
-    # more about can see here: https://help.aliyun.com/document_detail/106536.html
+    # more information can be found in the [documentation](https://help.aliyun.com/document_detail/106536.html)
     if type in [:integer, :double, :boolean, :string, :binary] do
       :ok
     else
@@ -623,6 +663,23 @@ defmodule EctoTablestore.Migration do
     end
   end
 
+  @doc """
+  Adds a secondary index when creating a table.
+
+  For more information see the [Chinese Docs](https://help.aliyun.com/document_detail/91947.html) | [English Docs](https://www.alibabacloud.com/help/doc-detail/91947.html)
+
+  ## Examples
+
+      create table("posts") do
+        add_pk(:id, :integer, partition_key: true)
+        add_pk(:owner_id, :string)
+        add_attr(:title, :string)
+        add_attr(:content, :string)
+        add_index("posts_owner", [:owner_id, :id], [:title, :content])
+        add_index("posts_title", [:title, :id], [:content])
+      end
+
+  """
   defmacro add_index(index_name, primary_keys, defined_columns)
            when is_binary(index_name) and is_list(primary_keys) and is_list(defined_columns) do
     check_and_transform_columns = fn columns ->
