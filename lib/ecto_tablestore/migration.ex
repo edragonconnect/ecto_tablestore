@@ -860,6 +860,7 @@ defmodule EctoTablestore.Migration do
 
     * a table
     * a secondary index
+    * a search index
 
   ## Examples
 

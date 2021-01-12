@@ -53,7 +53,8 @@ Implement Tablestore row related functions in `EctoTablestore.Repo` module, plea
 
 ## Migration
 
-Provide a simple migration to create table, please see `EctoTablestore.Migration` for details.
+Provide a simple migration to create or drop the table, the secondary index and the search index, please see
+`EctoTablestore.Migration` for details.
 
 ## Usage
 
