@@ -4,11 +4,7 @@ defmodule EctoTablestore.Migrator do
   alias EctoTablestore.Migration.{Runner, SchemaMigration}
 
   def run(repo, migration_source, opts) do
-    repo_meta = Ecto.Adapter.lookup_meta(repo.get_dynamic_repo())
-    instance = repo_meta.instance
-    table_names = initialize_table_names(instance)
-
-    SchemaMigration.ensure_schema_migrations_table!(repo, table_names)
+    SchemaMigration.ensure_schema_migrations_table!(repo)
     versions = SchemaMigration.versions(repo)
 
     pending =
@@ -37,12 +33,10 @@ defmodule EctoTablestore.Migrator do
       Logger.info("Already done")
     end
 
-    destroy_table_names(instance)
     versions
   end
 
   def with_repo(repo, fun, opts \\ []) do
-    ensure_table_names_ets()
     config = repo.config()
 
     mode = Keyword.get(opts, :mode, :permanent)
@@ -79,37 +73,6 @@ defmodule EctoTablestore.Migrator do
       {:error, _} = error ->
         error
     end
-  end
-
-  @table_names_ets :ecto_tablestore_table_names
-
-  def ensure_table_names_ets() do
-    if :ets.info(@table_names_ets, :size) == :undefined do
-      :ets.new(@table_names_ets, [:bag, :named_table, :public, read_concurrency: true])
-    end
-  end
-
-  def initialize_table_names(instance) do
-    {:ok, %{table_names: table_names}} = ExAliyunOts.list_table(instance)
-    objects = Enum.map(table_names, &{instance, &1})
-    :ets.insert(@table_names_ets, objects)
-    table_names
-  end
-
-  def destroy_table_names(instance) do
-    :ets.delete(@table_names_ets, instance)
-  end
-
-  def list_table_names(instance) do
-    Enum.map(:ets.lookup(@table_names_ets, instance), &elem(&1, 1))
-  end
-
-  def add_table(instance, table_name) do
-    :ets.insert(@table_names_ets, {instance, table_name})
-  end
-
-  def delete_table(instance, table_name) do
-    :ets.delete_object(@table_names_ets, {instance, table_name})
   end
 
   # This function will match directories passed into `Migrator.run`.

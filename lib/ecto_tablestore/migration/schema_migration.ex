@@ -12,7 +12,7 @@ defmodule EctoTablestore.Migration.SchemaMigration do
     timestamps(updated_at: false)
   end
 
-  def ensure_schema_migrations_table!(repo, table_names) do
+  def ensure_schema_migrations_table!(repo) do
     table_name =
       if prefix = Keyword.get(repo.config(), :migration_default_prefix) do
         prefix <> "schema_migrations"
@@ -20,26 +20,27 @@ defmodule EctoTablestore.Migration.SchemaMigration do
         "schema_migrations"
       end
 
-    if table_name not in table_names do
-      repo_meta = Ecto.Adapter.lookup_meta(repo)
-      instance = repo_meta.instance
-      primary_keys = [{"version", :integer}]
-      table_name_str = IO.ANSI.format([:green, table_name, :reset])
+    repo_meta = Ecto.Adapter.lookup_meta(repo)
+    instance = repo_meta.instance
+    primary_keys = [{"version", :integer}]
 
-      Logger.info(fn ->
-        ">> creating table: #{table_name_str} by [primary_keys: #{inspect(primary_keys)}]"
-      end)
+    case ExAliyunOts.create_table(instance, table_name, primary_keys) do
+      :ok ->
+        result_str = IO.ANSI.format([:green, "ok", :reset])
+        table_name_str = IO.ANSI.format([:green, table_name, :reset])
 
-      case ExAliyunOts.create_table(instance, table_name, primary_keys) do
-        :ok ->
-          result_str = IO.ANSI.format([:green, "ok", :reset])
-          Logger.info(fn -> ">>>> create migrations table: #{table_name_str} result: #{result_str}" end)
-          :ok
+        Logger.info(fn ->
+          ">>>> create migrations table: #{table_name_str} result: #{result_str}"
+        end)
 
-        result ->
-          raise MigrationError,
-                "create migrations table: #{table_name_str} result: #{inspect(result)}"
-      end
+        :ok
+
+      {:error, %{code: "OTSObjectAlreadyExist"}} ->
+        :ok
+
+      result ->
+        raise MigrationError,
+              "create migrations table: #{table_name} result: #{inspect(result)}"
     end
   end
 

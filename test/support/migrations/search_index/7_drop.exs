@@ -1,4 +1,4 @@
-defmodule EctoTablestore.Repo.Migrations.Drop do
+defmodule EctoTablestore.Repo.Migrations.DropSearchIndex do
   @moduledoc false
   use EctoTablestore.Migration
 

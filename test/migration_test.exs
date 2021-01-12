@@ -10,16 +10,8 @@ defmodule EctoTablestore.MigrationTest do
 
   setup_all do
     TestHelper.setup_all()
-    Migrator.ensure_table_names_ets()
-
-    @instance
-    |> Migrator.initialize_table_names()
-    |> cleanup_tables()
-
-    on_exit(fn ->
-      {:ok, %{table_names: table_names}} = ExAliyunOts.list_table(@instance)
-      cleanup_tables(table_names)
-    end)
+    cleanup_tables()
+    on_exit(&cleanup_tables/0)
   end
 
   # The partition key only can define one
@@ -265,7 +257,7 @@ defmodule EctoTablestore.MigrationTest do
     %{commands: commands, repo: repo} = Agent.get(runner, & &1)
     fun = fn -> commands |> Enum.reverse() |> Enum.map(& &1.(repo)) end
 
-    assert fun.() == [{table_name, :ok}]
+    assert fun.() == [:ok]
 
     stop_runner(runner)
   end
@@ -283,15 +275,16 @@ defmodule EctoTablestore.MigrationTest do
     end
 
     %{commands: commands, repo: repo} = Agent.get(runner, & &1)
-    fun = fn -> commands |> Enum.reverse() |> Enum.map(& &1.(repo)) end
-    assert fun.() == [{table_name, :already_exists}]
+
+    assert_raise MigrationError,
+                 "create table: migration_test error: Requested table already exists.",
+                 fn -> commands |> Enum.reverse() |> Enum.map(& &1.(repo)) end
 
     stop_runner(runner)
   end
 
   test "schema_migration: ensure_table" do
-    table_names = Migrator.list_table_names(@instance)
-    assert :ok = SchemaMigration.ensure_schema_migrations_table!(@repo, table_names)
+    assert :ok = SchemaMigration.ensure_schema_migrations_table!(@repo)
   end
 
   test "schema_migration: versions" do
@@ -414,7 +407,9 @@ defmodule EctoTablestore.MigrationTest do
     Agent.stop(runner)
   end
 
-  defp cleanup_tables(table_names) do
+  defp cleanup_tables do
+    {:ok, %{table_names: table_names}} = ExAliyunOts.list_table(@instance)
+
     Enum.each(@used_tables, fn table_name ->
       if table_name in table_names do
         ExAliyunOts.delete_table(@instance, table_name)
