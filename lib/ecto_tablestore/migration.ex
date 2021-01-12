@@ -199,6 +199,8 @@ defmodule EctoTablestore.Migration do
         field_sort("title")
       end
 
+  Please see the [field schema defination](https://hexdocs.pm/ex_aliyun_ots/ExAliyunOts.Search.html#define-field-schema) of
+  `ExAliyunOts.Search` for more details.
   """
   def search_index(table_name, index_name, opts \\ [])
       when is_binary(table_name) and is_binary(index_name) and is_list(opts) do
