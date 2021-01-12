@@ -38,9 +38,9 @@ defmodule EctoTablestore.Migration do
   """
   require ExAliyunOts.Const.PKType, as: PKType
   require Logger
-  alias EctoTablestore.Migration.Runner
-  alias EctoTablestore.Sequence
+  alias EctoTablestore.{Sequence, Migration.Runner}
   alias Ecto.MigrationError
+  alias ExAliyunOts.Var.Search
 
   defmodule Table do
     @moduledoc false
@@ -49,9 +49,34 @@ defmodule EctoTablestore.Migration do
 
     @type t :: %__MODULE__{
             name: String.t(),
-            prefix: atom | nil,
+            prefix: String.t() | nil,
             partition_key: boolean(),
             meta: Keyword.t()
+          }
+  end
+
+  defmodule SecondaryIndex do
+    @moduledoc false
+
+    defstruct table_name: nil, index_name: nil, prefix: nil, include_base_data: true
+
+    @type t :: %__MODULE__{
+            table_name: String.t(),
+            index_name: String.t(),
+            prefix: String.t() | nil,
+            include_base_data: boolean()
+          }
+  end
+
+  defmodule SearchIndex do
+    @moduledoc false
+
+    defstruct table_name: nil, index_name: nil, prefix: nil
+
+    @type t :: %__MODULE__{
+            table_name: String.t(),
+            index_name: String.t(),
+            prefix: String.t() | nil
           }
   end
 
@@ -62,12 +87,23 @@ defmodule EctoTablestore.Migration do
         only: [
           table: 1,
           table: 2,
+          secondary_index: 2,
+          secondary_index: 3,
+          search_index: 2,
+          search_index: 3,
           create: 2,
+          drop: 1,
           add: 2,
           add: 3,
+          add_pk: 1,
           add_pk: 2,
-          add_pk: 3
+          add_pk: 3,
+          add_column: 1,
+          add_column: 2,
+          add_index: 3
         ]
+
+      import ExAliyunOts.Search
 
       def __migration__, do: :ok
     end
@@ -125,6 +161,77 @@ defmodule EctoTablestore.Migration do
   end
 
   @doc """
+  Returns a secondary index struct that can be given to `create/2`.
+
+  For more information see the  [Chinese Docs](https://help.aliyun.com/document_detail/91947.html) | [English Docs](https://www.alibabacloud.com/help/doc-detail/91947.html)
+
+  ## Examples
+
+      create secondary_index("posts", "posts_owner") do
+        add_pk(:owner_id)
+        add_pk(:id)
+        add_column(:title)
+        add_column(:content)
+      end
+
+  ## Options
+
+    * `:include_base_data`, specifies whether the index table includes the existing data in the base table, if set it to
+    `true` means the index includes the existing data, if set it to `false` means the index excludes the existing data,
+    optional, by default it is `true`.
+
+  """
+  def secondary_index(table_name, index_name, opts \\ [])
+      when is_binary(table_name) and is_binary(index_name) and is_list(opts) do
+    struct(%SecondaryIndex{table_name: table_name, index_name: index_name}, opts)
+  end
+
+  @doc """
+  Returns a search index struct that can be given to `create/2`.
+
+  For more information see the  [Chinese Docs](https://help.aliyun.com/document_detail/117452.html) | [English Docs](https://www.alibabacloud.com/help/doc-detail/117452.html)
+
+  ## Examples
+
+      create search_index("posts", "posts_owner") do
+        field_schema_keyword("title")
+        field_schema_keyword("content")
+        field_sort("title")
+      end
+
+  """
+  def search_index(table_name, index_name, opts \\ [])
+      when is_binary(table_name) and is_binary(index_name) and is_list(opts) do
+    struct(%SearchIndex{table_name: table_name, index_name: index_name}, opts)
+  end
+
+  @doc """
+  Adds a primary key when creating a secondary index.
+  """
+  defmacro add_pk(column) when is_binary(column), do: quote(do: {:pk, column})
+
+  defmacro add_pk(column) when is_atom(column),
+    do: quote(do: {:pk, unquote(Atom.to_string(column))})
+
+  defmacro add_pk(column) do
+    raise ArgumentError,
+          "error type when defining pk column: #{inspect(column)} for secondary_index, only supported one of type: [:binary, :atom]"
+  end
+
+  @doc """
+  Adds a pre-defined column when creating a secondary index.
+  """
+  defmacro add_column(column) when is_binary(column), do: quote(do: {:column, column})
+
+  defmacro add_column(column) when is_atom(column),
+    do: quote(do: {:column, unquote(Atom.to_string(column))})
+
+  defmacro add_column(column) do
+    raise ArgumentError,
+          "error type when defining pre-defined column: #{inspect(column)} for secondary_index, only supported one of type: [:binary, :atom]"
+  end
+
+  @doc """
   Define the primary key(s) of the table to create.
 
   By default, the table will also include an `:id` primary key field (it is also partition key)
@@ -147,9 +254,9 @@ defmodule EctoTablestore.Migration do
       end
 
   """
-  defmacro create(table, do: block), do: _create_table(table, block)
+  defmacro create(object, do: block), do: expand_create(object, block)
 
-  defp _create_table(table, block) do
+  defp expand_create(object, block) do
     columns =
       case block do
         {:__block__, _, columns} -> columns
@@ -157,25 +264,43 @@ defmodule EctoTablestore.Migration do
       end
 
     quote do
-      map = unquote(__MODULE__).__create_table__(unquote(table), unquote(columns))
-      Runner.push_command(&unquote(__MODULE__).do_create_table(&1, map))
+      map = unquote(__MODULE__).__create__(unquote(object), unquote(columns))
+      Runner.push_command(&unquote(__MODULE__).do_create(&1, map))
     end
   end
 
-  def __create_table__(%Table{} = table, columns) do
-    partition_key_count = Enum.count(columns, & &1.partition_key)
+  def __create__(%Table{} = table, columns) do
+    {index_metas, columns} = Enum.split_with(columns, &is_tuple(&1))
 
-    columns =
+    %{primary_key: pk_columns, pre_defined_column: pre_defined_columns} =
+      Map.merge(
+        %{primary_key: [], pre_defined_column: []},
+        Enum.group_by(columns, & &1.column_type)
+      )
+
+    partition_key_count = Enum.count(pk_columns, & &1.partition_key)
+
+    pk_columns =
       cond do
         partition_key_count == 1 ->
-          columns
+          pk_columns
 
         # Make the partition key as `:id` and in an increment integer sequence
         partition_key_count == 0 and table.partition_key ->
           opts = Runner.repo_config(:migration_primary_key, [])
-          {name, opts} = Keyword.pop(opts, :name, :id)
+          {name, opts} = Keyword.pop(opts, :name, "id")
           {type, _opts} = Keyword.pop(opts, :type, :integer)
-          [%{pk_name: name, type: type, partition_key: true, auto_increment: true} | columns]
+
+          [
+            %{
+              name: name,
+              type: type,
+              column_type: :primary_key,
+              partition_key: true,
+              auto_increment: true
+            }
+            | pk_columns
+          ]
 
         # No partition key defined
         partition_key_count == 0 ->
@@ -187,21 +312,21 @@ defmodule EctoTablestore.Migration do
           raise MigrationError,
             message:
               "The maximum number of partition primary keys is 1, now is #{partition_key_count} defined on table: " <>
-                table.name <> " columns:\n" <> inspect(columns)
+                table.name <> " columns:\n" <> inspect(pk_columns)
       end
 
-    case Enum.count(columns) do
+    case Enum.count(pk_columns) do
       # The number of primary keys can not be more than 4
       pk_count when pk_count > 4 ->
         raise MigrationError,
           message:
             "The maximum number of primary keys is 4, now is #{pk_count} defined on table: " <>
-              table.name <> " columns:\n" <> inspect(columns)
+              table.name <> " columns:\n" <> inspect(pk_columns)
 
       # Only support to define one primary key as auto_increment integer
       _pk_count ->
         %{hashids: hashids_count, auto_increment: auto_increment_count} =
-          Enum.reduce(columns, %{hashids: 0, auto_increment: 0, none: 0}, fn
+          Enum.reduce(pk_columns, %{hashids: 0, auto_increment: 0, none: 0}, fn
             %{type: :hashids}, acc -> Map.update!(acc, :hashids, &(&1 + 1))
             %{auto_increment: true}, acc -> Map.update!(acc, :auto_increment, &(&1 + 1))
             _, acc -> Map.update!(acc, :none, &(&1 + 1))
@@ -210,9 +335,9 @@ defmodule EctoTablestore.Migration do
         if (total_increment_count = auto_increment_count + hashids_count) > 1 do
           raise MigrationError,
             message:
-              "The maximum number of [auto_increment & hashids] pk is 1, but now find #{
+              "The maximum number of [auto_increment & hashids] primary keys is 1, but now find #{
                 total_increment_count
-              } pks defined on table: " <> table.name
+              } primary keys defined on table: " <> table.name
         else
           seq_type =
             cond do
@@ -221,56 +346,224 @@ defmodule EctoTablestore.Migration do
               true -> :none_seq
             end
 
-          %{table: table, columns: columns, seq_type: seq_type}
+          %{
+            table: table,
+            pk_columns: pk_columns,
+            pre_defined_columns: pre_defined_columns,
+            index_metas: index_metas,
+            seq_type: seq_type
+          }
         end
     end
   end
 
+  def __create__(%SecondaryIndex{} = secondary_index, columns) do
+    g_columns = Enum.group_by(columns, &elem(&1, 0), &elem(&1, 1))
+
+    case Map.keys(g_columns) -- [:pk, :column] do
+      [] ->
+        :ok
+
+      [missing] ->
+        raise MigrationError,
+              "Missing #{missing} definition when creating: #{inspect(secondary_index)}, please use add_#{
+                missing
+              }/1 when creating secondary index."
+
+      _ ->
+        raise MigrationError,
+              "Missing pk & column definition when creating: #{inspect(secondary_index)}, please use add_pk/1 and add_column/1 when creating secondary index."
+    end
+
+    %{
+      secondary_index: secondary_index,
+      primary_keys: g_columns.pk,
+      defined_columns: g_columns.column
+    }
+  end
+
+  def __create__(%SearchIndex{} = search_index, columns) do
+    group_key = fn column ->
+      if column.__struct__ in [
+           Search.PrimaryKeySort,
+           Search.FieldSort,
+           Search.GeoDistanceSort,
+           Search.ScoreSort
+         ] do
+        :index_sorts
+      else
+        :field_schemas
+      end
+    end
+
+    g_columns = Enum.group_by(columns, group_key)
+
+    unless Map.get(g_columns, :field_schemas) do
+      raise MigrationError,
+            "Missing field_schemas definition when creating: #{inspect(search_index)}, please use field_schema_* functions when creating search index."
+    end
+
+    %{
+      search_index: search_index,
+      field_schemas: g_columns.field_schemas,
+      index_sorts: g_columns[:index_sorts] || []
+    }
+  end
+
   @doc false
-  def do_create_table(repo, %{table: table, columns: columns, seq_type: seq_type}) do
+  # create table
+  def do_create(repo, %{
+        table: table,
+        pk_columns: pk_columns,
+        pre_defined_columns: pre_defined_columns,
+        index_metas: index_metas,
+        seq_type: seq_type
+      }) do
     table_name = get_table_name(table, repo.config())
+    table_name_str = IO.ANSI.format([:green, table_name, :reset])
     repo_meta = Ecto.Adapter.lookup_meta(repo)
     instance = repo_meta.instance
-    table_names = Runner.list_table_names(instance)
+    primary_keys = Enum.map(pk_columns, &transform_table_column/1)
+    defined_columns = Enum.map(pre_defined_columns, &transform_table_column/1)
 
-    # check if not exists
-    if table_name not in table_names do
-      primary_keys = Enum.map(columns, &transform_table_column/1)
+    print_list =
+      Enum.reject(
+        [
+          primary_keys: primary_keys,
+          defined_columns: defined_columns,
+          index_metas: index_metas
+        ],
+        &match?({_, []}, &1)
+      )
 
-      Logger.info(fn -> ">> table: #{table_name}, primary_keys: #{inspect(primary_keys)}" end)
+    Logger.info(fn ->
+      ">> creating table: #{table_name_str} by #{
+        inspect(print_list, pretty: true, limit: :infinity)
+      } "
+    end)
 
-      options = Keyword.put(table.meta, :max_versions, 1)
+    options =
+      Keyword.merge(table.meta,
+        max_versions: 1,
+        defined_columns: defined_columns,
+        index_metas: index_metas
+      )
 
-      case ExAliyunOts.create_table(instance, table_name, primary_keys, options) do
-        :ok ->
-          result_str = IO.ANSI.format([:green, "ok", :reset])
-          Logger.info(fn -> "create table: #{table_name} result: #{result_str}" end)
-          :ok
-
-        result ->
-          Logger.error(fn -> "create table: #{table_name} result: #{inspect(result)}" end)
-          elem(result, 0)
-      end
-    else
-      result_str = IO.ANSI.format([:yellow, "exists", :reset])
-      Logger.info(fn -> ">> table: #{table_name} already #{result_str}" end)
-      :already_exists
-    end
-    |> case do
+    case ExAliyunOts.create_table(instance, table_name, primary_keys, options) do
       :ok ->
-        create_seq_table_by_type(seq_type, table_name, table_names, repo, instance)
+        result_str = IO.ANSI.format([:green, "ok", :reset])
+        Logger.info(fn -> ">>>> create table: #{table_name_str} result: #{result_str}" end)
 
-        {table_name, :ok}
+        create_seq_table_by_type!(seq_type, table_name, repo, instance)
+        :ok
 
-      result ->
-        {table_name, result}
+      {:error, error} ->
+        raise MigrationError, "create table: #{table_name} error: " <> error.message
     end
   end
 
-  def create_seq_table_by_type(:none_seq, _table_name, _table_names, _repo, _instance),
+  # create secondary_index
+  def do_create(repo, %{
+        secondary_index: secondary_index,
+        primary_keys: primary_keys,
+        defined_columns: defined_columns
+      }) do
+    {table_name, index_name} = get_index_name(secondary_index, repo.config())
+    table_name_str = IO.ANSI.format([:green, table_name, :reset])
+    index_name_str = IO.ANSI.format([:green, index_name, :reset])
+    include_base_data = secondary_index.include_base_data
+    repo_meta = Ecto.Adapter.lookup_meta(repo)
+
+    Logger.info(fn ->
+      ">> creating secondary_index: #{index_name_str} for table: #{table_name_str} by #{
+        inspect(
+          [
+            primary_keys: primary_keys,
+            defined_columns: defined_columns,
+            include_base_data: include_base_data
+          ],
+          pretty: true,
+          limit: :infinity
+        )
+      } "
+    end)
+
+    case ExAliyunOts.create_index(
+           repo_meta.instance,
+           table_name,
+           index_name,
+           primary_keys,
+           defined_columns,
+           include_base_data: include_base_data
+         ) do
+      :ok ->
+        result_str = IO.ANSI.format([:green, "ok", :reset])
+
+        Logger.info(fn ->
+          ">>>> create secondary_index: #{index_name_str} for table: #{table_name_str} result: #{
+            result_str
+          }"
+        end)
+
+        :ok
+
+      {:error, error} ->
+        raise MigrationError,
+              "create secondary index: #{index_name} for table: #{table_name} error: " <>
+                error.message
+    end
+  end
+
+  # create search_index
+  def do_create(repo, %{
+        search_index: search_index,
+        field_schemas: field_schemas,
+        index_sorts: index_sorts
+      }) do
+    {table_name, index_name} = get_index_name(search_index, repo.config())
+    table_name_str = IO.ANSI.format([:green, table_name, :reset])
+    index_name_str = IO.ANSI.format([:green, index_name, :reset])
+    repo_meta = Ecto.Adapter.lookup_meta(repo)
+
+    Logger.info(fn ->
+      ">> creating search index: #{index_name_str} for table: #{table_name_str} by #{
+        inspect(
+          [field_schemas: field_schemas, index_sorts: index_sorts],
+          pretty: true,
+          limit: :infinity
+        )
+      } "
+    end)
+
+    case ExAliyunOts.create_search_index(
+           repo_meta.instance,
+           table_name,
+           index_name,
+           field_schemas: field_schemas,
+           index_sorts: index_sorts
+         ) do
+      {:ok, _} ->
+        result_str = IO.ANSI.format([:green, "ok", :reset])
+
+        Logger.info(fn ->
+          ">>>> create search index: #{index_name_str} for table: #{table_name_str} result: #{
+            result_str
+          }"
+        end)
+
+        :ok
+
+      {:error, error} ->
+        raise MigrationError,
+              "create search index: #{index_name} for table: #{table_name} error: " <>
+                error.message
+    end
+  end
+
+  defp create_seq_table_by_type!(:none_seq, _table_name, _repo, _instance),
     do: :ignore
 
-  def create_seq_table_by_type(seq_type, table_name, table_names, repo, instance) do
+  defp create_seq_table_by_type!(seq_type, table_name, repo, instance) do
     seq_table_name =
       case seq_type do
         :self_seq -> repo.__adapter__.bound_sequence_table_name(table_name)
@@ -278,41 +571,65 @@ defmodule EctoTablestore.Migration do
       end
 
     # check if not exists
-    if seq_table_name not in table_names do
+    with {:list_table, {:ok, %{table_names: table_names}}} <-
+           {:list_table, ExAliyunOts.list_table(instance)},
+         true <- seq_table_name not in table_names,
+         :ok <-
+           ExAliyunOts.Sequence.create(instance, %ExAliyunOts.Var.NewSequence{
+             name: seq_table_name
+           }) do
       Logger.info(fn ->
         ">> auto create table: #{seq_table_name} for table: " <> table_name
       end)
 
-      Sequence.create(instance, seq_table_name)
+      :ok
     else
-      :already_exists
+      {:list_table, {:error, error}} ->
+        raise MigrationError, "list_table error: " <> error.message
+
+      {:error, error} ->
+        raise MigrationError, "create table: #{seq_table_name} error: " <> error.message
+
+      false ->
+        :already_exists
     end
   end
 
   @doc false
-  defp get_table_name(table, repo_config) do
-    prefix = table.prefix || Keyword.get(repo_config, :migration_default_prefix)
+  defp get_table_name(%{prefix: prefix, name: name}, repo_config) do
+    prefix = prefix || Keyword.get(repo_config, :migration_default_prefix)
 
     if prefix do
-      prefix <> table.name
+      prefix <> name
     else
-      table.name
+      name
     end
   end
 
+  defp get_index_name(
+         %{prefix: prefix, table_name: table_name, index_name: index_name},
+         repo_config
+       ) do
+    prefix = prefix || Keyword.get(repo_config, :migration_default_prefix)
+
+    if prefix do
+      {prefix <> table_name, prefix <> index_name}
+    else
+      {table_name, index_name}
+    end
+  end
+
+  defp transform_table_column(%{column_type: :pre_defined_column, name: field_name, type: type}) do
+    {field_name, type}
+  end
+
   defp transform_table_column(%{
+         column_type: :primary_key,
+         name: field_name,
          type: type,
-         pk_name: field_name,
          partition_key: partition_key?,
          auto_increment: auto_increment?
        }) do
-    field_name =
-      if is_binary(field_name) do
-        field_name
-      else
-        Atom.to_string(field_name)
-      end
-
     case type do
       :integer when auto_increment? and not partition_key? ->
         {field_name, PKType.integer(), PKType.auto_increment()}
@@ -413,6 +730,12 @@ defmodule EctoTablestore.Migration do
 
   """
   defmacro add(column, type, opts \\ []), do: _add_pk(column, type, opts)
+
+  @doc """
+  Adds a primary key when creating a table.
+
+  Same as `add/2`, see `add/2` for more information.
+  """
   defmacro add_pk(column, type, opts \\ []), do: _add_pk(column, type, opts)
 
   defp _add_pk(column, type, opts)
@@ -421,8 +744,9 @@ defmodule EctoTablestore.Migration do
 
     quote location: :keep do
       %{
-        pk_name: unquote(column),
+        name: unquote(to_string(column)),
         type: unquote(type),
+        column_type: :primary_key,
         partition_key: Keyword.get(unquote(opts), :partition_key, false),
         auto_increment: Keyword.get(unquote(opts), :auto_increment, false)
       }
@@ -430,6 +754,7 @@ defmodule EctoTablestore.Migration do
   end
 
   defp validate_pk_type!(column, type) do
+    # more information can be found in the [documentation](https://help.aliyun.com/document_detail/106536.html)
     if type in [:integer, :string, :binary, :hashids] do
       :ok
     else
@@ -437,5 +762,190 @@ defmodule EctoTablestore.Migration do
             "#{inspect(type)} is not a valid primary key type for column: `#{inspect(column)}`, " <>
               "please use an atom as :integer | :string | :binary | :hashids ."
     end
+  end
+
+  @doc """
+  Adds a pre-defined column when creating a table.
+
+  This function only accepts types as `:integer` | `:double` | `:boolean` | `:string` | `:binary`.
+
+  For more information see the  [Chinese Docs](https://help.aliyun.com/document_detail/91947.html) | [English Docs](https://www.alibabacloud.com/help/doc-detail/91947.html)
+
+  ## Examples
+
+      create table("posts") do
+        add_pk(:id, :integer, partition_key: true)
+        add_pk(:owner_id, :string)
+        add_column(:title, :string)
+        add_column(:content, :string)
+      end
+
+  """
+  defmacro add_column(column, type), do: _add_column(column, type)
+
+  defp _add_column(column, type) when is_atom(column) or is_binary(column) do
+    validate_pre_defined_col_type!(column, type)
+
+    quote location: :keep do
+      %{
+        name: unquote(to_string(column)),
+        type: unquote(type),
+        column_type: :pre_defined_column
+      }
+    end
+  end
+
+  defp validate_pre_defined_col_type!(column, type) do
+    # more information can be found in the [documentation](https://help.aliyun.com/document_detail/106536.html)
+    if type in [:integer, :double, :boolean, :string, :binary] do
+      :ok
+    else
+      raise ArgumentError,
+            "#{inspect(type)} is not a valid pre-defined column type for column: `#{
+              inspect(column)
+            }`, " <>
+              "please use an atom as :integer | :double | :boolean | :string | :binary ."
+    end
+  end
+
+  @doc """
+  Adds a secondary index when creating a table.
+
+  For more information see the [Chinese Docs](https://help.aliyun.com/document_detail/91947.html) | [English Docs](https://www.alibabacloud.com/help/doc-detail/91947.html)
+
+  ## Examples
+
+      create table("posts") do
+        add_pk(:id, :integer, partition_key: true)
+        add_pk(:owner_id, :string)
+        add_column(:title, :string)
+        add_column(:content, :string)
+        add_index("posts_owner", [:owner_id, :id], [:title, :content])
+        add_index("posts_title", [:title, :id], [:content])
+      end
+
+  """
+  defmacro add_index(index_name, primary_keys, defined_columns)
+           when is_binary(index_name) and is_list(primary_keys) and is_list(defined_columns) do
+    check_and_transform_columns = fn columns ->
+      columns
+      |> Macro.prewalk(&Macro.expand(&1, __CALLER__))
+      |> Enum.map(fn
+        column when is_binary(column) ->
+          column
+
+        column when is_atom(column) ->
+          Atom.to_string(column)
+
+        column ->
+          raise ArgumentError,
+                "error type when defining column: #{inspect(column)} for add_index: #{index_name}, " <>
+                  "only supported one of type: [:binary, :atom]"
+      end)
+    end
+
+    quote location: :keep do
+      {
+        unquote(index_name),
+        unquote(check_and_transform_columns.(primary_keys)),
+        unquote(check_and_transform_columns.(defined_columns))
+      }
+    end
+  end
+
+  @doc """
+  Drops one of the following:
+
+    * a table
+    * a secondary index
+
+  ## Examples
+
+      drop table("posts")
+      drop secondary_index("posts", "posts_owner")
+      drop search_index("posts", "posts_index")
+
+  """
+  def drop(%Table{} = table) do
+    Runner.push_command(fn repo ->
+      table_name = get_table_name(table, repo.config())
+      table_name_str = IO.ANSI.format([:green, table_name, :reset])
+      repo_meta = Ecto.Adapter.lookup_meta(repo)
+      instance = repo_meta.instance
+
+      Logger.info(fn -> ">> dropping table: #{table_name_str}" end)
+
+      case ExAliyunOts.delete_table(instance, table_name) do
+        :ok ->
+          result_str = IO.ANSI.format([:green, "ok", :reset])
+          Logger.info(fn -> ">>>> dropping table: #{table_name_str} result: #{result_str}" end)
+          :ok
+
+        {:error, error} ->
+          raise MigrationError, "dropping table: #{table_name} error: " <> error.message
+      end
+    end)
+  end
+
+  def drop(%SecondaryIndex{} = secondary_index) do
+    Runner.push_command(fn repo ->
+      {table_name, index_name} = get_index_name(secondary_index, repo.config())
+      table_name_str = IO.ANSI.format([:green, table_name, :reset])
+      index_name_str = IO.ANSI.format([:green, index_name, :reset])
+      repo_meta = Ecto.Adapter.lookup_meta(repo)
+
+      Logger.info(fn ->
+        ">> dropping secondary_index table: #{table_name_str}, index: #{index_name_str}"
+      end)
+
+      case ExAliyunOts.delete_index(repo_meta.instance, table_name, index_name) do
+        :ok ->
+          result_str = IO.ANSI.format([:green, "ok", :reset])
+
+          Logger.info(fn ->
+            ">>>> dropping secondary_index table: #{table_name_str}, index: #{index_name_str} result: #{
+              result_str
+            }"
+          end)
+
+          :ok
+
+        {:error, error} ->
+          raise MigrationError,
+                "dropping secondary_index index: #{index_name} for table: #{table_name} error: " <>
+                  error.message
+      end
+    end)
+  end
+
+  def drop(%SearchIndex{} = search_index) do
+    Runner.push_command(fn repo ->
+      {table_name, index_name} = get_index_name(search_index, repo.config())
+      table_name_str = IO.ANSI.format([:green, table_name, :reset])
+      index_name_str = IO.ANSI.format([:green, index_name, :reset])
+      repo_meta = Ecto.Adapter.lookup_meta(repo)
+
+      Logger.info(fn ->
+        ">> dropping search index table: #{table_name_str}, index: #{index_name_str}"
+      end)
+
+      case ExAliyunOts.delete_search_index(repo_meta.instance, table_name, index_name) do
+        {:ok, _} ->
+          result_str = IO.ANSI.format([:green, "ok", :reset])
+
+          Logger.info(fn ->
+            ">>>> dropping search index table: #{table_name_str}, index: #{index_name_str} result: #{
+              result_str
+            }"
+          end)
+
+          :ok
+
+        {:error, error} ->
+          raise MigrationError,
+                "dropping search index index: #{index_name} for table: #{table_name} error: " <>
+                  error.message
+      end
+    end)
   end
 end

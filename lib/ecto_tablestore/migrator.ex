@@ -1,15 +1,39 @@
 defmodule EctoTablestore.Migrator do
   @moduledoc false
-
-  alias EctoTablestore.Migration.Runner
+  require Logger
+  alias EctoTablestore.Migration.{Runner, SchemaMigration}
 
   def run(repo, migration_source, opts) do
-    migration_source
-    |> migrations_for()
-    |> Enum.map(&load_migration!/1)
-    |> Enum.map(fn {version, migration_module} ->
-      attempt(repo, version, migration_module, :change, opts)
-    end)
+    SchemaMigration.ensure_schema_migrations_table!(repo)
+    versions = SchemaMigration.versions(repo)
+
+    pending =
+      migration_source
+      |> migrations_for()
+      |> Enum.filter(fn {version, _name, _file} -> not (version in versions) end)
+
+    ensure_no_duplication!(pending)
+
+    versions =
+      pending
+      |> Enum.map(&load_migration!/1)
+      |> Enum.map(fn {version, module} ->
+        SchemaMigration.lock_version!(repo, version, fn ->
+          attempt(repo, version, module, :change, opts) ||
+            {:error,
+             Ecto.MigrationError.exception(
+               "#{inspect(module)} does not implement a `change/0` function"
+             )}
+        end)
+
+        version
+      end)
+
+    if match?([], versions) do
+      Logger.info("Already done")
+    end
+
+    versions
   end
 
   def with_repo(repo, fun, opts \\ []) do
@@ -68,6 +92,23 @@ defmodule EctoTablestore.Migrator do
       _ -> nil
     end
   end
+
+  defp ensure_no_duplication!([{version, name, _file} | t]) do
+    cond do
+      List.keyfind(t, version, 0) ->
+        raise Ecto.MigrationError,
+              "migrations can't be executed, migration version #{version} is duplicated"
+
+      List.keyfind(t, name, 1) ->
+        raise Ecto.MigrationError,
+              "migrations can't be executed, migration name #{name} is duplicated"
+
+      true ->
+        ensure_no_duplication!(t)
+    end
+  end
+
+  defp ensure_no_duplication!([]), do: :ok
 
   defp load_migration!({version, _, mod}) when is_atom(mod) do
     if migration?(mod) do
