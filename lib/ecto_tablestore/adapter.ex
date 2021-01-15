@@ -187,7 +187,7 @@ defmodule Ecto.Adapters.Tablestore do
       tablestore_instance when is_atom(tablestore_instance) ->
         {
           :ok,
-          Supervisor.Spec.supervisor(Supervisor, [[], [strategy: :one_for_one]]),
+          Ecto.Adapters.Tablestore.Supervisor.child_spec([]),
           %{instance: tablestore_instance}
         }
 

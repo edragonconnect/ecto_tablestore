@@ -37,7 +37,7 @@ defmodule EctoTablestore.Migrator do
   end
 
   def with_repo(repo, fun, opts \\ []) do
-    config = repo.config()
+    config = repo.config
 
     mode = Keyword.get(opts, :mode, :permanent)
     apps = [:ecto_tablestore | config[:start_apps_before_migration] || []]
@@ -57,7 +57,7 @@ defmodule EctoTablestore.Migrator do
         try do
           {:ok, fun.(repo), started}
         after
-          repo.stop()
+          repo.stop
         end
 
       {:error, {:already_started, _pid}} ->
