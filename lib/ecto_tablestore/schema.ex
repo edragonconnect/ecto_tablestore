@@ -72,7 +72,6 @@ defmodule EctoTablestore.Schema do
 
   defmacro tablestore_schema(source, do: block) do
     {block, hashids} = check_block(block, __CALLER__.module)
-
     quote do
       Ecto.Schema.schema(unquote(source), do: unquote(block))
 
@@ -81,11 +80,31 @@ defmodule EctoTablestore.Schema do
   end
 
   defp generate_hashids_config(hashids) do
-    for {key, hashids_item} <- hashids do
+    for {key, {opts, schema_module}} <- hashids do
       quote location: :keep do
         def hashids(unquote(key)) do
-          unquote(hashids_item)
+          schema_module = unquote(schema_module)
+          opts = unquote(opts)
+
+          opts = fetch_hashids_opts(opts, schema_module)
+
+          if not is_list(opts) do
+            raise "Using invalid options: #{inspect(opts)} for `#{schema_module}` schema, please check it should be a keyword."
+          end
+
+          opts
+          |> Keyword.take([:salt, :min_len, :alphabet])
+          |> Hashids.new()
         end
+
+        defp fetch_hashids_opts(nil, schema_module) do
+          Application.fetch_env!(:ecto_tablestore, :hashids) |> Keyword.get(schema_module, [])
+        end
+
+        defp fetch_hashids_opts(opts, _schema_module) do
+          opts
+        end
+
       end
     end
   end
@@ -262,12 +281,6 @@ defmodule EctoTablestore.Schema do
   end
 
   defp supplement_hashids_field(defined_macro, field_line, field_name, opts, schema_module) do
-    hashids_opts = fetch_hashids_opts(opts[:hashids], schema_module)
-
-    hashids =
-      hashids_opts
-      |> Keyword.take([:salt, :min_len, :alphabet])
-      |> Hashids.new()
 
     field = {
       defined_macro,
@@ -279,16 +292,7 @@ defmodule EctoTablestore.Schema do
       ]
     }
 
-    new_hashids = {field_name, hashids}
-
-    {field, new_hashids}
+    {field, {field_name, {opts[:hashids], schema_module}}}
   end
 
-  defp fetch_hashids_opts(nil, schema_module) do
-    Application.fetch_env!(:ecto_tablestore, :hashids) |> Keyword.get(schema_module, [])
-  end
-
-  defp fetch_hashids_opts(opts, _schema_module) when is_list(opts) do
-    opts
-  end
 end

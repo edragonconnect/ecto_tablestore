@@ -126,4 +126,25 @@ defmodule EctoTablestore.HashidsTest do
     [num2] = Hashids.decode!(hashids2, value2)
     assert num2 == 10
   end
+
+  test "make sure hashids configurable in runtime" do
+    app = Application.get_application(EctoTablestore.Application)
+
+    [{Post, config_hashids_opts}] = Application.get_env(app, :hashids)
+
+    hashids = Post.hashids(:keyid)
+    assert "#{hashids.salt}" == config_hashids_opts[:salt] and hashids.min_len == config_hashids_opts[:min_len]
+
+    new_salt = "1234"
+    new_min_len = 12
+    Application.put_env(app, :hashids, [{Post, salt: new_salt, min_len: new_min_len}])
+
+    hashids = Post.hashids(:keyid)
+    assert "#{hashids.salt}" == new_salt and hashids.min_len == new_min_len
+
+    assert_raise RuntimeError, ~r/:invalid_hashids_config/, fn ->
+      Application.put_env(app, :hashids, [{Post, :invalid_hashids_config}])
+      Post.hashids(:keyid)
+    end
+  end
 end
