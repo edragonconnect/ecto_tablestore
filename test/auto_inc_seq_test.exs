@@ -18,7 +18,7 @@ defmodule EctoTablestore.AutoIncSequenceTest do
 
   test "insert" do
     # before insert operation, there should be run the corrsponding
-    # migration to create the table and its seq table
+    # migration to create the table and default seq table
     page = %Page{
       name: "hello page",
       content: "test content"

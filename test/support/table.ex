@@ -28,8 +28,7 @@ defmodule EctoTablestore.Support.Table do
     table = Page.__schema__(:source)
     ExAliyunOts.create_table(@instance, table, [{"pid", :integer}, {"name", :string}])
 
-    seq_name = Ecto.Adapters.Tablestore.bound_sequence_table_name(table)
-    EctoTablestore.Sequence.create(@instance, seq_name)
+    EctoTablestore.Sequence.create(@instance)
   end
 
   def create_user4() do
@@ -61,8 +60,7 @@ defmodule EctoTablestore.Support.Table do
     table = Page.__schema__(:source)
     ExAliyunOts.delete_table(@instance, table)
 
-    seq_name = Ecto.Adapters.Tablestore.bound_sequence_table_name(table)
-    ExAliyunOts.delete_table(@instance, seq_name)
+    ExAliyunOts.delete_table(@instance, EctoTablestore.Sequence.default_table())
   end
 
   def delete_user4() do
