@@ -341,19 +341,12 @@ defmodule EctoTablestore.Migration do
                 total_increment_count
               } primary keys defined on table: " <> table.name
         else
-          seq_type =
-            cond do
-              auto_increment_count > 0 -> :self_seq
-              hashids_count > 0 -> :default_seq
-              true -> :none_seq
-            end
-
           %{
             table: table,
             pk_columns: pk_columns,
             pre_defined_columns: pre_defined_columns,
             index_metas: index_metas,
-            seq_type: seq_type
+            create_seq_table?: auto_increment_count > 0 or hashids_count > 0
           }
         end
     end
@@ -419,7 +412,7 @@ defmodule EctoTablestore.Migration do
         pk_columns: pk_columns,
         pre_defined_columns: pre_defined_columns,
         index_metas: index_metas,
-        seq_type: seq_type
+        create_seq_table?: create_seq_table?
       }) do
     table_name = get_table_name(table, repo.config())
     table_name_str = IO.ANSI.format([:green, table_name, :reset])
@@ -456,7 +449,7 @@ defmodule EctoTablestore.Migration do
         result_str = IO.ANSI.format([:green, "ok", :reset])
         Logger.info(fn -> ">>>> create table: #{table_name_str} result: #{result_str}" end)
 
-        create_seq_table_by_type!(seq_type, table_name, repo, instance)
+        create_seq_table!(create_seq_table?, table_name, repo, instance)
         :ok
 
       {:error, error} ->
@@ -562,16 +555,11 @@ defmodule EctoTablestore.Migration do
     end
   end
 
-  defp create_seq_table_by_type!(:none_seq, _table_name, _repo, _instance),
+  defp create_seq_table!(false, _table_name, _repo, _instance),
     do: :ignore
 
-  defp create_seq_table_by_type!(seq_type, table_name, repo, instance) do
-    seq_table_name =
-      case seq_type do
-        :self_seq -> repo.__adapter__.bound_sequence_table_name(table_name)
-        :default_seq -> Sequence.default_table()
-      end
-
+  defp create_seq_table!(true, table_name, repo, instance) do
+    seq_table_name = Sequence.default_table()
     # check if not exists
     with {:list_table, {:ok, %{table_names: table_names}}} <-
            {:list_table, ExAliyunOts.list_table(instance)},
@@ -651,7 +639,7 @@ defmodule EctoTablestore.Migration do
   @doc """
   Adds a primary key when creating a table.
 
-  This function only accepts types as `:string` | `:binary` | `:integer` | `:hashids`.
+  This function only accepts types as `:string` | `:binary` | `:integer` | `:hashids` | `:id`.
 
   About `:auto_increment` option:
 
@@ -720,6 +708,18 @@ defmodule EctoTablestore.Migration do
         add :id, :hashids, auto_increment: true, partition_key: true
       end
 
+  The `:id` type for the partition key with the built-in sequence feature:
+
+      create table("posts") do
+        add :id, :id
+      end
+
+      # The above is equivalent to
+
+      create table("posts", partition_key: false) do
+        add :id, :integer, partition_key: true, auto_increment: true
+      end
+
   ## Options
 
     * `:partition_key` - when `true`, marks this field as the partition key, only the first
@@ -744,25 +744,37 @@ defmodule EctoTablestore.Migration do
        when (is_atom(column) or is_binary(column)) and is_list(opts) do
     validate_pk_type!(column, type)
 
-    quote location: :keep do
-      %{
-        name: unquote(to_string(column)),
-        type: unquote(type),
-        column_type: :primary_key,
-        partition_key: Keyword.get(unquote(opts), :partition_key, false),
-        auto_increment: Keyword.get(unquote(opts), :auto_increment, false)
-      }
+    if type == :id do
+      quote location: :keep do
+        %{
+          name: unquote(to_string(column)),
+          type: :integer,
+          column_type: :primary_key,
+          partition_key: true,
+          auto_increment: true
+        }
+      end
+    else
+      quote location: :keep do
+        %{
+          name: unquote(to_string(column)),
+          type: unquote(type),
+          column_type: :primary_key,
+          partition_key: Keyword.get(unquote(opts), :partition_key, false),
+          auto_increment: Keyword.get(unquote(opts), :auto_increment, false)
+        }
+      end
     end
   end
 
   defp validate_pk_type!(column, type) do
     # more information can be found in the [documentation](https://help.aliyun.com/document_detail/106536.html)
-    if type in [:integer, :string, :binary, :hashids] do
+    if type in [:integer, :string, :binary, :hashids, :id] do
       :ok
     else
       raise ArgumentError,
             "#{inspect(type)} is not a valid primary key type for column: `#{inspect(column)}`, " <>
-              "please use an atom as :integer | :string | :binary | :hashids ."
+              "please use an atom as :integer | :string | :binary | :hashids | :id."
     end
   end
 

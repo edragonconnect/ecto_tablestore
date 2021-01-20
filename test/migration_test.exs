@@ -6,7 +6,16 @@ defmodule EctoTablestore.MigrationTest do
 
   @repo EctoTablestore.TestRepo
   @instance EDCEXTestInstance
-  @used_tables ["migration_test", "migration_test1", "migration_test2", "schema_migrations"]
+  @used_tables [
+    EctoTablestore.Sequence.default_table(),
+    "migration_test_create_table",
+    "migration_test_create_table_id",
+    "migration_test_create_table_hashids",
+    "migration_test",
+    "migration_test1",
+    "migration_test2",
+    "schema_migrations"
+  ]
 
   setup_all do
     TestHelper.setup_all()
@@ -92,26 +101,33 @@ defmodule EctoTablestore.MigrationTest do
              table: ^table,
              pk_columns: ^columns,
              pre_defined_columns: [],
-             seq_type: :self_seq
+             create_seq_table?: true
            } = Migration.__create__(table, [add_pk(:age, :integer)])
 
     stop_runner(runner)
   end
 
-  test "self_seq" do
+  test "default_seq(id)" do
     table = table("table_name")
     runner = setup_runner(@repo)
+
+    columns_id = [
+      add_pk(:id, :id),
+      add_pk(:age, :integer)
+    ]
 
     columns = [
       add_pk(:id, :integer, auto_increment: true, partition_key: true),
       add_pk(:age, :integer)
     ]
 
+    assert columns_id == columns
+
     assert %{
              table: ^table,
              pk_columns: ^columns,
              pre_defined_columns: [],
-             seq_type: :self_seq
+             create_seq_table?: true
            } = Migration.__create__(table, columns)
 
     stop_runner(runner)
@@ -129,7 +145,7 @@ defmodule EctoTablestore.MigrationTest do
              table: ^table,
              pk_columns: ^columns1,
              pre_defined_columns: [],
-             seq_type: :default_seq
+             create_seq_table?: true
            } = Migration.__create__(table, columns1)
 
     columns2 = [
@@ -141,7 +157,7 @@ defmodule EctoTablestore.MigrationTest do
              table: ^table,
              pk_columns: ^columns2,
              pre_defined_columns: [],
-             seq_type: :default_seq
+             create_seq_table?: true
            } = Migration.__create__(table, columns2)
   end
 
@@ -159,7 +175,7 @@ defmodule EctoTablestore.MigrationTest do
              table: ^table,
              pk_columns: ^columns,
              pre_defined_columns: [],
-             seq_type: :none_seq
+             create_seq_table?: false
            } = Migration.__create__(table, columns)
   end
 
@@ -187,7 +203,7 @@ defmodule EctoTablestore.MigrationTest do
              table: ^table,
              pk_columns: ^pk_columns,
              pre_defined_columns: ^pre_defined_columns,
-             seq_type: :none_seq
+             create_seq_table?: false
            } = Migration.__create__(table, columns)
   end
 
@@ -221,24 +237,54 @@ defmodule EctoTablestore.MigrationTest do
              pk_columns: ^pk_columns,
              pre_defined_columns: ^pre_defined_columns,
              index_metas: ^index_metas,
-             seq_type: :none_seq
+             create_seq_table?: false
            } = Migration.__create__(table, columns)
   end
 
   test "create table" do
-    table_name = "table_name"
-    table = table(table_name)
+    table_name = "migration_test_create_table"
     runner = setup_runner(@repo)
 
-    create table do
+    create table(table_name) do
       add_pk(:id, :integer, partition_key: true)
       add_pk(:age, :integer)
       add_pk(:name, :string)
       add_pk(:other, :binary)
     end
 
-    %{commands: commands} = Agent.get(runner, & &1)
-    assert length(commands) == 1
+    create table(table_name <> "_id") do
+      add_pk(:id, :id)
+      add_pk(:age, :integer)
+      add_pk(:name, :string)
+      add_pk(:other, :binary)
+    end
+
+    create table(table_name <> "_hashids") do
+      add_pk(:id, :hashids, partition_key: true)
+      add_pk(:age, :integer)
+      add_pk(:name, :string)
+      add_pk(:other, :binary)
+    end
+
+    %{commands: commands, repo: repo} = Agent.get(runner, & &1)
+    fun = fn -> commands |> Enum.reverse() |> Enum.map(& &1.(repo)) end
+    assert length(commands) == 3
+
+    assert fun.() == [:ok, :ok, :ok]
+
+    {:ok, %{table_names: table_names}} = ExAliyunOts.list_table(@instance)
+
+    assert true =
+             Enum.all?(
+               [
+                 EctoTablestore.Sequence.default_table(),
+                 table_name,
+                 table_name <> "_id",
+                 table_name <> "_hashids"
+               ],
+               &(&1 in table_names)
+             )
+
     stop_runner(runner)
   end
 

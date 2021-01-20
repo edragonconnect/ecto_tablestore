@@ -8,32 +8,23 @@ defmodule EctoTablestore.Sequence do
   def default_table, do: @default_seq
 
   def create(instance, seq_name \\ @default_seq) do
-    new_seq = %Var.NewSequence{name: seq_name}
-    result = Sequence.create(instance, new_seq)
+    result = Sequence.create(instance, %Var.NewSequence{name: seq_name})
     Logger.info("create a sequence: #{seq_name} result: #{inspect(result)}")
     result
   end
 
   def next_value(instance, seq_name, field_name)
       when is_bitstring(seq_name) and is_bitstring(field_name) do
-    var_next = %Var.GetSequenceNextValue{
-      name: seq_name,
-      event: field_name
-    }
-
-    Sequence.next_value(instance, var_next)
+    Sequence.next_value(instance, %Var.GetSequenceNextValue{name: seq_name, event: field_name})
   end
 
   @doc """
   Use a global sequence table to store all kinds of sequences to the tables.
   """
-  def next_value(instance, event)
-      when is_bitstring(event) do
-    var_next = %Var.GetSequenceNextValue{
+  def next_value(instance, event) when is_bitstring(event) do
+    Sequence.next_value(instance, %Var.GetSequenceNextValue{
       name: @default_seq,
       event: event
-    }
-
-    Sequence.next_value(instance, var_next)
+    })
   end
 end

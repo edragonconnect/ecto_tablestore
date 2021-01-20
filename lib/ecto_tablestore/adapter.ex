@@ -595,11 +595,6 @@ defmodule Ecto.Adapters.Tablestore do
     "#{table_name},#{field}"
   end
 
-  @doc false
-  def bound_sequence_table_name(table_name) do
-    "#{table_name}_seq"
-  end
-
   defp do_generate_condition([], nil) do
     nil
   end
@@ -887,7 +882,7 @@ defmodule Ecto.Adapters.Tablestore do
 
     field_name_str = Atom.to_string(autogenerate_id_name)
 
-    next_value = Sequence.next_value(instance, bound_sequence_table_name(source), field_name_str)
+    next_value = Sequence.next_value(instance, key_to_global_sequence(source, field_name_str))
 
     prepared_pks = [{field_name_str, next_value}]
 
