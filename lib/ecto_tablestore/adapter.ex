@@ -42,6 +42,15 @@ defmodule Ecto.Adapters.Tablestore do
         Tablestore.search(get_dynamic_repo(), schema, index_name, options)
       end
 
+      @spec stream_search(
+              schema :: Ecto.Schema.t(),
+              index_name :: String.t(),
+              options :: Keyword.t()
+            ) :: Enumerable.t()
+      def stream_search(schema, index_name, options) do
+        Tablestore.stream_search(get_dynamic_repo(), schema, index_name, options)
+      end
+
       @spec one(entity :: Ecto.Schema.t(), options :: Keyword.t()) ::
               Ecto.Schema.t() | {:error, term()} | nil
       def one(%{__meta__: meta} = entity, options \\ []) do
@@ -335,16 +344,32 @@ defmodule Ecto.Adapters.Tablestore do
             total_hits: response.total_hits,
             aggs: response.aggs,
             group_bys: response.group_bys,
-            schemas:
-              Enum.map(response.rows, fn row ->
-                row_to_schema(schema, row)
-              end)
+            schemas: Enum.map(response.rows, &row_to_schema(schema, &1))
           }
         }
 
       _error ->
         result
     end
+  end
+
+  @doc false
+  def stream_search(repo, schema, index_name, options) do
+    {_adapter, meta} = Ecto.Repo.Registry.lookup(repo)
+
+    ExAliyunOts.stream_search(
+      meta.instance,
+      schema.__schema__(:source),
+      index_name,
+      options
+    )
+    |> Stream.flat_map(fn
+      {:ok, response} ->
+        transfer_rows_by_schema(response.rows, schema, [])
+
+      error ->
+        [error]
+    end)
   end
 
   @doc false
@@ -417,9 +442,7 @@ defmodule Ecto.Adapters.Tablestore do
   defp transfer_rows_by_schema(nil, _schema, default), do: default
 
   defp transfer_rows_by_schema(rows, schema, _default) when is_list(rows) do
-    Enum.map(rows, fn row ->
-      row_to_schema(schema, row)
-    end)
+    Enum.map(rows, &row_to_schema(schema, &1))
   end
 
   @doc false
@@ -999,9 +1022,7 @@ defmodule Ecto.Adapters.Tablestore do
     {Atom.to_string(key), value}
   end
 
-  defp row_to_schema(_schema, nil) do
-    nil
-  end
+  defp row_to_schema(_schema, nil), do: nil
 
   defp row_to_schema(schema, row) do
     struct(schema, extract_as_keyword(schema, row))

@@ -22,6 +22,21 @@ defmodule EctoTablestore.SearchTest do
     :ok
   end
 
+  test "stream_search" do
+    index_name = "test_search_index"
+
+    result =
+      TestRepo.stream_search(Student, index_name,
+        search_query: [
+          limit: 3,
+          query: prefix_query("name", "n")
+        ]
+      )
+      |> Enum.to_list()
+
+    assert length(result) == 9
+  end
+
   test "match query" do
     index_name = "test_search_index"
 
