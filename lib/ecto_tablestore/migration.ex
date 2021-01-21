@@ -449,7 +449,7 @@ defmodule EctoTablestore.Migration do
         result_str = IO.ANSI.format([:green, "ok", :reset])
         Logger.info(fn -> ">>>> create table: #{table_name_str} result: #{result_str}" end)
 
-        create_seq_table!(create_seq_table?, table_name, repo, instance)
+        create_seq_table!(create_seq_table?, table_name, instance)
         :ok
 
       {:error, error} ->
@@ -555,10 +555,10 @@ defmodule EctoTablestore.Migration do
     end
   end
 
-  defp create_seq_table!(false, _table_name, _repo, _instance),
+  defp create_seq_table!(false, _table_name, _instance),
     do: :ignore
 
-  defp create_seq_table!(true, table_name, repo, instance) do
+  defp create_seq_table!(true, table_name, instance) do
     seq_table_name = Sequence.default_table()
     # check if not exists
     with {:list_table, {:ok, %{table_names: table_names}}} <-
