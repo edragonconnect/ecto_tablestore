@@ -2,10 +2,6 @@ defmodule EctoTablestore.Schema do
   @moduledoc ~S"""
   Defines a schema for Tablestore.
 
-  Since the atomic increment may need to return the increased value, `EctoTablestore.Schema`
-  module underlying uses `Ecto.Schema`, and automatically append all `:integer` field type with
-  `read_after_writes: true` option by default.
-
   An Ecto schema is used to map any data source into an Elixir struct. The definition of the
   schema is possible through the API: `tablestore_schema/2`.
 
@@ -124,96 +120,6 @@ defmodule EctoTablestore.Schema do
 
   defp supplement_fields([], prepared, hashids, _schema_module) do
     {Enum.reverse(prepared), hashids}
-  end
-
-  defp supplement_fields(
-         [{defined_macro, field_line, [field_name, :integer]} | rest_fields],
-         prepared,
-         hashids,
-         schema_module
-       ) do
-    update = {
-      defined_macro,
-      field_line,
-      [
-        field_name,
-        {:__aliases__, field_line, [:EctoTablestore, :Integer]},
-        [read_after_writes: true]
-      ]
-    }
-
-    supplement_fields(rest_fields, [update | prepared], hashids, schema_module)
-  end
-
-  defp supplement_fields(
-         [{defined_macro, field_line, [field_name, :integer, opts]} = field | rest_fields],
-         prepared,
-         hashids,
-         schema_module
-       ) do
-    field =
-      if Keyword.get(opts, :primary_key, false) do
-        field
-      else
-        {
-          defined_macro,
-          field_line,
-          [
-            field_name,
-            {:__aliases__, field_line, [:EctoTablestore, :Integer]},
-            Keyword.put(opts, :read_after_writes, true)
-          ]
-        }
-      end
-
-    supplement_fields(rest_fields, [field | prepared], hashids, schema_module)
-  end
-
-  defp supplement_fields(
-         [
-           {defined_macro, field_line,
-            [field_name, {:__aliases__, line, [:EctoTablestore, :Integer]}]}
-           | rest_fields
-         ],
-         prepared,
-         hashids,
-         schema_module
-       ) do
-    update = {
-      defined_macro,
-      field_line,
-      [field_name, {:__aliases__, line, [:EctoTablestore, :Integer]}, [read_after_writes: true]]
-    }
-
-    supplement_fields(rest_fields, [update | prepared], hashids, schema_module)
-  end
-
-  defp supplement_fields(
-         [
-           {defined_macro, field_line,
-            [field_name, {:__aliases__, line, [:EctoTablestore, :Integer]}, opts]} = field
-           | rest_fields
-         ],
-         prepared,
-         hashids,
-         schema_module
-       ) do
-    field =
-      if Keyword.get(opts, :primary_key, false) do
-        field
-      else
-        {
-          defined_macro,
-          field_line,
-          [
-            field_name,
-            {:__aliases__, line, [:EctoTablestore, :Integer]},
-            Keyword.put(opts, :read_after_writes, true)
-          ]
-        }
-      end
-
-    supplement_fields(rest_fields, [field | prepared], hashids, schema_module)
   end
 
   defp supplement_fields(

@@ -274,40 +274,73 @@ defmodule Ecto.Adapters.Tablestore do
   end
 
   @impl true
-  def update(repo, schema_meta, fields, filters, _returning, options) do
-    schema = schema_meta.schema
+  def update(repo, schema_meta, fields, ids, returning, options) do
 
-    options =
-      options
-      |> Keyword.take([:condition, :transaction_id])
-      |> Keyword.merge(map_attrs_to_update(schema, fields))
+    missing_fields_from_returning =
+      Enum.find(fields, fn
+        {field_name, {:increment, _}} ->
+          field_name not in returning
+        _ ->
+          false
+      end)
 
-    result =
-      ExAliyunOts.update_row(
-        repo.instance,
-        schema_meta.source,
-        prepare_primary_keys_by_order(schema, filters),
+    if missing_fields_from_returning != nil do
+
+      {field_name, _} = missing_fields_from_returning
+      {:invalid, [{:check, "Require to set `#{inspect(field_name)}` in the :returning option of Repo update when using atomic increment operation"}]}
+
+    else
+
+      schema = schema_meta.schema
+
+      options =
         options
-      )
+        |> Keyword.take([:condition, :transaction_id])
+        |> Keyword.merge(map_attrs_to_update(schema, fields))
 
-    case result do
-      {:ok, response} ->
-        case response.row do
-          nil ->
-            {:ok, []}
+      result =
+        ExAliyunOts.update_row(
+          repo.instance,
+          schema_meta.source,
+          prepare_primary_keys_by_order(schema, ids),
+          options
+        )
 
-          _ ->
-            {:ok, extract_as_keyword(schema, response.row)}
-        end
+      case result do
+        {:ok, response} ->
+          case response.row do
+            nil ->
+              {:ok, []}
 
-      {:error, error} ->
-        case error do
-          %Error{code: @ots_condition_check_fail} ->
-            {:error, :stale}
+            _ ->
 
-          _ ->
-            {:invalid, [{:check, error.code}]}
-        end
+              returning_from_response = extract_as_keyword(schema, response.row)
+
+              related_fields_map =
+                fields
+                |> Keyword.merge(returning_from_response)
+                |> Keyword.merge(ids)
+                |> Map.new()
+
+              # map the changed fields by the order of `returning`.
+              return_fields =
+                Enum.map(returning, fn(field) ->
+                  {field, Map.get(related_fields_map, field)}
+                end)
+
+              {:ok, return_fields}
+          end
+
+        {:error, error} ->
+          case error do
+            %Error{code: @ots_condition_check_fail} ->
+              {:error, :stale}
+
+            _ ->
+              {:invalid, [{:check, error.code}]}
+          end
+      end
+
     end
   end
 
