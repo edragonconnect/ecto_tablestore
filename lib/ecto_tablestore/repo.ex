@@ -394,9 +394,14 @@ defmodule EctoTablestore.Repo do
 
     * `:transaction_id`, update under local transaction in a partition key.
     * `:stale_error_field` - The field where stale errors will be added in the returning
-      changeset.  This option can be used to avoid raising `Ecto.StaleEntryError`.
+      changeset. This option can be used to avoid raising `Ecto.StaleEntryError`.
     * `:stale_error_message` - The message to add to the configured `:stale_error_field` when
       stale errors happen, defaults to "is stale".
+    * `:returning`, this option is required when the input changeset with `:increment` operation, all fields of the atomic
+      increment operation are required to explicitly set into this option in any order, if missed any atomic increment
+      operation related field, there will raise an `Ecto.ConstraintError` to prompt and terminate this update.
+      If there is no `:increment` operation, the `:returning` option is no need to set. If set `returning: true`, but not
+      really all fields are changed, the unchanged fields will be replaced as `nil` in the returned schema data.
   """
   @callback update(changeset :: Ecto.Changeset.t(), options) :: {:ok, schema} | {:error, term()}
 
