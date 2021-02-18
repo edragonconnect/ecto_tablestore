@@ -220,7 +220,8 @@ defmodule EctoTablestore.RowTest do
       |> Ecto.Changeset.change(num: {:increment, increment}, desc: nil)
       |> Ecto.Changeset.change(name: updated_order_name)
 
-    {:ok, updated_order} = TestRepo.update(changeset, condition: condition(:expect_exist), returning: [:num])
+    {:ok, updated_order} =
+      TestRepo.update(changeset, condition: condition(:expect_exist), returning: [:num])
 
     assert updated_order.desc == nil
     assert updated_order.num == new_input_num + increment
@@ -275,18 +276,28 @@ defmodule EctoTablestore.RowTest do
       |> Ecto.Changeset.change(level: {:increment, 1}, name: "username2")
       |> TestRepo.update(condition: condition(:expect_exist), returning: [:level])
 
-    assert user.level == 12 and user.level2 == 1 and user.name == "username2" and user.inserted_at != nil
+    assert user.level == 12 and user.level2 == 1 and user.name == "username2" and
+             user.inserted_at != nil
 
     naive_dt = NaiveDateTime.utc_now() |> NaiveDateTime.truncate(:second)
     dt = DateTime.utc_now() |> DateTime.truncate(:second)
 
     {:ok, user} =
       user
-      |> Ecto.Changeset.change(level: {:increment, 1}, level2: 2, name: "username3", naive_dt: naive_dt, dt: dt, profile: %{"test" => 1}, tags: ["A", "B"])
+      |> Ecto.Changeset.change(
+        level: {:increment, 1},
+        level2: 2,
+        name: "username3",
+        naive_dt: naive_dt,
+        dt: dt,
+        profile: %{"test" => 1},
+        tags: ["A", "B"]
+      )
       |> TestRepo.update(condition: condition(:expect_exist), returning: true)
 
     # Since `returning: true` but the :inserted_at field is not in the changes, it will be replaced as `nil` in the updated user.
-    assert user.level == 13 and user.level2 == 2 and user.inserted_at == nil and user.name == "username3" and user.inserted_at == nil
+    assert user.level == 13 and user.level2 == 2 and user.inserted_at == nil and
+             user.name == "username3" and user.inserted_at == nil
 
     {:ok, user} =
       user
@@ -312,7 +323,8 @@ defmodule EctoTablestore.RowTest do
     # Make sure there is a time difference between `updated_at` and `inserted_at`
     Process.sleep(1000)
 
-    {:ok, updated_user} = TestRepo.update(changeset, condition: condition(:expect_exist), returning: [:level])
+    {:ok, updated_user} =
+      TestRepo.update(changeset, condition: condition(:expect_exist), returning: [:level])
 
     assert updated_user.level == 2
     assert updated_user.name == new_name
@@ -976,6 +988,24 @@ defmodule EctoTablestore.RowTest do
     Enum.map(orders, fn order ->
       TestRepo.delete(order, condition: condition(:expect_exist))
     end)
+  end
+
+  test "repo - check insert stale_error" do
+    user = %User3{id: "check_insert_stale", name: "name"}
+    {:ok, _} = TestRepo.insert(user, condition: condition(:ignore))
+
+    stale_error_field = :id
+    stale_error_message = "Row already exists"
+
+    {:error, invalid_changeset} =
+      TestRepo.insert(user,
+        condition: condition(:expect_not_exist),
+        stale_error_field: stale_error_field,
+        stale_error_message: stale_error_message
+      )
+
+    assert {^stale_error_message, [stale: true]} =
+             Keyword.get(invalid_changeset.errors, stale_error_field)
   end
 
   test "repo - check stale_error" do

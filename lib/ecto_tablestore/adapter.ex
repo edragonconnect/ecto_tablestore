@@ -243,6 +243,9 @@ defmodule Ecto.Adapters.Tablestore do
             {:ok, []}
         end
 
+      {:error, %Error{code: @ots_condition_check_fail}} ->
+        {:error, :stale}
+
       {:error, error} ->
         {:invalid, [{:check, error.code}]}
     end
@@ -275,22 +278,24 @@ defmodule Ecto.Adapters.Tablestore do
 
   @impl true
   def update(repo, schema_meta, fields, ids, returning, options) do
-
     missing_fields_from_returning =
       Enum.find(fields, fn
         {field_name, {:increment, _}} ->
           field_name not in returning
+
         _ ->
           false
       end)
 
     if missing_fields_from_returning != nil do
-
       {field_name, _} = missing_fields_from_returning
-      {:invalid, [{:check, "Require to set `#{inspect(field_name)}` in the :returning option of Repo update when using atomic increment operation"}]}
 
+      {:invalid,
+       [
+         {:check,
+          "Require to set `#{inspect(field_name)}` in the :returning option of Repo update when using atomic increment operation"}
+       ]}
     else
-
       schema = schema_meta.schema
 
       options =
@@ -313,7 +318,6 @@ defmodule Ecto.Adapters.Tablestore do
               {:ok, []}
 
             _ ->
-
               returning_from_response = extract_as_keyword(schema, response.row)
 
               related_fields_map =
@@ -324,7 +328,7 @@ defmodule Ecto.Adapters.Tablestore do
 
               # map the changed fields by the order of `returning`.
               return_fields =
-                Enum.map(returning, fn(field) ->
+                Enum.map(returning, fn field ->
                   {field, Map.get(related_fields_map, field)}
                 end)
 
@@ -340,7 +344,6 @@ defmodule Ecto.Adapters.Tablestore do
               {:invalid, [{:check, error.code}]}
           end
       end
-
     end
   end
 
