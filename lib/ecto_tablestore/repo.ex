@@ -196,6 +196,16 @@ defmodule EctoTablestore.Repo do
             ) :: {nil, nil} | {list, nil} | {list, binary()} | {:error, term()}
 
   @doc """
+  As a wrapper built on `stream_range/4` to create composable and lazy enumerables
+  stream for iteration.
+
+  ## Options
+
+  Please see options of `c:get_range/4` for details.
+  """
+  @callback stream(schema, options) :: Enumerable.t()
+
+  @doc """
   As a wrapper built on `ExAliyunOts.stream_range/5` to create composable and lazy enumerables
   stream for iteration.
 
