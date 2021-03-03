@@ -446,6 +446,60 @@ defmodule EctoTablestore.RowTest do
     end
   end
 
+  test "repo - stream" do
+    saved_orders =
+      Enum.map(1..9, fn var ->
+        order = %Order{id: "#{var}", desc: "desc#{var}", num: var, price: 20.5 * var}
+
+        {:ok, saved_order} =
+          TestRepo.insert(order, condition: condition(:ignore), return_type: :pk)
+
+        saved_order
+      end)
+
+    # since it is enumerable, no matched data will return `[]`.
+    orders =
+      %Order{id: "0"}
+      |> TestRepo.stream()
+      |> Enum.to_list()
+
+    assert orders == []
+
+    orders =
+      %Order{id: "1"}
+      |> TestRepo.stream()
+      |> Enum.to_list()
+
+    assert length(orders) == 1
+
+    orders =
+      Order
+      |> TestRepo.stream()
+      |> Enum.to_list()
+
+    assert length(orders) == 9
+
+    backward_orders =
+      Order
+      |> TestRepo.stream(direction: :backward)
+      |> Enum.to_list()
+
+    assert orders == Enum.reverse(backward_orders)
+
+    take_orders =
+      Order
+      |> TestRepo.stream(limit: 3)
+      |> Enum.take(5)
+
+    assert length(take_orders) == 5
+
+    for order <- saved_orders do
+      TestRepo.delete(%Order{id: order.id, internal_id: order.internal_id},
+        condition: condition(:expect_exist)
+      )
+    end
+  end
+
   test "repo - stream_range" do
     saved_orders =
       Enum.map(1..9, fn var ->

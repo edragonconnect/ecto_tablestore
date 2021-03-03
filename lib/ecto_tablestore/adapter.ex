@@ -91,6 +91,34 @@ defmodule Ecto.Adapters.Tablestore do
         )
       end
 
+      @spec stream(schema :: Ecto.Schema.t(), options :: Keyword.t()) :: Enumerable.t()
+      def stream(schema, options \\ [direction: :forward]) do
+        {schema, primary_keys} =
+          if is_atom(schema) do
+            {schema, schema |> struct() |> Ecto.primary_key()}
+          else
+            {schema.__struct__, Ecto.primary_key(schema)}
+          end
+
+        fun = fn fill ->
+          fn
+            {k, nil} -> {k, fill}
+            kv -> kv
+          end
+        end
+
+        {start_primary_keys, end_primary_keys} =
+          case Keyword.get(options, :direction, :forward) do
+            :forward ->
+              {Enum.map(primary_keys, fun.(:inf_min)), Enum.map(primary_keys, fun.(:inf_max))}
+
+            _ ->
+              {Enum.map(primary_keys, fun.(:inf_max)), Enum.map(primary_keys, fun.(:inf_min))}
+          end
+
+        stream_range(schema, start_primary_keys, end_primary_keys, options)
+      end
+
       @spec stream_range(
               schema :: Ecto.Schema.t(),
               start_primary_keys :: list,
