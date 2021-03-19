@@ -62,12 +62,11 @@ defmodule EctoTablestore.Migration.SchemaMigration do
 
   def lock_version!(repo, version, fun) do
     %__MODULE__{version: version}
-    |> Changeset.change()
-    |> Changeset.check_constraint(:condition,
-      name: "OTSConditionCheckFail",
-      message: "already_exist"
+    |> repo.insert(
+      condition: condition(:expect_not_exist),
+      stale_error_field: :version,
+      stale_error_message: "already_exist"
     )
-    |> repo.insert(condition: condition(:expect_not_exist))
     |> case do
       {:ok, _} ->
         try do
@@ -81,7 +80,7 @@ defmodule EctoTablestore.Migration.SchemaMigration do
             raise error
         end
 
-      {:error, %Changeset{errors: [condition: {"already_exist", _}]}} ->
+      {:error, %Changeset{errors: [version: {"already_exist", [stale: true]}]}} ->
         raise MigrationError,
               "lock_version failed because of the version: #{version} already have"
 

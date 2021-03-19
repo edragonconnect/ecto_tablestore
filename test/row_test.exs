@@ -334,7 +334,7 @@ defmodule EctoTablestore.RowTest do
   end
 
   test "repo - insert/update with ecto types" do
-    assert_raise Ecto.ConstraintError, ~r/OTSConditionCheckFail/, fn ->
+    assert_raise Ecto.StaleEntryError, ~r/attempted to insert a stale struct/, fn ->
       user = %User{
         name: "username2",
         profile: %{"level" => 1, "age" => 20},
@@ -342,7 +342,7 @@ defmodule EctoTablestore.RowTest do
         id: 2
       }
 
-      {:ok, _saved_user} = TestRepo.insert(user, condition: condition(:expect_exist))
+      TestRepo.insert(user, condition: condition(:expect_exist))
     end
 
     naive_dt = NaiveDateTime.utc_now() |> NaiveDateTime.truncate(:second)
@@ -1091,30 +1091,6 @@ defmodule EctoTablestore.RowTest do
     assert error == [stale: true]
 
     {:ok, _} = TestRepo.delete(saved_order, condition: condition(:expect_exist))
-  end
-
-  test "repo - check_constraint" do
-    check_constraint_field = :condition
-    check_constraint_name = "OTSConditionCheckFail"
-    check_constraint_message = "ots condition check fail"
-
-    user =
-      %User2{id: "100"}
-      |> Ecto.Changeset.change(name: "name2")
-      |> Ecto.Changeset.check_constraint(check_constraint_field,
-        name: check_constraint_name,
-        message: check_constraint_message
-      )
-
-    {:error, invalid_changeset} =
-      TestRepo.insert(user, condition: condition(:expect_exist), return_type: :pk)
-
-    {^check_constraint_message, error_constraint} =
-      Keyword.get(invalid_changeset.errors, check_constraint_field)
-
-    error_constraint_name = Keyword.get(error_constraint, :constraint_name)
-    # Use ots's error code as check_constraint_name.
-    assert error_constraint_name == check_constraint_name
   end
 
   test "repo - naive_datetime timestamp" do
