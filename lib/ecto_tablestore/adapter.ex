@@ -224,7 +224,7 @@ defmodule Ecto.Adapters.Tablestore do
       tablestore_instance when is_atom(tablestore_instance) ->
         {
           :ok,
-          Ecto.Adapters.Tablestore.Supervisor.child_spec([name: :"#{tablestore_instance}Connection"]),
+          Ecto.Adapters.Tablestore.Supervisor.child_spec([]),
           %{instance: tablestore_instance}
         }
 

@@ -2,8 +2,8 @@ defmodule Ecto.Adapters.Tablestore.Supervisor do
   @moduledoc false
   use DynamicSupervisor
 
-  def start_link([name: name]) do
-    DynamicSupervisor.start_link(__MODULE__, [], name: name)
+  def start_link([]) do
+    DynamicSupervisor.start_link(__MODULE__, [])
   end
 
   def init([]) do
