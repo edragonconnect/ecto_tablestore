@@ -1196,8 +1196,9 @@ defmodule EctoTablestore.RowTest do
     # compare a success case to the previous stale error
     fetched_order = TestRepo.get(Order, [id: order.id, internal_id: order.internal_id], columns_to_get: ["name", "lock_version"])
     assert fetched_order.lock_version == 2
-    stale_change = Order.changeset(:update, fetched_order, %{name: "foo"})
-    {:ok, order} = TestRepo.update(stale_change, condition: condition(:ignore))
+    valid_change = Order.changeset(:update, fetched_order, %{name: "foo"})
+
+    {:ok, order} = TestRepo.update(valid_change, condition: condition(:expect_exist, "name" == "bar"))
     assert order.name == "foo" and order.lock_version == 3
   end
 
