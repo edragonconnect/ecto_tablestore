@@ -10,6 +10,14 @@ defmodule EctoTablestore.TestSchema.Order do
     field(:num, :integer)
     field(:success?, :boolean)
     field(:price, :float)
+
+    field(:lock_version, :integer, default: 1)
+  end
+
+  def changeset(:update, struct, params \\ %{}) do
+    struct
+    |> Ecto.Changeset.cast(params, [:name])
+    |> Ecto.Changeset.optimistic_lock(:lock_version)
   end
 
   def test_changeset(order, params \\ %{}) do
@@ -36,6 +44,7 @@ defmodule EctoTablestore.TestSchema.User do
 
     timestamps()
   end
+
 end
 
 defmodule EctoTablestore.TestSchema.Student do
@@ -51,6 +60,7 @@ defmodule EctoTablestore.TestSchema.Student do
     field(:comment, :string)
     field(:content, :string)
   end
+
 end
 
 defmodule EctoTablestore.TestSchema.Page do
@@ -86,6 +96,7 @@ defmodule EctoTablestore.TestSchema.User3 do
     field(:id, :string, primary_key: true)
     field(:name, :string)
   end
+
 end
 
 defmodule EctoTablestore.TestSchema.User4 do

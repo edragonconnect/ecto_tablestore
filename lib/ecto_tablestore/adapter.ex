@@ -331,6 +331,8 @@ defmodule Ecto.Adapters.Tablestore do
         |> Keyword.take([:condition, :transaction_id])
         |> Keyword.merge(map_attrs_to_update(schema, fields))
 
+      options = may_put_optimistic_lock_into_condition(schema, ids, options)
+
       result =
         ExAliyunOts.update_row(
           repo.instance,
@@ -593,7 +595,7 @@ defmodule Ecto.Adapters.Tablestore do
 
     options =
       attr_columns
-      |> generate_filter_from_entity([])
+      |> generate_filter_from_entity()
       |> do_generate_filter_options(options)
 
     columns_to_get_opt = Keyword.get(options, :columns_to_get, [])
@@ -624,6 +626,10 @@ defmodule Ecto.Adapters.Tablestore do
 
       Keyword.put(options, :columns_to_get, updated_columns_to_get)
     end
+  end
+
+  defp generate_filter_from_entity(fields) do
+    generate_filter_from_entity(fields, [])
   end
 
   defp generate_filter_from_entity([], []) do
@@ -713,6 +719,10 @@ defmodule Ecto.Adapters.Tablestore do
       column_condition: do_generate_filter(filter_from_entity, :and, column_condition),
       row_existence: RowExistence.expect_exist()
     }
+  end
+
+  defp do_generate_filter_options(filter_from_entity) do
+    do_generate_filter_options(filter_from_entity, [])
   end
 
   defp do_generate_filter_options(nil, options) do
@@ -1769,6 +1779,21 @@ defmodule Ecto.Adapters.Tablestore do
 
   defp splice_list(list1, list2) when is_list(list1) and is_list(list2) do
     List.flatten([list1 | list2])
+  end
+
+  defp may_put_optimistic_lock_into_condition(schema, ids, options) do
+    case Keyword.drop(ids, schema.__schema__(:primary_key)) do
+      [] ->
+        options
+      lock_fields ->
+        condition =
+          lock_fields
+          |> generate_filter_from_entity()
+          |> do_generate_filter_options()
+          |> do_generate_condition(options[:condition])
+
+        Keyword.put(options, :condition, condition)
+    end
   end
 
   ## Storage

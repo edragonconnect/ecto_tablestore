@@ -1163,4 +1163,42 @@ defmodule EctoTablestore.RowTest do
     [{:ok, deleted_user2}] = results[:delete]
     assert deleted_user2.id == "2"
   end
+
+  test "optimistic_lock/3" do
+    order = TestRepo.insert!(%Order{id: "1001", name: "name1"}, condition: condition(:ignore), return_type: :pk)
+
+    valid_change = Order.changeset(:update, order, %{name: "bar"})
+
+    stale_change = Order.changeset(:update, order, %{name: "baz"})
+
+    {:ok, order} = TestRepo.update(valid_change, condition: condition(:ignore))
+
+    assert order.name == "bar" and order.lock_version == 2
+
+    assert_raise Ecto.StaleEntryError, fn ->
+      TestRepo.update(stale_change, condition: condition(:ignore))
+    end
+
+    # since we don't explicitly fetch the "lock_version" field in query,
+    fetched_order = TestRepo.get(Order, [id: order.id, internal_id: order.internal_id], columns_to_get: ["name"])
+
+    # the returned dataset of order struct will use the default value of "lock_version" as 1
+    assert fetched_order.lock_version == 1
+
+    # and this case will make the next update fail when we use `Ecto.Changeset.optimistic_lock/3` in the changeset
+    # once we use the optimistic_lock, please remember append the fresh "version" field in the update operation for
+    # the condition check.
+    stale_change = Order.changeset(:update, fetched_order, %{name: "foo"})
+    assert_raise Ecto.StaleEntryError, fn ->
+      TestRepo.update(stale_change, condition: condition(:ignore))
+    end
+
+    # compare a success case to the previous stale error
+    fetched_order = TestRepo.get(Order, [id: order.id, internal_id: order.internal_id], columns_to_get: ["name", "lock_version"])
+    assert fetched_order.lock_version == 2
+    stale_change = Order.changeset(:update, fetched_order, %{name: "foo"})
+    {:ok, order} = TestRepo.update(stale_change, condition: condition(:ignore))
+    assert order.name == "foo" and order.lock_version == 3
+  end
+
 end
