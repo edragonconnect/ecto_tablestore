@@ -221,7 +221,7 @@ defmodule EctoTablestore.Migration do
   end
 
   @doc """
-  Adds a pre-defined column when creating a secondary index.
+  Adds a column what already be pre-defined column when creating a secondary index.
   """
   defmacro add_column(column) when is_binary(column), do: quote(do: {:column, column})
 

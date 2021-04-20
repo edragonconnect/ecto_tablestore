@@ -4,8 +4,8 @@ defmodule EctoTablestore.Repo.Migrations.Create do
 
   def change do
     create table("migration_search_index_test") do
-      add_pk(:id, :integer, partition_key: true)
-      add_pk(:name, :string)
+      add_pk :id, :integer, partition_key: true
+      add_pk :name, :string
     end
 
     create search_index("migration_search_index_test", "migration_search_index_test_index") do
