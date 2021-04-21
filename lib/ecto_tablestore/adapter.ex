@@ -378,13 +378,13 @@ defmodule Ecto.Adapters.Tablestore do
   end
 
   @impl true
-  def insert_all(repo, schema_meta, header, list, on_conflict, returning, options) do
+  def insert_all(repo, schema_meta, header, list, on_conflict, returning, placeholders, options) do
     IO.puts(
       "insert_all - repo: #{inspect(repo)}, schema_meta: #{inspect(schema_meta)}, header: #{
         inspect(header)
       }, list: #{inspect(list)}, on_conflict: #{inspect(on_conflict)}, returning: #{
         inspect(returning)
-      }, options: #{inspect(options)}\nplease use `batch_write` instead this function"
+      }, placeholders: #{inspect(placeholders)}, options: #{inspect(options)}\nplease use `batch_write` instead this function"
     )
   end
 
@@ -1785,6 +1785,7 @@ defmodule Ecto.Adapters.Tablestore do
     case Keyword.drop(ids, schema.__schema__(:primary_key)) do
       [] ->
         options
+
       lock_fields ->
         condition =
           lock_fields
