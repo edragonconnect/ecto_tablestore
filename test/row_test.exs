@@ -393,185 +393,181 @@ defmodule EctoTablestore.RowTest do
     TestRepo.delete(user, condition: condition(:expect_exist))
   end
 
-  test "repo - get_range" do
-    saved_orders =
-      Enum.map(1..9, fn var ->
-        order = %Order{id: "#{var}", desc: "desc#{var}", num: var, price: 20.5 * var}
+  describe "range" do
+    setup do
+      saved_orders =
+        Enum.map(1..9, fn var ->
+          {:ok, saved_order} =
+            TestRepo.insert(%Order{id: "#{var}", desc: "desc#{var}", num: var, price: 20.5 * var},
+              condition: condition(:ignore),
+              return_type: :pk
+            )
 
-        {:ok, saved_order} =
-          TestRepo.insert(order, condition: condition(:ignore), return_type: :pk)
+          saved_order
+        end)
 
-        saved_order
+      # double A
+      {:ok, order_10_1} =
+        TestRepo.insert(%Order{id: "A", desc: "descA", num: 10, price: 20.5 * 10},
+          condition: condition(:ignore),
+          return_type: :pk
+        )
+
+      {:ok, order_10_2} =
+        TestRepo.insert(%Order{id: "A", desc: "descA", num: 10, price: 20.5 * 10},
+          condition: condition(:ignore),
+          return_type: :pk
+        )
+
+      saved_orders = saved_orders ++ [order_10_1, order_10_2]
+
+      on_exit(fn ->
+        for order <- saved_orders do
+          TestRepo.delete(%Order{id: order.id, internal_id: order.internal_id},
+            condition: condition(:expect_exist)
+          )
+        end
       end)
-
-    start_pks = [{"id", "0a"}, {"internal_id", :inf_min}]
-    end_pks = [{"id", "0b"}, {"internal_id", :inf_max}]
-
-    {orders, next_start_primary_key} = TestRepo.get_range(Order, start_pks, end_pks)
-    assert orders == nil and next_start_primary_key == nil
-
-    start_pks = [{"id", "1"}, {"internal_id", :inf_min}, {"id", "1"}]
-    end_pks = [{"id", "3"}, {"internal_id", :inf_max}, {"id", "3"}]
-    {orders, next_start_primary_key} = TestRepo.get_range(Order, start_pks, end_pks)
-    assert next_start_primary_key == nil
-    assert length(orders) == 3
-
-    start_pks = [{"id", "3"}, {"internal_id", :inf_max}]
-    end_pks = [{"id", "1"}, {"internal_id", :inf_min}]
-
-    {backward_orders, _next_start_primary_key} =
-      TestRepo.get_range(Order, start_pks, end_pks, direction: :backward)
-
-    assert orders == Enum.reverse(backward_orders)
-
-    start_pks = [{"id", "7"}, {"internal_id", :inf_max}]
-    end_pks = [{"id", "4"}, {"internal_id", :inf_min}]
-
-    {orders, next_start_primary_key} =
-      TestRepo.get_range(Order, start_pks, end_pks, limit: 3, direction: :backward)
-
-    assert next_start_primary_key != nil
-    assert length(orders) == 3
-
-    {orders2, next_start_primary_key} =
-      TestRepo.get_range(Order, next_start_primary_key, end_pks, limit: 3, direction: :backward)
-
-    assert next_start_primary_key == nil
-    assert length(orders2) == 1
-
-    for order <- saved_orders do
-      TestRepo.delete(%Order{id: order.id, internal_id: order.internal_id},
-        condition: condition(:expect_exist)
-      )
     end
-  end
 
-  test "repo - stream" do
-    saved_orders =
-      Enum.map(1..9, fn var ->
-        order = %Order{id: "#{var}", desc: "desc#{var}", num: var, price: 20.5 * var}
+    test "repo - get_range/1-2" do
+      assert {nil, nil} = TestRepo.get_range(%Order{id: "0"})
 
-        {:ok, saved_order} =
-          TestRepo.insert(order, condition: condition(:ignore), return_type: :pk)
+      assert {orders, nil} = TestRepo.get_range(%Order{id: "1"})
+      assert length(orders) == 1
 
-        saved_order
-      end)
+      assert {orders, nil} = TestRepo.get_range(%Order{id: "A"})
+      assert length(orders) == 2
 
-    # since it is enumerable, no matched data will return `[]`.
-    orders =
-      %Order{id: "0"}
-      |> TestRepo.stream()
-      |> Enum.to_list()
+      assert {orders, nil} = TestRepo.get_range(Order)
+      assert length(orders) == 11
 
-    assert orders == []
+      assert {backward_orders, nil} = TestRepo.get_range(Order, direction: :backward)
+      assert orders == Enum.reverse(backward_orders)
 
-    orders =
-      %Order{id: "1"}
-      |> TestRepo.stream()
-      |> Enum.to_list()
-
-    assert length(orders) == 1
-
-    orders =
-      Order
-      |> TestRepo.stream()
-      |> Enum.to_list()
-
-    assert length(orders) == 9
-
-    backward_orders =
-      Order
-      |> TestRepo.stream(direction: :backward)
-      |> Enum.to_list()
-
-    assert orders == Enum.reverse(backward_orders)
-
-    take_orders =
-      Order
-      |> TestRepo.stream(limit: 3)
-      |> Enum.take(5)
-
-    assert length(take_orders) == 5
-
-    for order <- saved_orders do
-      TestRepo.delete(%Order{id: order.id, internal_id: order.internal_id},
-        condition: condition(:expect_exist)
-      )
+      assert {limit_orders, next_token} = TestRepo.get_range(Order, limit: 3)
+      assert length(limit_orders) == 3
+      assert is_binary(next_token)
     end
-  end
 
-  test "repo - stream_range" do
-    saved_orders =
-      Enum.map(1..9, fn var ->
-        order = %Order{id: "#{var}", desc: "desc#{var}", num: var, price: 20.5 * var}
+    test "repo - get_range/3-4" do
+      start_pks = [{"id", "0a"}, {"internal_id", :inf_min}]
+      end_pks = [{"id", "0b"}, {"internal_id", :inf_max}]
 
-        {:ok, saved_order} =
-          TestRepo.insert(order, condition: condition(:ignore), return_type: :pk)
+      {orders, next_start_primary_key} = TestRepo.get_range(Order, start_pks, end_pks)
+      assert orders == nil and next_start_primary_key == nil
 
-        saved_order
-      end)
+      start_pks = [{"id", "1"}, {"internal_id", :inf_min}, {"id", "1"}]
+      end_pks = [{"id", "3"}, {"internal_id", :inf_max}, {"id", "3"}]
+      assert {orders, nil} = TestRepo.get_range(Order, start_pks, end_pks)
+      assert length(orders) == 3
 
-    start_pks = [{"id", "0a"}, {"internal_id", :inf_min}]
-    end_pks = [{"id", "0b"}, {"internal_id", :inf_max}]
+      start_pks = [{"id", "3"}, {"internal_id", :inf_max}]
+      end_pks = [{"id", "1"}, {"internal_id", :inf_min}]
 
-    # since it is enumerable, no matched data will return `[]`.
-    orders =
-      Order
-      |> TestRepo.stream_range(start_pks, end_pks, direction: :forward)
-      |> Enum.to_list()
+      {backward_orders, _next_start_primary_key} =
+        TestRepo.get_range(Order, start_pks, end_pks, direction: :backward)
 
-    assert orders == []
+      assert orders == Enum.reverse(backward_orders)
 
-    start_pks = [{"id", "1"}, {"internal_id", :inf_min}]
-    end_pks = [{"id", "3"}, {"internal_id", :inf_max}]
+      start_pks = [{"id", "7"}, {"internal_id", :inf_max}]
+      end_pks = [{"id", "4"}, {"internal_id", :inf_min}]
 
-    orders =
-      Order
-      |> TestRepo.stream_range(start_pks, end_pks, direction: :forward, limit: 1)
-      |> Enum.to_list()
+      {orders, next_start_primary_key} =
+        TestRepo.get_range(Order, start_pks, end_pks, limit: 3, direction: :backward)
 
-    assert length(orders) == 3
+      assert next_start_primary_key != nil
+      assert length(orders) == 3
 
-    # start/end pks with an invalid `direction`
-    [{:error, error}] =
-      Order
-      |> TestRepo.stream_range(start_pks, end_pks, direction: :backward)
-      |> Enum.to_list()
+      {orders2, next_start_primary_key} =
+        TestRepo.get_range(Order, next_start_primary_key, end_pks, limit: 3, direction: :backward)
 
-    assert error.code == "OTSParameterInvalid" and
-             error.message == "Begin key must more than end key in BACKWARD"
+      assert next_start_primary_key == nil
+      assert length(orders2) == 1
+    end
 
-    start_pks = [{"id", "3"}, {"internal_id", :inf_max}]
-    end_pks = [{"id", "1"}, {"internal_id", :inf_min}]
+    test "repo - stream" do
+      # since it is enumerable, no matched data will return `[]`.
+      assert [] =
+               %Order{id: "0"}
+               |> TestRepo.stream()
+               |> Enum.to_list()
 
-    backward_orders =
-      Order
-      |> TestRepo.stream_range(start_pks, end_pks, direction: :backward)
-      |> Enum.to_list()
+      assert 1 =
+               %Order{id: "1"}
+               |> TestRepo.stream()
+               |> Enum.count()
 
-    assert orders == Enum.reverse(backward_orders)
+      assert 2 =
+               %Order{id: "A"}
+               |> TestRepo.stream()
+               |> Enum.count()
 
-    start_pks = [{"id", "1"}, {"internal_id", :inf_min}]
-    end_pks = [{"id", "9"}, {"internal_id", :inf_max}]
+      orders = TestRepo.stream(Order) |> Enum.to_list()
+      assert 11 = Enum.count(orders)
 
-    all_orders =
-      Order
-      |> TestRepo.stream_range(start_pks, end_pks, limit: 3)
-      |> Enum.to_list()
+      assert ^orders =
+               Order
+               |> TestRepo.stream(direction: :backward)
+               |> Enum.reverse()
 
-    assert length(all_orders) == 9
+      assert 5 =
+               Order
+               |> TestRepo.stream(limit: 3)
+               |> Enum.take(5)
+               |> Enum.count()
+    end
 
-    take_orders =
-      Order
-      |> TestRepo.stream_range(start_pks, end_pks, limit: 3)
-      |> Enum.take(5)
+    test "repo - stream_range" do
+      start_pks = [{"id", "0a"}, {"internal_id", :inf_min}]
+      end_pks = [{"id", "0b"}, {"internal_id", :inf_max}]
 
-    assert length(take_orders) == 5
+      # since it is enumerable, no matched data will return `[]`.
+      assert [] =
+               Order
+               |> TestRepo.stream_range(start_pks, end_pks, direction: :forward)
+               |> Enum.to_list()
 
-    for order <- saved_orders do
-      TestRepo.delete(%Order{id: order.id, internal_id: order.internal_id},
-        condition: condition(:expect_exist)
-      )
+      start_pks = [{"id", "1"}, {"internal_id", :inf_min}]
+      end_pks = [{"id", "3"}, {"internal_id", :inf_max}]
+
+      orders =
+        Order
+        |> TestRepo.stream_range(start_pks, end_pks, direction: :forward, limit: 1)
+        |> Enum.to_list()
+
+      assert length(orders) == 3
+
+      # start/end pks with an invalid `direction`
+      [{:error, error}] =
+        Order
+        |> TestRepo.stream_range(start_pks, end_pks, direction: :backward)
+        |> Enum.to_list()
+
+      assert error.code == "OTSParameterInvalid" and
+               error.message == "Begin key must more than end key in BACKWARD"
+
+      start_pks = [{"id", "3"}, {"internal_id", :inf_max}]
+      end_pks = [{"id", "1"}, {"internal_id", :inf_min}]
+
+      assert ^orders =
+               Order
+               |> TestRepo.stream_range(start_pks, end_pks, direction: :backward)
+               |> Enum.reverse()
+
+      start_pks = [{"id", "1"}, {"internal_id", :inf_min}]
+      end_pks = [{"id", "9"}, {"internal_id", :inf_max}]
+
+      assert 9 =
+               Order
+               |> TestRepo.stream_range(start_pks, end_pks, limit: 3)
+               |> Enum.count()
+
+      assert 5 =
+               Order
+               |> TestRepo.stream_range(start_pks, end_pks, limit: 3)
+               |> Enum.take(5)
+               |> Enum.count()
     end
   end
 
@@ -1165,7 +1161,11 @@ defmodule EctoTablestore.RowTest do
   end
 
   test "optimistic_lock/3" do
-    order = TestRepo.insert!(%Order{id: "1001", name: "name1"}, condition: condition(:ignore), return_type: :pk)
+    order =
+      TestRepo.insert!(%Order{id: "1001", name: "name1"},
+        condition: condition(:ignore),
+        return_type: :pk
+      )
 
     valid_change = Order.changeset(:update, order, %{name: "bar"})
 
@@ -1180,7 +1180,8 @@ defmodule EctoTablestore.RowTest do
     end
 
     # since we don't explicitly fetch the "lock_version" field in query,
-    fetched_order = TestRepo.get(Order, [id: order.id, internal_id: order.internal_id], columns_to_get: ["name"])
+    fetched_order =
+      TestRepo.get(Order, [id: order.id, internal_id: order.internal_id], columns_to_get: ["name"])
 
     # the returned dataset of order struct will use the default value of "lock_version" as 1
     assert fetched_order.lock_version == 1
@@ -1189,17 +1190,23 @@ defmodule EctoTablestore.RowTest do
     # once we use the optimistic_lock, please remember append the fresh "version" field in the update operation for
     # the condition check.
     stale_change = Order.changeset(:update, fetched_order, %{name: "foo"})
+
     assert_raise Ecto.StaleEntryError, fn ->
       TestRepo.update(stale_change, condition: condition(:ignore))
     end
 
     # compare a success case to the previous stale error
-    fetched_order = TestRepo.get(Order, [id: order.id, internal_id: order.internal_id], columns_to_get: ["name", "lock_version"])
+    fetched_order =
+      TestRepo.get(Order, [id: order.id, internal_id: order.internal_id],
+        columns_to_get: ["name", "lock_version"]
+      )
+
     assert fetched_order.lock_version == 2
     valid_change = Order.changeset(:update, fetched_order, %{name: "foo"})
 
-    {:ok, order} = TestRepo.update(valid_change, condition: condition(:expect_exist, "name" == "bar"))
+    {:ok, order} =
+      TestRepo.update(valid_change, condition: condition(:expect_exist, "name" == "bar"))
+
     assert order.name == "foo" and order.lock_version == 3
   end
-
 end
