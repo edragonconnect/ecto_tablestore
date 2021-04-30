@@ -70,6 +70,15 @@ defmodule Ecto.Adapters.Tablestore do
         Tablestore.get(get_dynamic_repo(), schema, ids, options)
       end
 
+      @spec get_range(schema :: Ecto.Schema.t(), options :: Keyword.t()) ::
+              {nil, nil} | {list, nil} | {list, binary()} | {:error, term()}
+      def get_range(schema, options \\ [direction: :forward]) do
+        {schema, start_primary_keys, end_primary_keys} =
+          Tablestore.get_range_params_by_schema(schema, options)
+
+        get_range(schema, start_primary_keys, end_primary_keys, options)
+      end
+
       @spec get_range(
               schema :: Ecto.Schema.t(),
               start_primary_keys :: list | binary(),
@@ -93,28 +102,8 @@ defmodule Ecto.Adapters.Tablestore do
 
       @spec stream(schema :: Ecto.Schema.t(), options :: Keyword.t()) :: Enumerable.t()
       def stream(schema, options \\ [direction: :forward]) do
-        {schema, primary_keys} =
-          if is_atom(schema) do
-            {schema, schema |> struct() |> Ecto.primary_key()}
-          else
-            {schema.__struct__, Ecto.primary_key(schema)}
-          end
-
-        fun = fn fill ->
-          fn
-            {k, nil} -> {k, fill}
-            kv -> kv
-          end
-        end
-
-        {start_primary_keys, end_primary_keys} =
-          case Keyword.get(options, :direction, :forward) do
-            :forward ->
-              {Enum.map(primary_keys, fun.(:inf_min)), Enum.map(primary_keys, fun.(:inf_max))}
-
-            _ ->
-              {Enum.map(primary_keys, fun.(:inf_max)), Enum.map(primary_keys, fun.(:inf_min))}
-          end
+        {schema, start_primary_keys, end_primary_keys} =
+          Tablestore.get_range_params_by_schema(schema, options)
 
         stream_range(schema, start_primary_keys, end_primary_keys, options)
       end
@@ -155,12 +144,7 @@ defmodule Ecto.Adapters.Tablestore do
                    | (schema_entity :: Ecto.Schema.t())
                    | {[schema_entity :: Ecto.Schema.t()], options :: Keyword.t()}
                  ]
-      def batch_get(gets) do
-        Tablestore.batch_get(
-          get_dynamic_repo(),
-          gets
-        )
-      end
+      def batch_get(gets), do: Tablestore.batch_get(get_dynamic_repo(), gets)
 
       ## Addition
 
@@ -196,11 +180,7 @@ defmodule Ecto.Adapters.Tablestore do
                      }
                  ]
       def batch_write(writes, options \\ []) do
-        Tablestore.batch_write(
-          get_dynamic_repo(),
-          writes,
-          options
-        )
+        Tablestore.batch_write(get_dynamic_repo(), writes, options)
       end
     end
   end
@@ -509,6 +489,34 @@ defmodule Ecto.Adapters.Tablestore do
 
   defp transfer_rows_by_schema(rows, schema, _default) when is_list(rows) do
     Enum.map(rows, &row_to_schema(schema, &1))
+  end
+
+  @doc false
+  def get_range_params_by_schema(schema, options) do
+    {schema, primary_keys} =
+      if is_atom(schema) do
+        {schema, schema |> struct() |> Ecto.primary_key()}
+      else
+        {schema.__struct__, Ecto.primary_key(schema)}
+      end
+
+    fun = fn fill ->
+      fn
+        {k, nil} -> {k, fill}
+        kv -> kv
+      end
+    end
+
+    {start_primary_keys, end_primary_keys} =
+      case Keyword.get(options, :direction, :forward) do
+        :forward ->
+          {Enum.map(primary_keys, fun.(:inf_min)), Enum.map(primary_keys, fun.(:inf_max))}
+
+        _ ->
+          {Enum.map(primary_keys, fun.(:inf_max)), Enum.map(primary_keys, fun.(:inf_min))}
+      end
+
+    {schema, start_primary_keys, end_primary_keys}
   end
 
   @doc false
