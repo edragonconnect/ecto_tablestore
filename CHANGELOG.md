@@ -2,7 +2,7 @@
 
 ## v0.11.0 (2021-05-14)
 
-* [Need migration before upgrade] When define the type of partition key as an auto increment integer, we
+* [Need to migrate before upgrade] When define the type of partition key as an auto increment integer, we
   created a `"#{table_name}_seq"` table as an internal sequence to each `"#{table_name}"` table,
   but now all sequence managed into the `"ecto_tablestore_default_seq"`, see
   [#16](https://github.com/edragonconnect/ecto_tablestore/pull/16).
@@ -12,7 +12,9 @@
   [#28](https://github.com/edragonconnect/ecto_tablestore/pull/28).
 * Support changeset optimistic_lock in update, see commit
   [66f6823](https://github.com/edragonconnect/ecto_tablestore/commit/66f6823704f14940e97f8195e63ad2c29b77ecea).
-* Fix update with `:increment` operation return an unexpected result when schema has multi integer fields defined,
+* [Need to check before upgrade] Fix update with `:increment` operation return an unexpected result when
+  schema has multi integer fields defined, and require to explicitly add column name(s) which are related in the atomic increment
+  operation into the `:returning` option of `Repo.update/2`,
   see [#19](https://github.com/edragonconnect/ecto_tablestore/pull/19).
 * Fix to properly handle the stale error case when insert,
   see [#20](https://github.com/edragonconnect/ecto_tablestore/pull/20).

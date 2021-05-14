@@ -8,7 +8,10 @@
 
 ## Notice
 
-If you have used this library and upgrade it into `0.11.0` or later, there is a breaking change in `0.11.0` , so we need to make a data migration before use, please see this [changelog](https://github.com/edragonconnect/ecto_tablestore/blob/master/CHANGELOG.md) for details, if you are new to use `0.11.0` or later, please ignore this comment.
+If you have used this library and upgrade it into `0.11.0` or later, there are some breaking changes in `0.11.0`,
+you may need to make a data migration before upgrade and one use case check, please see this
+[changelog](https://github.com/edragonconnect/ecto_tablestore/blob/master/CHANGELOG.md)
+for details, if you are new to use `0.11.0` or later, please ignore this comment.
 
 ## Introduce
 
