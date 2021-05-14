@@ -2,9 +2,9 @@ defmodule EctoTablestore.Repo do
   @moduledoc ~S"""
   Defines a repository for Tablestore.
 
-  A repository maps to an underlying data store, controlled by `Ecto.Adapters.Tablestore` adapter.
+  A repository maps to an underlying data store, controlled by Ecto.Adapters.Tablestore adapter.
 
-  When used, the repository expects the `:otp_app` option, and uses `Ecto.Adapters.Tablestore` by
+  When used, the repository expects the `:otp_app` option, and uses Ecto.Adapters.Tablestore by
   default.  The `:otp_app` should point to an OTP application that has repository configuration.
   For example, the repository:
 
