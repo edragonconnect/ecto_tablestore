@@ -3,8 +3,8 @@
 ## v0.11.0 (2021-05-14)
 
 * [Need to migrate before upgrade] When define the type of partition key as an auto increment integer, we
-  created a `"#{table_name}_seq"` table as an internal sequence to each `"#{table_name}"` table,
-  but now all sequence managed into the `"ecto_tablestore_default_seq"`, see
+  created a `"#{table_name}_seq"` table as an internal sequence to the `"#{table_name}"` table,
+  but now all sequence(s) managed into the `"ecto_tablestore_default_seq"` table, see
   [#16](https://github.com/edragonconnect/ecto_tablestore/pull/16).
 * Add `Repo.stream_search/3`, see [#17](https://github.com/edragonconnect/ecto_tablestore/pull/16).
 * Add `Repo.stream/2`, see [#21](https://github.com/edragonconnect/ecto_tablestore/pull/21).
