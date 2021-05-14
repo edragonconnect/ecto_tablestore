@@ -6,7 +6,7 @@ defmodule EctoTablestore.MixProject do
   def project do
     [
       app: :ecto_tablestore,
-      version: "0.10.1",
+      version: "0.11.0",
       elixir: "~> 1.7",
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
@@ -42,7 +42,7 @@ defmodule EctoTablestore.MixProject do
   defp package do
     [
       files: ["lib", "mix.exs", "README.md", "LICENSE.md"],
-      maintainers: ["Xin Zou"],
+      maintainers: ["Kevin Pan", "Xin Zou"],
       licenses: ["MIT"],
       links: %{"GitHub" => @source_url}
     ]
@@ -53,7 +53,8 @@ defmodule EctoTablestore.MixProject do
       main: "readme",
       formatter_opts: [gfm: true],
       extras: [
-        "README.md"
+        "README.md",
+        "CHANGELOG.md"
       ]
     ]
   end

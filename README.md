@@ -6,6 +6,11 @@
 [![License](https://img.shields.io/hexpm/l/ecto_tablestore.svg)](https://github.com/edragonconnect/ecto_tablestore/blob/master/LICENSE.md)
 [![Last Updated](https://img.shields.io/github/last-commit/edragonconnect/ecto_tablestore.svg)](https://github.com/edragonconnect/ecto_tablestore/commits/master)
 
+## Notice
+
+If you have used this library and upgrade it into `0.11.0` or later, there is a breaking change in `0.11.0` , so we need to make a data migration before use, please see this [changelog](https://github.com/edragonconnect/ecto_tablestore/blob/master/CHANGELOG.md) for details, if you are new to use `0.11.0` or later, please ignore this comment.
+
+## Introduce
 
 Ecto 3.x adapter for [Alibaba Tablestore](https://www.alibabacloud.com/product/table-store), this
 is built on top of [`ex_aliyun_ots`](https://hex.pm/packages/ex_aliyun_ots) to implement
@@ -14,20 +19,27 @@ is built on top of [`ex_aliyun_ots`](https://hex.pm/packages/ex_aliyun_ots) to i
 Supported features:
 
 * Compatible `Ecto.Repo` API.
+
 * Support schema's `timestamps()` macro, make `inserted_at` and `updated_at` as an integer UTC
   timestamps.
+
 * Support `:map` | `{:map, _}` | `:array` | `{:array, _}` field type, use Jason to encode the
   field value into :string when save, use Jason to simply decode the field value into `:map` |
   `:array` when read, the :keys option of Jason's decode always use :string.
+
 * Support the partition key is autoincrementing, use the sequence feature provided by
   `ex_aliyun_ots`.
+
 * Automatically converts the returned original row results into corresponding schema(s).
+
 * Automatically generate the provided attribute-column field(s) of schema entity into the `filter`
   expression option of `GetRow` (see `c:EctoTablestore.Repo.one/2`) and `BatchGet` (see
   `c:EctoTablestore.Repo.batch_get/1`) use `entity_full_match: true`, by default this option is
   `false`.
+
 * Automatically generate the provided attribute-column field(s) of schema entity into the
   `condition` expression option of `BatchWrite`.
+
 * Automatically map changeset's attribute-column field(s) into `UpdateRow` operation when call
   `c:EctoTablestore.Repo.update/2`:
 
@@ -36,6 +48,7 @@ Supported features:
   * Set any attribute(s) of schema changeset as `nil` will `:delete_all` that attribute-column
     field(s);
   * Set existed attribute(s) in schema changeset will `:put` to save.
+
 * Support embedded schema, please refer full functions of `Ecto.Schema` for details.
 
 Implement Tablestore row related functions in `EctoTablestore.Repo` module, please see
@@ -78,7 +91,6 @@ config :ex_aliyun_ots,
 
 config :my_otp_app, EctoTablestore.MyRepo,
   instance: MyInstance
-
 ```
 
 2, Create the `EctoTablestore.MyRepo` module mentioned earlier in the configuration, use
@@ -134,10 +146,10 @@ end
 
 Options:
 
-  * The `primary_key` as true is required;
-  * The `autogenerate` as true is required;
-  * The `salt`, `min_len` and `alphabet` of hashids options are used for configuration options from
-    `Hashids.new/1`.
+* The `primary_key` as true is required;
+* The `autogenerate` as true is required;
+* The `salt`, `min_len` and `alphabet` of hashids options are used for configuration options from
+  `Hashids.new/1`.
 
 Notice: the `salt`, `min_len` and `alphabet` of hashids options also can be configured in the `:ecto_tablestore`
 config for each defined schema, for example:
@@ -173,8 +185,8 @@ end
 
 Options:
 
-  * The `partition_key` option as true is required;
-  * The `auto_increment` option is ignored when the partition key is `:hashids` type.
+* The `partition_key` option as true is required;
+* The `auto_increment` option is ignored when the partition key is `:hashids` type.
 
 ## References
 
