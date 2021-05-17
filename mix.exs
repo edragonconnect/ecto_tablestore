@@ -41,7 +41,7 @@ defmodule EctoTablestore.MixProject do
 
   defp package do
     [
-      files: ["lib", "mix.exs", "README.md", "LICENSE.md"],
+      files: ["lib", "mix.exs", "README.md", "LICENSE.md", ".formatter.exs"],
       maintainers: ["Kevin Pan", "Xin Zou"],
       licenses: ["MIT"],
       links: %{"GitHub" => @source_url}
