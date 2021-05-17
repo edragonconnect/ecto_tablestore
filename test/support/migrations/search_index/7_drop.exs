@@ -4,6 +4,7 @@ defmodule EctoTablestore.Repo.Migrations.DropSearchIndex do
 
   def change do
     drop search_index("migration_search_index_test", "migration_search_index_test_index")
+    drop_if_exists search_index("migration_search_index_test", "migration_search_index_test_index")
     drop table("migration_search_index_test")
   end
 end
