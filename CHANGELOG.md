@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.11.1 (2021-05-17)
+
+* Fix format error to put the `.formatter.exs` file into package.
+
 ## v0.11.0 (2021-05-14)
 
 * [Need to migrate before upgrade] When define the type of partition key as an auto increment integer, we
