@@ -93,6 +93,7 @@ defmodule EctoTablestore.Migration do
           search_index: 3,
           create: 2,
           drop: 1,
+          drop_if_exists: 1,
           add: 2,
           add: 3,
           add_pk: 1,
@@ -868,6 +869,20 @@ defmodule EctoTablestore.Migration do
   end
 
   @doc """
+  Drops a table or index if it exists.
+
+  Does not raise an error if the specified table or index does not exist.
+
+  ## Examples
+
+      drop_if_exists table("posts")
+      drop_if_exists secondary_index("posts", "posts_owner")
+      drop_if_exists search_index("posts", "posts_index")
+
+  """
+  def drop_if_exists(obj), do: drop(obj, true)
+
+  @doc """
   Drops one of the following:
 
     * a table
@@ -881,7 +896,9 @@ defmodule EctoTablestore.Migration do
       drop search_index("posts", "posts_index")
 
   """
-  def drop(%Table{} = table) do
+  def drop(obj), do: drop(obj, false)
+
+  def drop(%Table{} = table, if_exists) do
     Runner.push_command(fn repo ->
       table_name = get_table_name(table, repo.config())
       table_name_str = IO.ANSI.format([:green, table_name, :reset])
@@ -896,13 +913,18 @@ defmodule EctoTablestore.Migration do
           Logger.info(fn -> ">>>> dropping table: #{table_name_str} result: #{result_str}" end)
           :ok
 
+        {:error, %{code: "OTSObjectNotExist"}} when if_exists ->
+          result_str = IO.ANSI.format([:green, "not exists", :reset])
+          Logger.info(fn -> ">>>> dropping table: #{table_name_str} result: #{result_str}" end)
+          :ok
+
         {:error, error} ->
           raise MigrationError, "dropping table: #{table_name} error: " <> error.message
       end
     end)
   end
 
-  def drop(%SecondaryIndex{} = secondary_index) do
+  def drop(%SecondaryIndex{} = secondary_index, if_exists) do
     Runner.push_command(fn repo ->
       {table_name, index_name} = get_index_name(secondary_index, repo.config())
       table_name_str = IO.ANSI.format([:green, table_name, :reset])
@@ -925,6 +947,17 @@ defmodule EctoTablestore.Migration do
 
           :ok
 
+        {:error, %{code: "OTSObjectNotExist"}} when if_exists ->
+          result_str = IO.ANSI.format([:green, "not exists", :reset])
+
+          Logger.info(fn ->
+            ">>>> dropping secondary_index table: #{table_name_str}, index: #{index_name_str} result: #{
+              result_str
+            }"
+          end)
+
+          :ok
+
         {:error, error} ->
           raise MigrationError,
                 "dropping secondary_index index: #{index_name} for table: #{table_name} error: " <>
@@ -933,7 +966,7 @@ defmodule EctoTablestore.Migration do
     end)
   end
 
-  def drop(%SearchIndex{} = search_index) do
+  def drop(%SearchIndex{} = search_index, if_exists) do
     Runner.push_command(fn repo ->
       {table_name, index_name} = get_index_name(search_index, repo.config())
       table_name_str = IO.ANSI.format([:green, table_name, :reset])
@@ -947,6 +980,17 @@ defmodule EctoTablestore.Migration do
       case ExAliyunOts.delete_search_index(repo_meta.instance, table_name, index_name) do
         {:ok, _} ->
           result_str = IO.ANSI.format([:green, "ok", :reset])
+
+          Logger.info(fn ->
+            ">>>> dropping search index table: #{table_name_str}, index: #{index_name_str} result: #{
+              result_str
+            }"
+          end)
+
+          :ok
+
+        {:error, %{code: "OTSObjectNotExist"}} when if_exists ->
+          result_str = IO.ANSI.format([:green, "not exists", :reset])
 
           Logger.info(fn ->
             ">>>> dropping search index table: #{table_name_str}, index: #{index_name_str} result: #{

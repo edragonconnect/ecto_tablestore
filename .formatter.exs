@@ -2,6 +2,7 @@
 locals_without_parens = [
   create: 2,
   drop: 1,
+  drop_if_exists: 1,
   add: 2,
   add: 3,
   add_pk: 1,
