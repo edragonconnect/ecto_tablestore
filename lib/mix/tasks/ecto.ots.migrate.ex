@@ -16,7 +16,8 @@ defmodule Mix.Tasks.Ecto.Ots.Migrate do
     step: :integer,
     to: :integer,
     prefix: :string,
-    repo: [:keep, :string]
+    repo: [:keep, :string],
+    migrations_path: :string
   ]
 
   @moduledoc """
