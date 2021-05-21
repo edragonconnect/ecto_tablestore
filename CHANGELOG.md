@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.11.2 (2021-05-21)
+
+* Add `drop_if_exists/1` function for migration.
+* Add `--migrations_path` option to `mix ecto.ots.migrate`.
+
 ## v0.11.1 (2021-05-17)
 
 * Fix format error to put the `.formatter.exs` file into package.
