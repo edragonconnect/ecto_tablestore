@@ -958,6 +958,17 @@ defmodule EctoTablestore.Migration do
 
           :ok
 
+        {:error, %{code: "OTSParameterInvalid", message: "Index does not exist" <> _}} when if_exists ->
+          result_str = IO.ANSI.format([:green, "not exists", :reset])
+
+          Logger.info(fn ->
+            ">>>> dropping secondary_index table: #{table_name_str}, index: #{index_name_str} result: #{
+              result_str
+            }"
+          end)
+
+          :ok
+
         {:error, error} ->
           raise MigrationError,
                 "dropping secondary_index index: #{index_name} for table: #{table_name} error: " <>

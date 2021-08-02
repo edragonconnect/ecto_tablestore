@@ -19,7 +19,6 @@ defmodule EctoTablestore.MigrationTest do
 
   setup_all do
     TestHelper.setup_all()
-    cleanup_tables()
     on_exit(&cleanup_tables/0)
   end
 
