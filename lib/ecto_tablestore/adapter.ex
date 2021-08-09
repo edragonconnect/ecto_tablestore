@@ -1404,6 +1404,7 @@ defmodule Ecto.Adapters.Tablestore do
     end
   end
 
+  @doc false
   def autogen_fields(schema) do
     case schema.__schema__(:autogenerate) do
       [{autogen_fields, {m, f, a}}] ->
@@ -1415,6 +1416,7 @@ defmodule Ecto.Adapters.Tablestore do
     end
   end
 
+  @doc false
   def autoupdate_fields(schema) do
     case schema.__schema__(:autoupdate) do
       [{autoupdate_fields, {m, f, a}}] ->
