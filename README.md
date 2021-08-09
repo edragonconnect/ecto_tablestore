@@ -37,11 +37,12 @@ Supported features:
 
 * Automatically generate the provided attribute-column field(s) of schema entity into the `filter`
   expression option of `GetRow` (see `c:EctoTablestore.Repo.one/2`) and `BatchGet` (see
-  `c:EctoTablestore.Repo.batch_get/1`) use `entity_full_match: true`, by default this option is
+  `c:EctoTablestore.Repo.batch_get/1`) when use `entity_full_match: true`, by default this option is
   `false`.
 
 * Automatically generate the provided attribute-column field(s) of schema entity into the
-  `condition` expression option of `BatchWrite`.
+  `condition` expression option of `BatchWrite` (see `c:EctoTablestore.Repo.batch_write/2`) when
+  use `entity_full_match: true`, by default this option is `false`.
 
 * Automatically map changeset's attribute-column field(s) into `UpdateRow` operation when call
   `c:EctoTablestore.Repo.update/2`:

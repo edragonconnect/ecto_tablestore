@@ -273,8 +273,8 @@ defmodule EctoTablestore.Repo do
                  ]
 
   @doc """
-  Batch write several rows of data from one or more tables, this batch request put multiple
-  put_row/delete_row/update_row in one request from client's perspective.
+  Batch write several rows of data from one or more tables, this batch request puts multiple
+  PutRow/DeleteRow/UpdateRow operations in one request from client's perspective.
 
   After execute each operation in servers, return results independently and independently consumes
   capacity units.
@@ -292,21 +292,46 @@ defmodule EctoTablestore.Repo do
   `ExAliyunOts.put_row/5`, `ExAliyunOts.delete_row/4` and `ExAliyunOts.update_row/4`, but
   `transaction_id` option is using in the options of `c:EctoTablestore.Repo.batch_write/2`.
 
+  By default, require to explicitly set the `:condition` option in each operation, excepts that
+  if a table defined an auto increment primary key(aka non-partitioned primary key) which is processed in the server side,
+  the server logic MUST use `condition: condition(:ignore)`, in this case, this library internally forces to use
+  `condition: condition(:ignore)`, so we can omit the `:condition` option in the PutRow operation of a batch write.
+
+  If we set `entity_full_match: true` there will use the whole provided attribute-column field(s) of
+  schema entity into the `column_condition` of condition filter, and always use `row_existence: :EXPECT_EXIST`,
+  by default the `entity_full_match` option is `false`.
+
+  If put a row with an auto increment primary key, meanwhile set `entity_full_match: true`, the `entity_full_match: true`
+  option is no effect, this library internally forces to use `condition: condition(:ignore)`.
+
       batch_write([
         delete: [
-          schema_entity_1,
-          schema_entity_2
+          {schema_entity_1, condition: condition(:ignore)}
+          {schema_entity_2, condition: condition(:expect_exist)}
         ],
         put: [
-          {%Schema2{}, condition: condition(:ignore)},
           {%Schema1{}, condition: condition(:expect_not_exist)},
+          {%Schema2{}, condition: condition(:ignore)},
+          {%Schema3WithAutoIncrementPK{}, return_type: :pk},
           {changeset_schema_1, condition: condition(:ignore)}
         ],
         update: [
           {changeset_schema_1, return_type: :pk},
-          {changeset_schema_2}
+          {changeset_schema_2, entity_full_match: true}
         ]
       ])
+
+  Use `transaction_id` option:
+
+      batch_write(
+        [
+          delete: [...],
+          put: [...],
+          update: [...]
+        ],
+        transaction_id: "..."
+      )
+
   """
   @callback batch_write(writes, options) :: {:ok, Keyword.t()} | {:error, term()}
             when writes: [
@@ -341,18 +366,24 @@ defmodule EctoTablestore.Repo do
   @doc """
   Inserts a struct defined via EctoTablestore.Schema or a changeset.
 
+  If a table defined an auto increment primary key which is processed in the server side, the server logic
+  MUST use `condition(:ignore)`, in this case, this library internally forces to use `condition(:ignore)` to `:condition`
+  option, so here we can omit the `:condition` option when insert a row.
+
   ## Options
 
-    * `:condition`, this option is required, whether to add conditional judgment before date insert.
+    * `:condition`, this option is required excepts that the table defined an auto increment primary key,
+      whether to add conditional judgment before date insert.
 
-      Two kinds of insert condition types as below:
+      1. As `condition(:ignore)` means DO NOT do any condition validation before insert, whether the row exists or not,
+         both of the insert results will be success, if the schema non-partitioned primary key is auto increment,
+         we can only use `condition(:ignore)` option.
+      2. As `condition(:expect_not_exist)` means expect the primary key(s) are NOT existed before insert, if the row is
+         existed, the insert result will be fail, if the row is not existed, the insert result will be success.
+      3. As `condition(:expect_exist)` means overwrite the whole existed row to the primary key(s), if the row is existed,
+         the insert result will be success, if the row is not existed, the insert result will be fail.
 
-      As `condition(:ignore)` means DO NOT do any condition validation before insert, if the schema
-      non-partitioned primary key is auto increment, we can only use `condition(:ignore)` option.
-
-      As `condition(:expect_not_exist)` means the primary key(s) are NOT existed before insert.  *
-      `:transaction_id`, insert under local transaction in a partition key.
-
+    * `:transaction_id`, insert under local transaction in a partition key.
   """
   @callback insert(schema_or_changeset, options) :: {:ok, schema} | {:error, term()}
 
@@ -364,16 +395,20 @@ defmodule EctoTablestore.Repo do
     * `:condition`, this option is required, whether to add conditional judgment before data
       delete.
 
-    Two kinds of update condition types as below:
+        1. As `condition(:expect_exist)` means the primary key(s) can match a row to delete, if the row is existed, 
+           the delete result will be success, if the row is not existed, the delete result will be fail.
 
-      As `condition(:expect_exist)` means the primary key(s) can match a row to delete, we also can add
-      some compare expressions for the attribute columns, e.g.
+             We also can add some compare expressions for the attribute columns, e.g:
 
-        1. condition(:expect_exist, "attr1" == value1 and "attr2" > 1)
-        2. condition(:expect_exist, "attr1" != value1)
-        3. condition(:expect_exist, "attr1" > 100 or "attr2" < 1000)
+               condition(:expect_exist, "attr1" == value1 and "attr2" > 1)
+               condition(:expect_exist, "attr1" != value1)
+               condition(:expect_exist, "attr1" > 100 or "attr2" < 1000)
 
-      As `condition(:ignore)` means DO NOT do any condition validation before delete.
+        2. As `condition(:ignore)` means DO NOT do any condition validation before delete, whether the row exists or not,
+           both of the delete results will be success.
+
+        3. As `condition(:expect_not_exist)` means expect the primary key(s) are NOT existed before delete, if the row
+           is existed, the delete result will be fail, if the row is not existed, the delete result will be success.
 
     * `:transaction_id`, delete under local transaction in a partition key.
     * `:stale_error_field` - The field where stale errors will be added in the returning
@@ -391,16 +426,20 @@ defmodule EctoTablestore.Repo do
     * `:condition`, this option is required, whether to add conditional judgment before data
       update.
 
-      Two kinds of update condition types as below:
+      1. As `condition(:expect_exist)` means the primary key(s) can match a row to update, if the row is existed,
+         the update result will be success, if the row is not existed, the update result will be fail.
 
-      As `condition(:expect_exist)` means the primary key(s) can match a row to update, we also can add
-      some compare expressions for the attribute columns, e.g.
+           We also can add some compare expressions for the attribute columns, e.g:
 
-        1. condition(:expect_exist, "attr1" == value1 and "attr2" > 1)
-        2. condition(:expect_exist, "attr1" != value1)
-        3. condition(:expect_exist, "attr1" > 100 or "attr2" < 1000)
+             condition(:expect_exist, "attr1" == value1 and "attr2" > 1)
+             condition(:expect_exist, "attr1" != value1)
+             condition(:expect_exist, "attr1" > 100 or "attr2" < 1000)
 
-      As `condition(:ignore)` means DO NOT do any condition validation before update.
+      2. As `condition(:ignore)` means DO NOT do any condition validation before update, whether the row exists or not,
+         both of the update results will be success.
+
+      3. As `condition(:expect_not_exist)` means expect the primary key(s) are NOT existed before update, if the row
+         is existed, the update will be fail, if the row is not existed, the update result will be success.
 
     * `:transaction_id`, update under local transaction in a partition key.
     * `:stale_error_field` - The field where stale errors will be added in the returning

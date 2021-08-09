@@ -87,11 +87,11 @@ defmodule EctoTablestore.HashidsTest do
 
     writes = [
       delete: [
-        saved_p0,
+        {saved_p0, entity_full_match: true},
         {Post, [keyid: saved_p1.keyid], condition: condition(:ignore)}
       ],
       update: [
-        {changeset_post2, return_type: :pk}
+        {changeset_post2, entity_full_match: true, return_type: :pk}
       ],
       put: [
         {p3, condition: condition(:expect_not_exist), return_type: :pk}

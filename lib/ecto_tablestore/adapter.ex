@@ -54,13 +54,7 @@ defmodule Ecto.Adapters.Tablestore do
       @spec one(entity :: Ecto.Schema.t(), options :: Keyword.t()) ::
               Ecto.Schema.t() | {:error, term()} | nil
       def one(%{__meta__: meta} = entity, options \\ []) do
-        options =
-          if Keyword.get(options, :entity_full_match, false) do
-            Tablestore.generate_filter_options(entity, options)
-          else
-            options
-          end
-
+        options = Tablestore.generate_filter_options(entity, options)
         get(meta.schema, Ecto.primary_key(entity), options)
       end
 
@@ -182,6 +176,7 @@ defmodule Ecto.Adapters.Tablestore do
       def batch_write(writes, options \\ []) do
         Tablestore.batch_write(get_dynamic_repo(), writes, options)
       end
+
     end
   end
 
@@ -227,6 +222,14 @@ defmodule Ecto.Adapters.Tablestore do
 
     {pks, attrs, autogenerate_id_name} = pks_and_attrs_to_put_row(instance, schema, fields)
 
+    options =
+      case condition_when_put_row_with_auto_increment_pk(schema, options) do
+        {:ok, options} ->
+          options
+        _ ->
+          options
+      end
+
     result =
       ExAliyunOts.put_row(
         instance,
@@ -265,7 +268,7 @@ defmodule Ecto.Adapters.Tablestore do
       ExAliyunOts.delete_row(
         repo.instance,
         schema_meta.source,
-        prepare_primary_keys_by_order(schema_meta.schema, filters),
+        primary_key_as_string(schema_meta.schema, filters),
         Keyword.take(options, [:condition, :transaction_id])
       )
 
@@ -317,7 +320,7 @@ defmodule Ecto.Adapters.Tablestore do
         ExAliyunOts.update_row(
           repo.instance,
           schema_meta.source,
-          prepare_primary_keys_by_order(schema, ids),
+          primary_key_as_string(schema, ids),
           options
         )
 
@@ -426,7 +429,7 @@ defmodule Ecto.Adapters.Tablestore do
       ExAliyunOts.get_row(
         meta.instance,
         schema.__schema__(:source),
-        prepare_primary_keys_by_order(schema, ids),
+        primary_key_as_string(schema, ids),
         options
       )
 
@@ -448,7 +451,7 @@ defmodule Ecto.Adapters.Tablestore do
         meta.instance,
         schema.__schema__(:source),
         prepare_start_primary_keys_by_order(schema, start_primary_keys),
-        prepare_primary_keys_by_order(schema, end_primary_keys),
+        primary_key_as_string(schema, end_primary_keys),
         options
       )
 
@@ -472,7 +475,7 @@ defmodule Ecto.Adapters.Tablestore do
     |> ExAliyunOts.stream_range(
       schema.__schema__(:source),
       prepare_start_primary_keys_by_order(schema, start_primary_keys),
-      prepare_primary_keys_by_order(schema, end_primary_keys),
+      primary_key_as_string(schema, end_primary_keys),
       options
     )
     |> Stream.flat_map(fn
@@ -542,69 +545,68 @@ defmodule Ecto.Adapters.Tablestore do
   end
 
   @doc false
-  def batch_write(repo, writes, options) do
-    {_adapter, meta} = Ecto.Repo.Registry.lookup(repo)
-
-    instance = meta.instance
-
-    {var_write_requests, schema_entities_map} =
-      writes
-      |> Enum.map(&map_batch_writes(instance, &1))
-      |> Enum.unzip()
-
-    {prepared_requests, operations} =
-      var_write_requests
-      |> reduce_merge_map()
-      |> Enum.reduce({[], %{}}, fn {source, requests}, {requests_acc, operations_acc} ->
-        operations =
-          for req <- requests do
-            case req.type do
-              OperationType.delete() -> :delete
-              OperationType.update() -> :update
-              OperationType.put() -> :put
-            end
-          end
-
-        {
-          [{source, requests} | requests_acc],
-          Map.put(operations_acc, source, operations)
-        }
-      end)
-
-    input_schema_entities = reduce_merge_map(schema_entities_map)
-
-    result = ExAliyunOts.batch_write(instance, prepared_requests, options)
-
-    case result do
-      {:ok, response} ->
-        {
-          :ok,
-          batch_write_row_response_to_schemas(response.tables, input_schema_entities, operations)
-        }
-
-      _error ->
-        result
-    end
-  end
+  defdelegate batch_write(repo, writes, options), to: EctoTablestore.Repo.BatchWrite
 
   @doc false
   def generate_condition_options(%{__meta__: _meta} = entity, options) do
     condition =
       entity
-      |> generate_filter_options([])
-      |> do_generate_condition(Keyword.get(options, :condition))
+      |> generate_filter_options(Keyword.take(options, [:entity_full_match]))
+      |> merge_condition(Keyword.get(options, :condition))
 
     Keyword.put(options, :condition, condition)
   end
 
   @doc false
+  def generate_condition_options(:put, %{__meta__: %{schema: schema}} = entity, options) do
+    case condition_when_put_row_with_auto_increment_pk(schema, options) do
+      {:ok, options} ->
+        options
+      _ ->
+        # schema definition no server side auth increment primary_key
+        generate_condition_options(entity, options)
+    end
+  end
+
+  defp condition_when_put_row_with_auto_increment_pk(schema, options) do
+    with {field, _, :id} <- schema.__schema__(:autogenerate_id),
+         true <- define_auto_increment_pk?(schema, field) do
+      # when put row with auto increment primary_key from server side,
+      # must set `:IGNORE` condition.
+      {
+        :ok,
+        Keyword.put(options, :condition, %ExAliyunOts.TableStore.Condition{
+          row_existence: RowExistence.ignore()
+        })
+      }
+    else
+      _ ->
+        options
+    end
+  end
+
+  defp define_auto_increment_pk?(schema, field) do
+    [_first_primary_key | other_pks] = schema.__schema__(:primary_key)
+    field in other_pks
+  end
+
+  @doc false
   def generate_filter_options(%{__meta__: _meta} = entity, options) do
+    {entity_full_match?, options} = Keyword.pop(options, :entity_full_match, false)
+    if entity_full_match? == true do
+      extract_filter_options_from_entity(entity, options)
+    else
+      options
+    end
+  end
+
+  defp extract_filter_options_from_entity(entity, options) do
     attr_columns = entity_attr_columns(entity)
 
     options =
       attr_columns
       |> generate_filter_from_entity()
-      |> do_generate_filter_options(options)
+      |> filter_to_options(options)
 
     columns_to_get_opt = Keyword.get(options, :columns_to_get, [])
 
@@ -696,23 +698,23 @@ defmodule Ecto.Adapters.Tablestore do
     "#{table_name},#{field}"
   end
 
-  defp do_generate_condition([], nil) do
+  defp merge_condition([], nil) do
     nil
   end
 
-  defp do_generate_condition([], %ExAliyunOts.TableStore.Condition{} = condition_opt) do
-    condition_opt
+  defp merge_condition([], %ExAliyunOts.TableStore.Condition{} = condition) do
+    condition
   end
 
-  defp do_generate_condition([filter: filter_from_entity], nil) do
+  defp merge_condition([filter: filter_from_entity], nil) do
     %ExAliyunOts.TableStore.Condition{
       column_condition: filter_from_entity,
       row_existence: RowExistence.expect_exist()
     }
   end
 
-  defp do_generate_condition([filter: filter_from_entity], %ExAliyunOts.TableStore.Condition{
-         column_condition: nil
+  defp merge_condition([filter: filter_from_entity], %ExAliyunOts.TableStore.Condition{
+        column_condition: nil,
        }) do
     %ExAliyunOts.TableStore.Condition{
       column_condition: filter_from_entity,
@@ -720,7 +722,7 @@ defmodule Ecto.Adapters.Tablestore do
     }
   end
 
-  defp do_generate_condition([filter: filter_from_entity], %ExAliyunOts.TableStore.Condition{
+  defp merge_condition([filter: filter_from_entity], %ExAliyunOts.TableStore.Condition{
          column_condition: column_condition
        }) do
     %ExAliyunOts.TableStore.Condition{
@@ -729,15 +731,15 @@ defmodule Ecto.Adapters.Tablestore do
     }
   end
 
-  defp do_generate_filter_options(filter_from_entity) do
-    do_generate_filter_options(filter_from_entity, [])
+  defp filter_to_options(filter_from_entity) do
+    filter_to_options(filter_from_entity, [])
   end
 
-  defp do_generate_filter_options(nil, options) do
+  defp filter_to_options(nil, options) do
     options
   end
 
-  defp do_generate_filter_options(filter_from_entity, options) do
+  defp filter_to_options(filter_from_entity, options) do
     merged = do_generate_filter(filter_from_entity, :and, options[:filter])
     Keyword.put(options, :filter, merged)
   end
@@ -751,7 +753,7 @@ defmodule Ecto.Adapters.Tablestore do
          :and,
          %ExAliyunOts.TableStoreFilter.Filter{} = filter_from_opt
        ) do
-    filter_names_from_opt = do_generate_filter_iterate(filter_from_opt)
+    filter_names_from_opt = flatten_filter(filter_from_opt)
 
     filter_from_entity = do_drop_filter_from_entity(filter_from_entity, filter_names_from_opt)
 
@@ -797,18 +799,18 @@ defmodule Ecto.Adapters.Tablestore do
     raise("Invalid usecase - input invalid `:filter` option: #{inspect(filter_from_opt)}")
   end
 
-  defp do_generate_filter_iterate(%ExAliyunOts.TableStoreFilter.Filter{
+  defp flatten_filter(%ExAliyunOts.TableStoreFilter.Filter{
          filter: %{sub_filters: sub_filters},
          type: FilterType.composite_column()
        }) do
     sub_filters
     |> Enum.map(fn filter ->
-      do_generate_filter_iterate(filter)
+      flatten_filter(filter)
     end)
     |> List.flatten()
   end
 
-  defp do_generate_filter_iterate(%ExAliyunOts.TableStoreFilter.Filter{
+  defp flatten_filter(%ExAliyunOts.TableStoreFilter.Filter{
          filter: %{column_name: column_name},
          type: FilterType.single_column()
        }) do
@@ -843,7 +845,7 @@ defmodule Ecto.Adapters.Tablestore do
     if filter_from_entity == [], do: nil, else: filter_from_entity
   end
 
-  defp pks_and_attrs_to_put_row(instance, schema, fields) do
+  def pks_and_attrs_to_put_row(instance, schema, fields) do
     primary_keys = schema.__schema__(:primary_key)
     autogenerate_id = schema.__schema__(:autogenerate_id)
     map_pks_and_attrs_to_put_row(primary_keys, autogenerate_id, fields, [], instance, schema)
@@ -1112,7 +1114,7 @@ defmodule Ecto.Adapters.Tablestore do
 
   defp extract_as_keyword(schema, {nil, attrs}) do
     for {attr_key, attr_value, _ts} <- attrs do
-      field = String.to_atom(attr_key)
+      field = String.to_existing_atom(attr_key)
       type = schema.__schema__(:type, field)
       do_map_row_item_to_attr(type, field, attr_value)
     end
@@ -1120,24 +1122,24 @@ defmodule Ecto.Adapters.Tablestore do
 
   defp extract_as_keyword(_schema, {pks, nil}) do
     for {pk_key, pk_value} <- pks do
-      {String.to_atom(pk_key), pk_value}
+      {String.to_existing_atom(pk_key), pk_value}
     end
   end
 
   defp extract_as_keyword(schema, {pks, attrs}) do
-    prepared_pks =
+    pks =
       for {pk_key, pk_value} <- pks do
-        {String.to_atom(pk_key), pk_value}
+        {String.to_existing_atom(pk_key), pk_value}
       end
 
-    prepared_attrs =
+    attrs =
       for {attr_key, attr_value, _ts} <- attrs do
-        field = String.to_atom(attr_key)
+        field = String.to_existing_atom(attr_key)
         type = schema.__schema__(:type, field)
         do_map_row_item_to_attr(type, field, attr_value)
       end
 
-    Keyword.merge(prepared_attrs, prepared_pks)
+    Keyword.merge(attrs, pks)
   end
 
   defp do_map_row_item_to_attr(type, key, value)
@@ -1193,30 +1195,25 @@ defmodule Ecto.Adapters.Tablestore do
     Ecto.embedded_load(schema, data, :json)
   end
 
-  defp map_attrs_to_update(schema, attrs) do
+  @doc false
+  def map_attrs_to_update(schema, attrs) do
     {_, updates} = Enum.reduce(attrs, {schema, Keyword.new()}, &construct_row_updates/2)
     updates
   end
 
   defp construct_row_updates({field, nil}, {schema, acc}) when is_atom(field) do
-    if Keyword.has_key?(acc, :delete_all) do
-      {
-        schema,
-        Keyword.update!(acc, :delete_all, &[Atom.to_string(field) | &1])
-      }
-    else
-      {
-        schema,
-        Keyword.put(acc, :delete_all, [Atom.to_string(field)])
-      }
-    end
+    field_str = Atom.to_string(field)
+    {
+      schema,
+      Keyword.update(acc, :delete_all, [field_str], &[field_str | &1])
+    }
   end
 
   defp construct_row_updates({field, {:increment, value}}, {schema, acc})
        when is_integer(value) do
     field_str = Atom.to_string(field)
 
-    updated_acc =
+    acc =
       if Keyword.has_key?(acc, :increment) do
         acc
         |> Keyword.update!(:increment, &[{field_str, value} | &1])
@@ -1228,76 +1225,55 @@ defmodule Ecto.Adapters.Tablestore do
         |> Keyword.put(:return_columns, [field_str])
       end
 
-    {schema, updated_acc}
+    {schema, acc}
+  end
+
+  defp construct_row_updates({field, %Ecto.Changeset{valid?: true} = changeset}, {schema, acc}) do
+    field_type = schema.__schema__(:type, field)
+    embeds = schema.__schema__(:embeds)
+    embeds = Ecto.Embedded.prepare(changeset, embeds, __MODULE__, :update)
+    changes = Map.merge(changeset.changes, embeds)
+
+    {
+      schema,
+      Keyword.update(
+        acc,
+        :put,
+        [do_map_attr_to_row_item(field_type, field, changes)],
+        &[do_map_attr_to_row_item(field_type, field, changes) | &1]
+      )
+    }
   end
 
   defp construct_row_updates({field, value}, {schema, acc}) when is_atom(field) do
     field_type = schema.__schema__(:type, field)
 
-    if Keyword.has_key?(acc, :put) do
-      {
-        schema,
-        Keyword.update!(acc, :put, &[do_map_attr_to_row_item(field_type, field, value) | &1])
-      }
-    else
-      {
-        schema,
-        Keyword.put(acc, :put, [do_map_attr_to_row_item(field_type, field, value)])
-      }
-    end
+    {
+      schema,
+      Keyword.update(
+        acc,
+        :put,
+        [do_map_attr_to_row_item(field_type, field, value)],
+        &[do_map_attr_to_row_item(field_type, field, value) | &1]
+      )
+    }
   end
 
-  defp prepare_primary_keys_by_order(schema_entity) do
-    schema_entity
-    |> Ecto.primary_key()
-    |> Enum.map(fn {key, value} ->
-      {Atom.to_string(key), map_key_value(value)}
-    end)
+  defp prepare_start_primary_keys_by_order(schema, start_primary_keys)
+       when is_list(start_primary_keys) do
+    primary_key_as_string(schema, start_primary_keys)
   end
-
+  defp prepare_start_primary_keys_by_order(_schema, start_primary_keys)
+       when is_binary(start_primary_keys) do
+    start_primary_keys
+  end
   defp prepare_start_primary_keys_by_order(schema, start_primary_keys) do
-    cond do
-      is_list(start_primary_keys) ->
-        prepare_primary_keys_by_order(schema, start_primary_keys)
-
-      is_binary(start_primary_keys) ->
-        start_primary_keys
-
-      true ->
-        raise "Invalid start_primary_keys: #{inspect(start_primary_keys)}, expect it as `list` or `binary`"
-    end
+    raise "Invalid start_primary_keys: #{inspect(start_primary_keys)} for #{schema}, expect it as `list` or `binary`"
   end
 
-  defp prepare_primary_keys_by_order(schema, input_primary_keys)
-       when is_list(input_primary_keys) do
-    struct(schema)
-    |> Ecto.primary_key()
-    |> Enum.map(fn {key, _} ->
-      key_str = Atom.to_string(key)
-
-      value =
-        input_primary_keys
-        |> Enum.find_value(fn {input_k, input_v} ->
-          cond do
-            is_atom(input_k) and input_k == key ->
-              input_v
-
-            is_bitstring(input_k) and input_k == key_str ->
-              input_v
-
-            true ->
-              nil
-          end
-        end)
-        |> map_key_value()
-
-      {key_str, value}
-    end)
-  end
-
-  defp map_key_value(:inf_min), do: PKType.inf_min()
-  defp map_key_value(:inf_max), do: PKType.inf_max()
-  defp map_key_value(value), do: value
+  defp primary_key_value(:inf_min), do: PKType.inf_min()
+  defp primary_key_value(:inf_max), do: PKType.inf_max()
+  defp primary_key_value(value), do: value
 
   defp map_batch_gets(schema_entities, acc) when is_list(schema_entities) do
     map_batch_gets({schema_entities, []}, acc)
@@ -1311,7 +1287,7 @@ defmodule Ecto.Adapters.Tablestore do
         MapSet.new([]),
         fn %{__meta__: meta} = schema_entity, acc ->
           {
-            prepare_primary_keys_by_order(schema_entity),
+            primary_key_as_string(schema_entity),
             MapSet.put(acc, meta.schema)
           }
         end
@@ -1326,21 +1302,17 @@ defmodule Ecto.Adapters.Tablestore do
     {conflict_schemas, filters, columns_to_get} =
       Enum.reduce(schema_entities, {[], [], []}, fn schema_entity,
                                                     {conflict_schemas, filters, columns_to_get} ->
-        opts =
-          if Keyword.get(options, :entity_full_match, false) do
-            generate_filter_options(schema_entity, options)
-          else
-            options
-          end
+
+        options = generate_filter_options(schema_entity, options)
 
         prepared_columns_to_get =
-          opts
+          options
           |> Keyword.get(:columns_to_get, [])
           |> splice_list(columns_to_get)
           |> MapSet.new()
           |> MapSet.to_list()
 
-        case Keyword.get(opts, :filter) do
+        case Keyword.get(options, :filter) do
           nil ->
             {[schema_entity | conflict_schemas], filters, prepared_columns_to_get}
 
@@ -1409,216 +1381,12 @@ defmodule Ecto.Adapters.Tablestore do
     raise("Invalid usecase - input invalid batch get request: #{inspect(request)}")
   end
 
-  defp map_batch_writes(_instance, {:delete, deletes}) do
-    Enum.reduce(deletes, {%{}, %{}}, fn delete, {delete_acc, schema_entities_acc} ->
-      {source, ids, options, schema_entity} = do_map_batch_writes(:delete, delete)
-      write_delete_request = ExAliyunOts.write_delete(ids, options)
-
-      if Map.has_key?(delete_acc, source) do
-        {
-          Map.update!(delete_acc, source, &[write_delete_request | &1]),
-          Map.update!(schema_entities_acc, source, &[schema_entity | &1])
-        }
-      else
-        {
-          Map.put(delete_acc, source, [write_delete_request]),
-          Map.put(schema_entities_acc, source, [schema_entity])
-        }
-      end
-    end)
-  end
-
-  defp map_batch_writes(instance, {:put, puts}) do
-    Enum.reduce(puts, {%{}, %{}}, fn put, {puts_acc, schema_entities_acc} ->
-      {source, ids, attrs, options, schema_entity} = do_map_batch_writes(:put, {instance, put})
-
-      write_put_request = ExAliyunOts.write_put(ids, attrs, options)
-
-      if Map.has_key?(puts_acc, source) do
-        {
-          Map.update!(puts_acc, source, &[write_put_request | &1]),
-          Map.update!(schema_entities_acc, source, &[schema_entity | &1])
-        }
-      else
-        {
-          Map.put(puts_acc, source, [write_put_request]),
-          Map.put(schema_entities_acc, source, [schema_entity])
-        }
-      end
-    end)
-  end
-
-  defp map_batch_writes(_instance, {:update, updates}) do
-    Enum.reduce(updates, {%{}, %{}}, fn update, {update_acc, schema_entities_acc} ->
-      {source, ids, options, schema_entity} = do_map_batch_writes(:update, update)
-
-      write_update_request = ExAliyunOts.write_update(ids, options)
-
-      if Map.has_key?(update_acc, source) do
-        {
-          Map.update!(update_acc, source, &[write_update_request | &1]),
-          Map.update!(schema_entities_acc, source, &[schema_entity | &1])
-        }
-      else
-        {
-          Map.put(update_acc, source, [write_update_request]),
-          Map.put(schema_entities_acc, source, [schema_entity])
-        }
-      end
-    end)
-  end
-
-  defp map_batch_writes(_instance, item) do
-    raise("Invalid usecase - batch write with item: #{inspect(item)}")
-  end
-
-  defp do_map_batch_writes(:delete, %{__meta__: _meta} = schema_entity) do
-    do_map_batch_writes(:delete, {schema_entity, []})
-  end
-
-  defp do_map_batch_writes(:delete, {%{__meta__: meta} = schema_entity, options}) do
-    source = meta.schema.__schema__(:source)
-    ids = prepare_primary_keys_by_order(schema_entity)
-    options = generate_condition_options(schema_entity, options)
-    {source, ids, options, schema_entity}
-  end
-
-  defp do_map_batch_writes(:delete, {schema, ids, options}) do
-    source = schema.__schema__(:source)
-    schema_entity = struct(schema, ids)
-    ids = prepare_primary_keys_by_order(schema_entity)
-    {source, ids, options, schema_entity}
-  end
-
-  defp do_map_batch_writes(:put, {instance, %{__meta__: _meta} = schema_entity}) do
-    do_map_batch_writes(:put, {instance, {schema_entity, []}})
-  end
-
-  defp do_map_batch_writes(:put, {instance, {%{__meta__: meta} = schema_entity, options}}) do
-    schema = meta.schema
-
-    source = schema.__schema__(:source)
-
-    fields =
-      schema_entity
-      |> Ecto.primary_key()
-      |> Enum.reduce(entity_attr_columns(schema_entity), fn {key, value}, acc ->
-        if value != nil, do: [{key, value} | acc], else: acc
-      end)
-
-    autogen_fields = autogen_fields(schema)
-
-    schema_entity =
-      Enum.reduce(autogen_fields, schema_entity, fn {key, value}, acc ->
-        Map.put(acc, key, value)
-      end)
-
-    {pks, attrs, _autogenerate_id_name} =
-      pks_and_attrs_to_put_row(instance, schema, Keyword.merge(autogen_fields, fields))
-
-    {source, pks, attrs, options, schema_entity}
-  end
-
-  defp do_map_batch_writes(:put, {instance, {schema, ids, attrs, options}}) do
-    source = schema.__schema__(:source)
-    autogen_fields = autogen_fields(schema)
-    fields = Keyword.merge(autogen_fields, splice_list(ids, attrs))
-    schema_entity = struct(schema, fields)
-
-    {pks, attrs, _autogenerate_id_name} = pks_and_attrs_to_put_row(instance, schema, fields)
-    {source, pks, attrs, options, schema_entity}
-  end
-
-  defp do_map_batch_writes(
-         :put,
-         {instance, {%Ecto.Changeset{valid?: true, data: %{__meta__: meta}} = changeset, options}}
-       ) do
-    schema = meta.schema
-    source = schema.__schema__(:source)
-    autogen_fields = autogen_fields(schema)
-
-    input_fields =
-      changeset.data
-      |> Ecto.primary_key()
-      |> Enum.reduce(Map.to_list(changeset.changes), fn {key, value}, acc ->
-        if value != nil, do: [{key, value} | acc], else: acc
-      end)
-
-    fields = Keyword.merge(autogen_fields, input_fields)
-
-    schema_entity = struct(schema, fields)
-
-    {pks, attrs, _autogenerate_id_name} = pks_and_attrs_to_put_row(instance, schema, fields)
-    {source, pks, attrs, options, schema_entity}
-  end
-
-  defp do_map_batch_writes(
-         :put,
-         {instance, %Ecto.Changeset{valid?: true} = changeset}
-       ) do
-    do_map_batch_writes(:put, {instance, {changeset, []}})
-  end
-
-  defp do_map_batch_writes(
-         :put,
-         {_instance, {%Ecto.Changeset{valid?: false} = changeset, _options}}
-       ) do
-    raise "Using invalid changeset: #{inspect(changeset)} in batch writes"
-  end
-
-  defp do_map_batch_writes(
-         :put,
-         {_instance, %Ecto.Changeset{valid?: false} = changeset}
-       ) do
-    raise "Using invalid changeset: #{inspect(changeset)} in batch writes"
-  end
-
-  defp do_map_batch_writes(
-         :update,
-         {%Ecto.Changeset{valid?: true, data: %{__meta__: meta}} = changeset, options}
-       ) do
-    schema = meta.schema
-    source = schema.__schema__(:source)
-    entity = changeset.data
-
-    options = generate_condition_options(entity, options)
-
-    autoupdate_fields = autoupdate_fields(schema)
-
-    changes =
-      Enum.reduce(autoupdate_fields, changeset.changes, fn {key, value}, acc ->
-        Map.put(acc, key, value)
-      end)
-
-    update_attrs = map_attrs_to_update(schema, changes)
-
-    schema_entity = do_map_merge(changeset.data, changes, true)
-
-    {source, prepare_primary_keys_by_order(entity), merge_options(options, update_attrs),
-     schema_entity}
-  end
-
-  defp do_map_batch_writes(
-         :update,
-         %Ecto.Changeset{valid?: true, data: %{__meta__: _meta}} = changeset
-       ) do
-    do_map_batch_writes(:update, {changeset, []})
-  end
-
-  defp do_map_batch_writes(:update, %Ecto.Changeset{valid?: false} = changeset) do
-    raise "Using invalid changeset: #{inspect(changeset)} in batch writes"
-  end
-
-  defp do_map_batch_writes(:update, {%Ecto.Changeset{valid?: false} = changeset, _options}) do
-    raise "Using invalid changeset: #{inspect(changeset)} in batch writes"
-  end
-
   defp format_ids_groups(schema, [ids] = ids_groups) when is_list(ids) do
     ids_groups
     |> Enum.map(fn ids_group ->
       if is_list(ids_group),
-        do: prepare_primary_keys_by_order(schema, ids_group),
-        else: prepare_primary_keys_by_order(schema, [ids_group])
+        do: primary_key_as_string(schema, ids_group),
+        else: primary_key_as_string(schema, [ids_group])
     end)
   end
 
@@ -1631,12 +1399,12 @@ defmodule Ecto.Adapters.Tablestore do
     else
       # fetch multi rows with multi primary_keys
       Enum.map(ids_groups, fn ids_group ->
-        prepare_primary_keys_by_order(schema, ids_group)
+        primary_key_as_string(schema, ids_group)
       end)
     end
   end
 
-  defp autogen_fields(schema) do
+  def autogen_fields(schema) do
     case schema.__schema__(:autogenerate) do
       [{autogen_fields, {m, f, a}}] ->
         autogen_value = apply(m, f, a)
@@ -1647,7 +1415,7 @@ defmodule Ecto.Adapters.Tablestore do
     end
   end
 
-  defp autoupdate_fields(schema) do
+  def autoupdate_fields(schema) do
     case schema.__schema__(:autoupdate) do
       [{autoupdate_fields, {m, f, a}}] ->
         autoupdate_value = apply(m, f, a)
@@ -1673,23 +1441,6 @@ defmodule Ecto.Adapters.Tablestore do
     end)
   end
 
-  defp merge_options(input_opts, generated_opts) do
-    Keyword.merge(input_opts, generated_opts, fn _option_name, input_v, generated_v ->
-      do_merge_option(input_v, generated_v)
-    end)
-  end
-
-  defp do_merge_option(input, generated) when input == nil and generated != nil, do: generated
-  defp do_merge_option(input, generated) when input == nil and generated == nil, do: nil
-  defp do_merge_option(input, generated) when input != nil and generated == nil, do: input
-
-  defp do_merge_option(input, generated) when is_list(input) and is_list(generated) do
-    input |> splice_list(generated) |> MapSet.new() |> MapSet.to_list()
-  end
-
-  defp do_merge_option(input, generated) when input == generated, do: input
-  defp do_merge_option(_input, generated), do: generated
-
   defp batch_get_row_response_to_schemas(tables, schemas_mapping) do
     tables
     |> Enum.reduce([], fn table, acc ->
@@ -1712,79 +1463,6 @@ defmodule Ecto.Adapters.Tablestore do
     |> Enum.reverse()
   end
 
-  defp batch_write_row_response_to_schemas(tables, input_schema_entities, operations) do
-    Enum.reduce(tables, [], fn table, acc ->
-      source = table.table_name
-      input_matched_schema_entities = Map.get(input_schema_entities, source)
-      schema = List.first(input_matched_schema_entities).__meta__.schema
-
-      results =
-        operations
-        |> Map.get(source, [])
-        |> Enum.zip(Enum.zip(table.rows, input_matched_schema_entities))
-        |> Enum.reduce([], fn {operation, {write_row_response, input}}, acc ->
-          return =
-            if write_row_response.is_ok == true do
-              schema_entity_from_response = row_to_schema(schema, write_row_response.row)
-
-              return_schema_entity = do_map_merge(input, schema_entity_from_response)
-
-              {:ok, return_schema_entity}
-            else
-              {:error, write_row_response}
-            end
-
-          if Keyword.has_key?(acc, operation) do
-            Keyword.update!(acc, operation, &[return | &1])
-          else
-            Keyword.put(acc, operation, [return])
-          end
-        end)
-
-      Keyword.put(acc, schema, results)
-    end)
-  end
-
-  defp reduce_merge_map(items) do
-    Enum.reduce(items, %{}, fn map, acc ->
-      Map.merge(acc, map, fn _key, v1, v2 ->
-        splice_list(v1, v2)
-      end)
-    end)
-  end
-
-  defp do_map_merge(map1, map_or_keyword, force_merge \\ false)
-
-  defp do_map_merge(nil, map, _force_merge) when is_map(map) do
-    map
-  end
-
-  defp do_map_merge(map, nil, _force_merge) when is_map(map) do
-    map
-  end
-
-  defp do_map_merge(map1, map2, true) when is_map(map1) and is_map(map2) do
-    Map.merge(map1, map2)
-  end
-
-  defp do_map_merge(map1, map2, false) when is_map(map1) and is_map(map2) do
-    Map.merge(map1, map2, fn _k, v1, v2 ->
-      if v2 != nil, do: v2, else: v1
-    end)
-  end
-
-  defp do_map_merge(map, keyword, true) when is_map(map) and is_list(keyword) do
-    Enum.reduce(keyword, map, fn {key, value}, acc ->
-      Map.put(acc, key, value)
-    end)
-  end
-
-  defp do_map_merge(map, keyword, false) when is_map(map) and is_list(keyword) do
-    Enum.reduce(keyword, map, fn {key, value}, acc ->
-      if value != nil, do: Map.put(acc, key, value), else: acc
-    end)
-  end
-
   defp splice_list(list1, list2) when is_list(list1) and is_list(list2) do
     List.flatten([list1 | list2])
   end
@@ -1798,11 +1476,70 @@ defmodule Ecto.Adapters.Tablestore do
         condition =
           lock_fields
           |> generate_filter_from_entity()
-          |> do_generate_filter_options()
-          |> do_generate_condition(options[:condition])
+          |> filter_to_options()
+          |> merge_condition(options[:condition])
 
         Keyword.put(options, :condition, condition)
     end
+  end
+
+  @doc false
+  def primary_key_as_string(struct) do
+    struct
+    |> Ecto.primary_key()
+    |> Enum.map(fn {field, value} ->
+      {Atom.to_string(field), primary_key_value(value)}
+    end)
+  end
+
+  @doc false
+  def primary_key_as_string(schema, pks) when is_list(pks) do
+    map =
+      Enum.reduce(pks, %{}, fn
+        {pk_field, pk_value}, acc when is_atom(pk_field) ->
+          Map.put(acc, Atom.to_string(pk_field), primary_key_value(pk_value))
+        {pk_field, pk_value}, acc when is_bitstring(pk_field) ->
+          Map.put(acc, pk_field, primary_key_value(pk_value))
+        _, acc ->
+          acc
+      end)
+
+    struct(schema)
+    |> Ecto.primary_key()
+    |> Enum.map(fn {field, _value} ->
+      field = Atom.to_string(field)
+      value = Map.get(map, field)
+      {field, value}
+    end)
+  end
+
+  @doc false
+  def row_to_struct(%{__meta__: _} = struct, nil) do
+    struct
+  end
+  def row_to_struct(struct, {nil, attrs}) do
+    reduce_items_into_struct(struct, attrs)
+  end
+  def row_to_struct(struct, {pks, nil}) do
+    reduce_items_into_struct(struct, pks)
+  end
+  def row_to_struct(struct, {pks, attrs}) do
+    struct
+    |> reduce_items_into_struct(attrs)
+    |> reduce_items_into_struct(pks)
+  end
+
+  defp reduce_items_into_struct(%{__meta__: meta} = struct, items) do
+    Enum.reduce(items, struct, fn
+      {field, value, _ts}, acc ->
+        field = String.to_existing_atom(field)
+        type = meta.schema.__schema__(:type, field)
+        {_, value} = do_map_row_item_to_attr(type, field, value)
+        Map.put(acc, field, value)
+      {field, value}, acc ->
+        field = String.to_existing_atom(field)
+        Map.put(acc, field, value)
+    end)
   end
 
   ## Storage
@@ -1841,4 +1578,5 @@ defmodule Ecto.Adapters.Tablestore do
       \n\nPlease #{action} tablestore instance/database visit Alibaba TableStore product console through
       https://otsnext.console.aliyun.com/
     """
+
 end
