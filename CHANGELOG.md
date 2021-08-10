@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.12.0 (2021-08-10)
+
+* Some fix and enhancement via [#32](https://github.com/edragonconnect/ecto_tablestore/pull/32):
+
+  1. Fix fail when batch write with `embeds_many` or `embeds_one` fields;
+  2. Add `:entity_full_match` as an optional option to leverage the provided attribute columns of the struct into the filter of the batch write
+     condition when it is `true`, default value is `false`. After this breaking change, each put/update/delete operation of batch write requires
+     explicitly set `:condition` option, excepts the following `#3` case;
+  3. When insert or a `:put` operation of batch write with a table defined an auto increment primary key(a server side function), we can omit
+     `:condition` option, because the server side only accepts `condition: condition(:ignore)`, we internally wrapper this to simplify the
+     input in this use case;
+  4. Clarify document about the `:condition` option of insert/update/delete/batch_write;
+  5. Some code naming improvement.
+
 ## v0.11.2 (2021-05-21)
 
 * Add `drop_if_exists/1` function for migration.

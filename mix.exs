@@ -6,7 +6,7 @@ defmodule EctoTablestore.MixProject do
   def project do
     [
       app: :ecto_tablestore,
-      version: "0.11.2",
+      version: "0.12.0",
       elixir: "~> 1.7",
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
