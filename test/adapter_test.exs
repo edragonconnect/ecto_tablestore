@@ -1,7 +1,7 @@
 defmodule EctoTablestore.AdapterTest do
   use ExUnit.Case
 
-  alias EctoTablestore.TestSchema.User
+  alias EctoTablestore.TestSchema.{User, Order, Page}
   alias Ecto.Adapters.Tablestore
 
   alias ExAliyunOts.Const.{LogicOperator, FilterType, ComparatorType, RowExistence}
@@ -27,7 +27,7 @@ defmodule EctoTablestore.AdapterTest do
     user_name = "testname"
     user_level = 10
     user = %User{id: 1, name: user_name, level: user_level}
-    opts = Tablestore.generate_filter_options(user, [])
+    opts = Tablestore.generate_filter_options(user, [entity_full_match: true])
 
     filter = Keyword.get(opts, :filter)
     assert filter.type == FilterType.composite_column()
@@ -63,7 +63,7 @@ defmodule EctoTablestore.AdapterTest do
     # used in filter, they should be in `columns_to_get` as well, or
     # the coresponding branch condition of filter will be failed and finally 
     # affect the return result.
-    opts = Tablestore.generate_filter_options(user, columns_to_get: ["level"])
+    opts = Tablestore.generate_filter_options(user, columns_to_get: ["level"], entity_full_match: true)
 
     columns_to_get = Keyword.get(opts, :columns_to_get)
     assert "level" in columns_to_get
@@ -87,7 +87,7 @@ defmodule EctoTablestore.AdapterTest do
     user_level = 20
     user = %User{id: 2, name: user_name, level: user_level}
 
-    opts = Tablestore.generate_condition_options(user, [])
+    opts = Tablestore.generate_condition_options(user, [entity_full_match: true])
 
     condition = Keyword.get(opts, :condition)
     assert condition.row_existence == RowExistence.expect_exist()
@@ -124,7 +124,7 @@ defmodule EctoTablestore.AdapterTest do
     user_level = 20
     user = %User{id: 2, name: user_name, level: user_level}
 
-    opts = Tablestore.generate_condition_options(user, condition: condition(:ignore))
+    opts = Tablestore.generate_condition_options(user, condition: condition(:ignore), entity_full_match: true)
 
     condition = Keyword.get(opts, :condition)
     assert condition.row_existence == RowExistence.expect_exist()
@@ -132,7 +132,7 @@ defmodule EctoTablestore.AdapterTest do
     user1 = %User{id: 2, name: user_name}
 
     opts =
-      Tablestore.generate_condition_options(user1, condition: condition(:ignore, "level" > 10))
+      Tablestore.generate_condition_options(user1, condition: condition(:ignore, "level" > 10), entity_full_match: true)
 
     condition = Keyword.get(opts, :condition)
     assert condition.row_existence == RowExistence.expect_exist()
@@ -225,4 +225,41 @@ defmodule EctoTablestore.AdapterTest do
 
     assert Keyword.get(opts3, :condition) == nil
   end
+
+  test "generate_condition_options with server side pk auto increment" do
+    order = %Order{id: "1", desc: "desc3", num: 10, price: 55.67}
+    opts = Tablestore.generate_condition_options(:put, order, [entity_full_match: true])
+    condition = Keyword.get(opts, :condition)
+    assert condition.row_existence == :IGNORE
+    assert condition.column_condition == nil
+
+    # although set `condition: :expect_not_exist` but still keep use `:ignore` in the PutRow case
+    opts = Tablestore.generate_condition_options(:put, order, [entity_full_match: true, condition: condition(:expect_not_exist)])
+    condition = Keyword.get(opts, :condition)
+    assert condition.row_existence == :IGNORE
+    assert condition.column_condition == nil
+  end
+
+  test "generate_condition_options with no attribute columns" do
+    # no attribute columns
+    page = %Page{name: "pagename"}
+    opts = Tablestore.generate_condition_options(:put, page, [entity_full_match: true])
+    assert Keyword.get(opts, :condition) == nil
+
+    user = %User{id: "u1"}
+    opts = Tablestore.generate_condition_options(:put, user, [entity_full_match: true])
+    assert Keyword.get(opts, :condition) == nil
+
+    # explicitly set `condition` option
+    opts = Tablestore.generate_condition_options(:put, page, [entity_full_match: true, condition: condition(:expect_not_exist)])
+    condition = Keyword.get(opts, :condition)
+    assert condition.row_existence == :EXPECT_NOT_EXIST
+    assert condition.column_condition == nil
+
+    opts = Tablestore.generate_condition_options(:put, user, [entity_full_match: true, condition: condition(:expect_exist)])
+    condition = Keyword.get(opts, :condition)
+    assert condition.row_existence == :EXPECT_EXIST
+    assert condition.column_condition == nil
+  end
+
 end

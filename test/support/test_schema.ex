@@ -104,8 +104,9 @@ defmodule EctoTablestore.TestSchema.User4 do
 
   tablestore_schema "test_embed_user4" do
     field(:id, :string, primary_key: true)
+    field(:count, :integer)
 
-    embeds_many :cars, Car, primary_key: false do
+    embeds_many :cars, Car, primary_key: false, on_replace: :delete do
       field(:name, :string)
       field(:status, Ecto.Enum, values: [:foo, :bar, :baz])
     end

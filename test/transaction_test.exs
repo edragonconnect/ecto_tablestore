@@ -51,7 +51,10 @@ defmodule EctoTablestore.TransactionTest do
     {status, _result} =
       TestRepo.batch_write(
         [
-          update: [c1, c2]
+          update: [
+            {c1, condition: condition(:expect_exist)},
+            {c2, condition: condition(:expect_exist)}
+          ]
         ],
         transaction_id: transaction_id
       )

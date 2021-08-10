@@ -27,7 +27,47 @@ defmodule EctoTablestore.RowTest do
     Process.sleep(3_000)
   end
 
-  test "repo - embed schema c/r/u/d" do
+  test "repo - insert with expect_exist condition" do
+    user = %User4{
+      id: "not_exist_id1",
+      cars: [
+        %User4.Car{name: "car1", status: :bar},
+        %User4.Car{name: "car2", status: :foo}
+      ],
+      info: %User4.Info{
+        name: "Mike",
+        status: :baz,
+        money: Decimal.new(1)
+      },
+      count: 0,
+      item: %EmbedItem{name: "item1"}
+    }
+
+    assert_raise Ecto.StaleEntryError, fn ->
+      TestRepo.insert(user, condition: condition(:expect_exist), return_type: :pk)
+    end
+
+    {:ok, returned_user} = TestRepo.insert(user, condition: condition(:expect_not_exist), return_type: :pk)
+    assert length(returned_user.cars) == 2
+
+    # override
+    user =
+      user
+      |> Map.put(:count, 1)
+      |> Map.put(:cars, [
+        %User4.Car{name: "newcar1", status: :baz}
+      ])
+
+    updated_cars = [%User4.Car{name: "newcar1", status: :baz}]
+
+    {:ok, returned_user} = TestRepo.insert(user, condition: condition(:expect_exist), return_type: :pk)
+    assert returned_user.cars == updated_cars
+
+    user = TestRepo.one(%User4{id: "not_exist_id1"})
+    assert user.cars == updated_cars and user.count == 1
+  end
+
+  test "repo - embed schema create/read/update/delete" do
     user4 = %User4{
       id: "1",
       cars: [
@@ -39,6 +79,7 @@ defmodule EctoTablestore.RowTest do
         status: :baz,
         money: Decimal.new(1)
       },
+      count: 0,
       item: %EmbedItem{name: "item1"}
     }
 
@@ -60,14 +101,17 @@ defmodule EctoTablestore.RowTest do
 
     changeset =
       user4
-      |> Ecto.Changeset.change()
+      |> Ecto.Changeset.change(count: {:increment, 1})
       |> Ecto.Changeset.put_embed(:info, info)
       |> Ecto.Changeset.put_embed(:item, embed_item)
 
-    {status, _updated_result} =
-      TestRepo.update(changeset, condition: condition(:expect_exist), return_type: :pk)
+    {status, updated_result} =
+      TestRepo.update(changeset, condition: condition(:expect_exist), return_type: :pk, returning: [:count])
 
     assert :ok == status
+    assert updated_result.count == 1
+    assert updated_result.info.__struct__ == User4.Info and
+      updated_result.item.__struct__ == EmbedItem
 
     {status, _updated_result} =
       TestRepo.delete(%User4{id: "1"}, condition: condition(:expect_exist))
@@ -92,12 +136,12 @@ defmodule EctoTablestore.RowTest do
       price: input_price
     }
 
-    assert_raise Ecto.ConstraintError, fn ->
-      TestRepo.insert(order, condition: condition(:expect_not_exist), return_type: :pk)
-    end
-
+    # Since "Order" table defined an auto increment primary key,
+    # and only expect to use `condition: :IGNORE` in server side,
+    # we will use `condition: :IGNORE` internally,
+    # so here we can omit condition option.
     {status, saved_order} =
-      TestRepo.insert(order, condition: condition(:ignore), return_type: :pk)
+      TestRepo.insert(order, return_type: :pk)
 
     assert status == :ok
     saved_order_internal_id = saved_order.internal_id
@@ -736,6 +780,8 @@ defmodule EctoTablestore.RowTest do
 
     order4_changeset = Changeset.cast(%Order{id: "order4_1", desc: "desc3"}, %{num: 40}, [:num])
 
+    order5 = %Order{id: "order5", desc: "desc5", num: 20, price: 50.11}
+
     user1_lv = 8
 
     user1 = %User{id: 100, name: "u1", level: user1_lv}
@@ -758,19 +804,24 @@ defmodule EctoTablestore.RowTest do
 
     writes = [
       delete: [
-        saved_order2,
+        {saved_order2, entity_full_match: true},
         {Order, [id: "order0", internal_id: saved_order0.internal_id],
          condition: condition(:ignore)},
-        {user2, return_type: :pk}
+        {user2, condition: condition(:expect_exist), return_type: :pk}
       ],
       update: [
-        {changeset_user1, return_type: :pk},
-        {changeset_order1, return_type: :pk}
+        {changeset_user1, entity_full_match: true, return_type: :pk},
+        {changeset_order1, condition: condition(:expect_exist), return_type: :pk}
       ],
       put: [
-        {order3, condition: condition(:ignore), return_type: :pk},
+        # Since "Order" table defined autogenerate_id field to server auto increment,
+        # in this case only can use `condition: :ignore` to the server side logic,
+        # and the `entity_full_match: true` setting will be ignored.
+        {order3, return_type: :pk},
         {order4_changeset, condition: condition(:ignore), return_type: :pk},
-        {user3, condition: condition(:expect_not_exist), return_type: :pk}
+        {order5, entity_full_match: true, return_type: :pk},
+        {user3, condition: condition(:expect_not_exist), return_type: :pk},
+        {User, [id: 1001], [name: "new_u1", level: 1], condition: condition(:expect_not_exist)}
       ]
     ]
 
@@ -795,16 +846,25 @@ defmodule EctoTablestore.RowTest do
     assert batch_write_delete_order0.id == saved_order0.id
     assert batch_write_delete_order0.internal_id == saved_order0.internal_id
 
-    {:ok, batch_write_put_order} = Keyword.get(order_batch_write_result, :put) |> List.first()
-    assert batch_write_put_order.id == order3.id
-    assert batch_write_put_order.desc == "desc3"
-    assert batch_write_put_order.num == 10
-    assert batch_write_put_order.price == 55.67
+    [
+      {:ok, batch_write_put_order3},
+      {:ok, batch_write_put_order4},
+      {:ok, batch_write_put_order5},
+    ] = Keyword.get(order_batch_write_result, :put)
 
-    {:ok, batch_write_put_order4} = Keyword.get(order_batch_write_result, :put) |> List.last()
+    assert batch_write_put_order3.id == order3.id
+    assert batch_write_put_order3.desc == order3.desc
+    assert batch_write_put_order3.num == order3.num
+    assert batch_write_put_order3.price == order3.price
+
     assert batch_write_put_order4.id == order4_changeset.data.id
     assert is_integer(batch_write_put_order4.internal_id) == true
     assert batch_write_put_order4.num == order4_changeset.changes.num
+
+    assert batch_write_put_order5.id == order5.id
+    assert batch_write_put_order5.desc == order5.desc
+    assert batch_write_put_order5.num == order5.num
+    assert batch_write_put_order5.price == order5.price
 
     user_batch_write_result = Keyword.get(result, User)
 
@@ -818,20 +878,27 @@ defmodule EctoTablestore.RowTest do
     assert batch_write_delete_user.id == 101
     assert batch_write_delete_user.name == "u2"
 
-    {:ok, batch_write_put_user} = Keyword.get(user_batch_write_result, :put) |> List.first()
+    batch_write_put = Keyword.get(user_batch_write_result, :put)
+
+    {:ok, batch_write_put_user} = batch_write_put |> List.first()
     assert batch_write_put_user.level == 12
     assert batch_write_put_user.id == 102
     assert batch_write_put_user.name == "u3"
+
+    {:ok, batch_write_put_user1001} = batch_write_put |> List.last()
+    assert batch_write_put_user1001.level == 1
+    assert batch_write_put_user1001.id == 1001
+    assert batch_write_put_user1001.name == "new_u1"
 
     changeset_user3 = Changeset.change(batch_write_put_user, level: {:increment, 2})
 
     # failed case
     writes2 = [
       delete: [
-        batch_write_put_user
+        {batch_write_put_user, condition: condition(:expect_exist)},
       ],
       update: [
-        changeset_user3
+        {changeset_user3, condition: condition(:expect_exist)}
       ]
     ]
 
@@ -851,7 +918,8 @@ defmodule EctoTablestore.RowTest do
 
     {:ok, _} = TestRepo.delete(batch_write_put_user, condition: condition(:expect_exist))
     {:ok, _} = TestRepo.delete(batch_write_update_user, condition: condition(:expect_exist))
-    {:ok, _} = TestRepo.delete(batch_write_put_order, condition: condition(:ignore))
+    {:ok, _} = TestRepo.delete(batch_write_put_order3, condition: condition(:ignore))
+    {:ok, _} = TestRepo.delete(batch_write_put_order5, condition: condition(:ignore))
     {:ok, _} = TestRepo.delete(batch_write_update_order, condition: condition(:ignore))
   end
 
@@ -1110,8 +1178,8 @@ defmodule EctoTablestore.RowTest do
     {:ok, _} =
       TestRepo.batch_write(
         delete: [
-          user1,
-          user2
+          {user1, condition: condition(:expect_exist)},
+          {user2, condition: condition(:expect_exist)}
         ]
       )
 
@@ -1209,4 +1277,103 @@ defmodule EctoTablestore.RowTest do
 
     assert order.name == "foo" and order.lock_version == 3
   end
+
+  test "batch_write with embeds" do
+    inserted_users =
+      for index <- 1..3 do
+        cars = [
+          %User4.Car{name: "carname#{index}_a"},
+          %User4.Car{name: "carname#{index}_b"},
+        ]
+        {:ok, inserted} = TestRepo.insert(%User4{id: "#{index}", cars: cars}, condition: condition(:ignore))
+        inserted
+      end
+
+    [user1, user2, user3] = inserted_users
+
+    changeset1 = Changeset.change(user1, info: %User4.Info{name: "bar"}, count: {:increment, 10})
+
+    changeset2 = Changeset.change(%User4{id: "not_existed0"}, info: %User4.Info{name: "foo"})
+
+    changeset3 =
+      user3
+      |> Ecto.Changeset.change(count: {:increment, 1})
+      |> Ecto.Changeset.put_embed(:cars, [%User4.Car{name: "user3_new_car1"}, %User4.Car{name: "user3_new_car2"}])
+
+    new_userid4 = %User4{id: "4", count: 1, info: %User4.Info{name: "bar4"}, cars: [%User4.Car{name: "car4name"}]}
+    new_userid4_changeset =
+      new_userid4
+      |> Ecto.Changeset.change()
+      |> Ecto.Changeset.put_embed(:info, %{name: "bar4v2"})
+
+    new_order_id = "orderbatchwrite_1"
+    new_order_name = "orderbatchwrite_testname"
+
+    writes = [
+      update: [
+        {changeset1, condition: condition(:expect_exist)},
+        {changeset2, condition: condition(:expect_not_exist), return_type: :pk},
+        {changeset3, condition: condition(:expect_exist), return_type: :pk}
+      ],
+      delete: [
+        {user2, condition: condition(:expect_exist)}
+      ],
+      put: [
+        {new_userid4_changeset, condition: condition(:expect_not_exist)},
+        {%User4{id: "5", info: %User4.Info{name: "bar5"}, cars: [%User4.Car{name: "car5name"}]}, condition: condition(:expect_not_exist)},
+        {%Order{id: new_order_id, name: new_order_name}, condition: condition(:ignore), return_type: :pk},
+        {%User{id: 100, name: "username"}, condition: condition(:expect_not_exist)}
+      ]
+    ]
+
+    {:ok, result} = TestRepo.batch_write(writes)
+
+    result_to_user4 = Keyword.get(result, User4)
+
+    # update in batch_write with `User4`
+    [{:ok, update_user1}, {:ok, update_user2}, {:ok, update_user3}] = Keyword.get(result_to_user4, :update)
+
+    assert update_user1.count == 10
+    assert update_user1.cars == [%User4.Car{name: "carname1_a"}, %User4.Car{name: "carname1_b"}]
+    assert update_user1.info == %User4.Info{name: "bar"}
+
+    assert update_user2.id == "not_existed0" and update_user2.info.name == "foo"
+
+    assert update_user3.id == "3" and update_user3.count == 1
+    assert update_user3.cars == [%User4.Car{name: "user3_new_car1"}, %User4.Car{name: "user3_new_car2"}]
+
+    # delete in batch_write with `User4`
+    [{:ok, delete_user2}] = Keyword.get(result_to_user4, :delete)
+
+    assert delete_user2.id == "2"
+    assert delete_user2.cars == [%User4.Car{name: "carname2_a"}, %User4.Car{name: "carname2_b"}]
+
+    assert TestRepo.one(user2) == nil
+
+    # put in batch_write with `User4`
+    [{:ok, put_user1}, {:ok, put_user2}] = Keyword.get(result_to_user4, :put)
+    assert put_user1.id == "4"
+    assert put_user1.cars == [%EctoTablestore.TestSchema.User4.Car{name: "car4name", status: nil}]
+    assert put_user1.info == %User4.Info{name: "bar4v2"}
+
+    assert put_user2.id == "5"
+    assert put_user2.cars == [%EctoTablestore.TestSchema.User4.Car{name: "car5name", status: nil}]
+    assert put_user2.info == %User4.Info{name: "bar5"}
+
+    # put in batch_write with `User`
+    result_to_user = Keyword.get(result, User)
+
+    [{:ok, put_user}] = Keyword.get(result_to_user, :put)
+    assert put_user.id == 100
+    assert put_user.inserted_at == put_user.updated_at and is_integer(put_user.inserted_at) == true
+
+    result_to_order = Keyword.get(result, Order)
+
+    # put in batch_write with `Order`
+    [{:ok, put_order}] = Keyword.get(result_to_order, :put)
+
+    assert put_order.id == new_order_id and is_integer(put_order.internal_id) == true
+    assert put_order.name == new_order_name
+  end
+
 end
