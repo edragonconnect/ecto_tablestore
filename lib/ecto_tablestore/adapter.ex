@@ -375,6 +375,8 @@ defmodule Ecto.Adapters.Tablestore do
   def search(repo, schema, index_name, options) do
     {_adapter, meta} = Ecto.Repo.Registry.lookup(repo)
 
+    options = schema_fields_for_columns_to_get(schema, options)
+
     result =
       ExAliyunOts.search(
         meta.instance,
@@ -406,6 +408,8 @@ defmodule Ecto.Adapters.Tablestore do
   def stream_search(repo, schema, index_name, options) do
     {_adapter, meta} = Ecto.Repo.Registry.lookup(repo)
 
+    options = schema_fields_for_columns_to_get(schema, options)
+
     ExAliyunOts.stream_search(
       meta.instance,
       schema.__schema__(:source),
@@ -424,6 +428,8 @@ defmodule Ecto.Adapters.Tablestore do
   @doc false
   def get(repo, schema, ids, options) do
     {_adapter, meta} = Ecto.Repo.Registry.lookup(repo)
+
+    options = schema_fields_for_columns_to_get(schema, options)
 
     result =
       ExAliyunOts.get_row(
@@ -445,6 +451,8 @@ defmodule Ecto.Adapters.Tablestore do
   @doc false
   def get_range(repo, schema, start_primary_keys, end_primary_keys, options) do
     {_adapter, meta} = Ecto.Repo.Registry.lookup(repo)
+
+    options = schema_fields_for_columns_to_get(schema, options)
 
     result =
       ExAliyunOts.get_range(
@@ -470,6 +478,8 @@ defmodule Ecto.Adapters.Tablestore do
   @doc false
   def stream_range(repo, schema, start_primary_keys, end_primary_keys, options) do
     {_adapter, meta} = Ecto.Repo.Registry.lookup(repo)
+
+    options = schema_fields_for_columns_to_get(schema, options)
 
     meta.instance
     |> ExAliyunOts.stream_range(
@@ -613,7 +623,7 @@ defmodule Ecto.Adapters.Tablestore do
     if not is_list(columns_to_get_opt),
       do:
         raise(
-          "Invalid usecase - require `columns_to_get` as list, but get: #{
+          "Invalid usecase - require `columns_to_get` as list, but got: #{
             inspect(columns_to_get_opt)
           }"
         )
@@ -1339,14 +1349,15 @@ defmodule Ecto.Adapters.Tablestore do
         options
       end
 
+    schema = MapSet.to_list(source_set) |> List.first()
+
     options =
       if columns_to_get != [] do
         Keyword.put(options, :columns_to_get, columns_to_get)
       else
-        options
+        schema_fields_for_columns_to_get(schema, options)
       end
 
-    schema = MapSet.to_list(source_set) |> List.first()
     source = schema.__schema__(:source)
 
     request =
@@ -1362,6 +1373,8 @@ defmodule Ecto.Adapters.Tablestore do
   defp map_batch_gets({schema, ids_groups, options}, {requests, schemas_mapping})
        when is_list(ids_groups) do
     source = schema.__schema__(:source)
+
+    options = schema_fields_for_columns_to_get(schema, options)
 
     request =
       ExAliyunOts.get(
@@ -1429,9 +1442,8 @@ defmodule Ecto.Adapters.Tablestore do
   end
 
   defp entity_attr_columns(%{__meta__: meta} = entity) do
-    schema = meta.schema
-
-    (schema.__schema__(:fields) -- schema.__schema__(:primary_key))
+    meta.schema
+    |> attribute_fields()
     |> Enum.reduce([], fn field_name, acc ->
       case Map.get(entity, field_name) do
         value when value != nil ->
@@ -1542,6 +1554,47 @@ defmodule Ecto.Adapters.Tablestore do
         field = String.to_existing_atom(field)
         Map.put(acc, field, value)
     end)
+  end
+
+  defp schema_fields_for_columns_to_get(schema, []) do
+    [columns_to_get: attribute_fields_to_string_list(schema)]
+  end
+  defp schema_fields_for_columns_to_get(schema, options) do
+    options
+    |> Keyword.get(:columns_to_get)
+    |> put_columns_to_get(schema, options)
+  end
+
+  defp put_columns_to_get(nil, schema, options) do
+    Keyword.put(options, :columns_to_get, attribute_fields_to_string_list(schema))
+  end
+  defp put_columns_to_get(value, schema, options)
+       when value == :all
+       when value == :RETURN_ALL do
+    # used for search index function, e.g. [columns_to_get: :all]
+    Keyword.put(options, :columns_to_get, attribute_fields_to_string_list(schema))
+  end
+  defp put_columns_to_get(value, schema, options)
+       when value == :all_from_index
+       when value == :RETURN_ALL_FROM_INDEX do
+    # used for parallel scan function (still base on search index),
+    # e.g. [columns_to_get: :all_from_index]
+    Keyword.put(options, :columns_to_get, attribute_fields_to_string_list(schema))
+  end
+  defp put_columns_to_get(_value, _schema, options) do
+    options
+  end
+
+  defp attribute_fields_to_string_list(schema) do
+    schema
+    |> attribute_fields()
+    |> Enum.map(fn(field) ->
+      Atom.to_string(field)
+    end)
+  end
+
+  defp attribute_fields(schema) do
+    (schema.__schema__(:fields) -- schema.__schema__(:primary_key))
   end
 
   ## Storage

@@ -148,6 +148,15 @@ defmodule EctoTablestore.Support.Search do
       |> TestRepo.insert(condition: condition(:expect_not_exist), return_type: :pk)
     end)
 
+    {:ok, _} =
+      ExAliyunOts.update_row(
+        @instance,
+        Student.__schema__(:source),
+        [{"partition_key", "b9"}],
+        put: [{"unknown1", "unknownfield1"}, {"unknown2", true}],
+        condition: condition(:expect_exist)
+      )
+
     Logger.info("waiting for indexing...")
     Process.sleep(35_000)
   end
