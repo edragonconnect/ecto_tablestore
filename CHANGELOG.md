@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.12.1 (2021-08-11)
+
+* Use schema defined attribute fields into `:columns_to_get` option as default
+  in all read operations via [#33](https://github.com/edragonconnect/ecto_tablestore/pull/33).
+
 ## v0.12.0 (2021-08-10)
 
 * Some fix and enhancement via [#32](https://github.com/edragonconnect/ecto_tablestore/pull/32):

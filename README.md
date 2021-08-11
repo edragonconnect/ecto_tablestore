@@ -55,6 +55,9 @@ Supported features:
 
 * Support embedded schema, please refer full functions of `Ecto.Schema` for details.
 
+* Automatically use schema defined attribute fields into `:columns_to_get` in all read operations
+  by default if this option is not explicitly provided.
+
 Implement Tablestore row related functions in `EctoTablestore.Repo` module, please see
 [document](https://hexdocs.pm/ecto_tablestore/readme.html) for details:
 
