@@ -713,7 +713,8 @@ defmodule EctoTablestore.RowTest do
       TestRepo.batch_get(requests_invalid)
     end
 
-    # The filter of following case is ((name == "name1" and level == 2) or (name == "name2" and level == 2)
+    # If set `entity_full_match: true`, the filter of following case is
+    # ((name == "name1" and level == 2) or (name == "name2" and level == 2)
     requests3 = [
       {[%User{id: 1, name: "name1"}, %User{id: 2, name: "name2"}], filter: filter("level" == 2)}
     ]
@@ -1376,4 +1377,58 @@ defmodule EctoTablestore.RowTest do
     assert put_order.name == new_order_name
   end
 
+  test "by default use schema attribute fields into columns_to_get" do
+    {_adapter, meta} = Ecto.Repo.Registry.lookup(TestRepo)
+
+    cars = Jason.encode!(
+      [%{name: "c1", status: :bar}, %{name: "c2", status: :foo}]
+    )
+
+    id1 = "id1"
+
+    {:ok, _} =
+      ExAliyunOts.put_row(
+        meta.instance,
+        User4.__schema__(:source),
+        [{"id", id1}],
+        [
+          {"count", 1},
+          {"cars", cars},
+          {"unknown1", true},
+          {"unknown2", "unknown field"}
+        ],
+        condition: condition(:ignore)
+      )
+
+    # the "unknown1" and "unknown2" fields are not defined in the schema,
+    # so they won't exist in the `:columns_to_get` option by default.
+    #
+    # meanwhile there no occurs an error about fail transfer string to an existing atom
+    # can also prove that "unknown1" and "unknown2" are not fetched from
+    # server side.
+    user = TestRepo.one(%User4{id: id1})
+
+    assert length(user.cars) == 2
+    assert user.count == 1
+    assert user.id == id1
+
+    {[user2], _next_token} = TestRepo.get_range(User4, [{"id", "id0"}], [{"id", "id2"}])
+
+    assert user == user2
+
+    [user3] =
+      User4
+      |> TestRepo.stream_range([{"id", "id0"}], [{"id", "id2"}])
+      |> Enum.to_list()
+
+    assert user == user3
+
+    requests = [
+      {User4, [{"id", id1}]}
+    ]
+
+    {:ok, [{User4, [user4]}]} = TestRepo.batch_get(requests)
+
+    assert user == user4
+  end
 end
