@@ -5,7 +5,7 @@ defmodule EctoTablestore.TestSchema.Order do
   tablestore_schema "ecto_ots_test_order" do
     field(:id, :binary_id, primary_key: true, autogenerate: false)
     field(:internal_id, :id, primary_key: true, autogenerate: true)
-    field(:name, :string)
+    field(:name, Ecto.ReplaceableString)
     field(:desc)
     field(:num, :integer)
     field(:success?, :boolean)
@@ -53,7 +53,7 @@ defmodule EctoTablestore.TestSchema.Student do
   tablestore_schema "ecto_ots_test_student" do
     field(:partition_key, :binary_id, primary_key: true)
     field(:class, :string)
-    field(:name, :string)
+    field(:name, Ecto.ReplaceableString)
     field(:age, :integer)
     field(:score, :float)
     field(:is_actived, :boolean)
@@ -107,12 +107,12 @@ defmodule EctoTablestore.TestSchema.User4 do
     field(:count, :integer)
 
     embeds_many :cars, Car, primary_key: false, on_replace: :delete do
-      field(:name, :string)
+      field(:name, Ecto.ReplaceableString)
       field(:status, Ecto.Enum, values: [:foo, :bar, :baz])
     end
 
     embeds_one :info, Info, primary_key: false, on_replace: :update do
-      field(:name, :string)
+      field(:name, Ecto.ReplaceableString)
       field(:money, :decimal)
       field(:status, Ecto.Enum, values: [:foo, :bar, :baz])
     end
@@ -125,7 +125,7 @@ defmodule EctoTablestore.TestSchema.EmbedItem do
   use Ecto.Schema
   @primary_key false
   embedded_schema do
-    field(:name, :string)
+    field(:name, Ecto.ReplaceableString)
   end
 end
 
