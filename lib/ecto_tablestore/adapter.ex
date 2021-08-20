@@ -1078,6 +1078,10 @@ defmodule Ecto.Adapters.Tablestore do
     end
   end
 
+  defp do_map_attr_to_row_item(:decimal, key, %Decimal{} = value) do
+    {Atom.to_string(key), Decimal.to_string(value)}
+  end
+
   defp do_map_attr_to_row_item(type, key, value)
        when type == :naive_datetime_usec
        when type == :naive_datetime do
@@ -1126,7 +1130,10 @@ defmodule Ecto.Adapters.Tablestore do
     for {attr_key, attr_value, _ts} <- attrs do
       field = String.to_existing_atom(attr_key)
       type = schema.__schema__(:type, field)
-      do_map_row_item_to_attr(type, field, attr_value)
+      {
+        field,
+        load_field!(attr_value, type, field, schema)
+      }
     end
   end
 
@@ -1146,47 +1153,71 @@ defmodule Ecto.Adapters.Tablestore do
       for {attr_key, attr_value, _ts} <- attrs do
         field = String.to_existing_atom(attr_key)
         type = schema.__schema__(:type, field)
-        do_map_row_item_to_attr(type, field, attr_value)
+
+        {
+          field,
+          load_field!(attr_value, type, field, schema)
+        }
       end
 
     Keyword.merge(attrs, pks)
   end
 
-  defp do_map_row_item_to_attr(type, key, value)
-       when type in [:naive_datetime_usec, :naive_datetime] and is_atom(key) do
-    {key, value |> DateTime.from_unix!() |> DateTime.to_naive()}
+  defp load_field!(value, type, field, struct)
+       when type == :naive_datetime_usec
+       when type == :naive_datetime do
+    value
+    |> DateTime.from_unix!()
+    |> DateTime.to_naive()
+    |> load!(type, field, struct)
   end
 
-  defp do_map_row_item_to_attr(type, key, value)
-       when type in [:utc_datetime, :utc_datetime_usec] and is_atom(key) do
-    {key, DateTime.from_unix!(value)}
+  defp load_field!(value, type, field, struct)
+       when type == :utc_datetime_usec
+       when type == :utc_datetime do
+    value
+    |> DateTime.from_unix!()
+    |> load!(type, field, struct)
   end
 
-  defp do_map_row_item_to_attr(type, key, value)
-       when type == :map and is_atom(key)
-       when type == :array and is_atom(key) do
-    {key, Jason.decode!(value)}
+  defp load_field!(value, type, field, struct)
+       when type == :map
+       when type == :array do
+    Jason.decode!(value) |> load!(type, field, struct)
   end
 
-  defp do_map_row_item_to_attr({:array, _}, key, value) when is_atom(key) do
-    {key, Jason.decode!(value)}
+  defp load_field!(value, {:array, _} = type, field, struct) do
+    Jason.decode!(value) |> load!(type, field, struct)
   end
 
-  defp do_map_row_item_to_attr({:map, _}, key, value) when is_atom(key) do
-    {key, Jason.decode!(value)}
+  defp load_field!(value, {:map, _} = type, field, struct) do
+    Jason.decode!(value) |> load!(type, field, struct)
   end
 
-  defp do_map_row_item_to_attr(
-         {:parameterized, Ecto.Embedded, %{cardinality: embedded_type, related: schema}},
-         key,
-         value
-       )
-       when is_atom(key) do
-    {key, decode_json_to_embedded(embedded_type, schema, value)}
+  defp load_field!(value, {:parameterized, Ecto.Embedded, %{cardinality: embedded_type, related: schema}}, _field, _struct) do
+    decode_json_to_embedded(embedded_type, schema, value)
   end
 
-  defp do_map_row_item_to_attr(_type, key, value) when is_atom(key) do
-    {key, value}
+  defp load_field!(value, :decimal, field, struct) when is_bitstring(value) do
+    value |> Decimal.new() |> load_field!(:decimal, field, struct)
+  end
+
+  defp load_field!(value, type, field, struct) do
+    load!(value, type, field, struct)
+  end
+
+  @compile {:inline, load!: 4}
+  defp load!(value, type, field, struct) do
+    case Ecto.Type.adapter_load(__MODULE__, type, value) do
+      {:ok, value} ->
+        value
+      :error ->
+        field = field && " for field #{inspect(field)}"
+        struct = struct && " in #{inspect(struct)}"
+
+        raise ArgumentError,
+              "cannot load `#{inspect(value)}` as type #{inspect(type)}#{field}#{struct}"
+    end
   end
 
   defp decode_json_to_embedded(:one, schema, value) do
@@ -1547,8 +1578,9 @@ defmodule Ecto.Adapters.Tablestore do
     Enum.reduce(items, struct, fn
       {field, value, _ts}, acc ->
         field = String.to_existing_atom(field)
-        type = meta.schema.__schema__(:type, field)
-        {_, value} = do_map_row_item_to_attr(type, field, value)
+        schema = meta.schema
+        type = schema.__schema__(:type, field)
+        value = load_field!(value, type, field, schema)
         Map.put(acc, field, value)
       {field, value}, acc ->
         field = String.to_existing_atom(field)
