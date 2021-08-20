@@ -1,4 +1,37 @@
 defmodule Ecto.ReplaceableString do
+  @moduledoc """
+  A custom type that replace some terms for strings.
+
+  `#{inspect(__MODULE__)}` can be used when you want to replace some terms on dump/load
+  a field, or even both included, for example:
+
+  Before a field persisted to the database, `#{inspect(__MODULE__)}` replaces a matched pattern
+  with the replacement, the final replaced value will be saved into database.
+
+      field :content, #{inspect(__MODULE__)},
+        on_dump: pattern: "hello", replacement: "hi", options: [global: false]
+
+  After a field loaded from the database, `#{inspect(__MODULE__)}` replaces a matched pattern
+  with the replacement, the final replaced value will extracted into the struct, but
+  no changes into the original database.
+
+      field :content, #{inspect(__MODULE__)},
+        on_load: pattern: ~r/test/, replacement: "TEST"
+
+  The `:pattern` and `:replacement` options are a pair required when both existed, the `:options` option
+  is optional, these three options are correspond completely to `String.replace/4`.
+
+  If no `:on_dump` or `:on_load` option(s) set, the following cases are equal from result perspective, but
+  recommend to use the `:string` type as a base type:
+
+      field :content, #{inspect(__MODULE__)}
+      # equals
+      field :content, :string
+
+  Please notice that once used this type means a string replacement will be invoked in each read or write operation
+  to the corresponding field, so please ensure use this type in a proper scenario to avoid a wasted performance issue,
+  or find a better way to satisfy the similar use case.
+  """
   use Ecto.ParameterizedType
 
   @doc false
@@ -47,6 +80,10 @@ defmodule Ecto.ReplaceableString do
     # make sure `load/3` will be invoked when use `on_load` case.
     :dump
   end
+
+  @doc false
+  @impl true
+  def equal?(a, b, _params), do: a == b
 
   defp prepare_init(_key, nil, acc), do: acc
   defp prepare_init(key, opts, acc) do

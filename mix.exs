@@ -55,6 +55,14 @@ defmodule EctoTablestore.MixProject do
       extras: [
         "README.md",
         "CHANGELOG.md"
+      ],
+      groups_for_modules: [
+        "Types": [
+          Ecto.ReplaceableString
+        ],
+        "Migration": [
+          EctoTablestore.Migration
+        ]
       ]
     ]
   end
