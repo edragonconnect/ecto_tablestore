@@ -12,7 +12,7 @@ defmodule Ecto.ReplaceableString do
         on_dump: pattern: "hello", replacement: "hi", options: [global: false]
 
   After a field loaded from the database, `#{inspect(__MODULE__)}` replaces a matched pattern
-  with the replacement, the final replaced value will extracted into the struct, but
+  with the replacement, the final replaced value will be extracted into the struct, but
   no changes into the original database.
 
       field :content, #{inspect(__MODULE__)},
