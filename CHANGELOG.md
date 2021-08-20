@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.12.2 (2021-08-20)
+
+* Some fix and enhancement via [#34](https://github.com/edragonconnect/ecto_tablestore/pull/34):
+
+  1. Fix to properly adapt Ecto type on load;
+  2. Add support to `:decimal` type in the field of schema;
+  3. Add `Ecto.ReplaceableString` type.
+
 ## v0.12.1 (2021-08-11)
 
 * Use schema defined attribute fields into `:columns_to_get` option as default
