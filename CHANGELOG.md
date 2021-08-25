@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.13.0 (2021-08-25)
+
+* Refactor `:hashids` type with Ecto.ParameterizedType.
+* Clean logger when create sequence.
+* Fix warning: function checked_out?/1 required with ecto `3.7.0`.
+
 ## v0.12.2 (2021-08-20)
 
 * Some fix and enhancement via [#34](https://github.com/edragonconnect/ecto_tablestore/pull/34):
