@@ -216,6 +216,7 @@ defmodule Ecto.Adapters.Tablestore do
 
   @impl true
   def insert(repo, schema_meta, fields, _on_conflict, _returning, options) do
+
     schema = schema_meta.schema
 
     instance = repo.instance
@@ -856,219 +857,55 @@ defmodule Ecto.Adapters.Tablestore do
   end
 
   def pks_and_attrs_to_put_row(instance, schema, fields) do
-    primary_keys = schema.__schema__(:primary_key)
+    prepare_primary_key_and_attribute_col_when_put_row(instance, schema, fields)
+  end
+
+  defp prepare_primary_key_and_attribute_col_when_put_row(instance, schema, fields) do
+    # From the design principle of the primary key of table, there will only be
+    # one `autogenerate_id` field at most.
     autogenerate_id = schema.__schema__(:autogenerate_id)
-    map_pks_and_attrs_to_put_row(primary_keys, autogenerate_id, fields, [], instance, schema)
-  end
 
-  defp map_pks_and_attrs_to_put_row(
-         [],
-         nil,
-         attr_columns,
-         prepared_pks,
-         _instance,
-         schema
-       ) do
-    attrs = map_attrs_to_row(schema, attr_columns)
+    {primary_keys, attribute_cols, autogen_field} =
+      schema.__schema__(:primary_key)
+      |> Enum.reduce({[], fields, nil}, fn primary_key, {primary_keys, fields, autogen_field} ->
+        {value, fields} = Keyword.pop(fields, primary_key)
+        {value, autogen_field} = value_of_primary_keys_to_put_row(
+          instance, schema, primary_keys, primary_key, value, autogenerate_id, autogen_field
+        )
+        {[{Atom.to_string(primary_key), value} | primary_keys], fields, autogen_field}
+      end)
 
     {
-      Enum.reverse(prepared_pks),
-      attrs,
-      nil
+      Enum.reverse(primary_keys),
+      map_attrs_to_row(schema, attribute_cols),
+      autogen_field
     }
   end
 
-  defp map_pks_and_attrs_to_put_row(
-         [],
-         {_, autogenerate_id_name, EctoTablestore.Hashids},
-         attr_columns,
-         prepared_pks,
-         _instance,
-         schema
-       ) do
-    attrs = map_attrs_to_row(schema, attr_columns)
-
-    {
-      Enum.reverse(prepared_pks),
-      attrs,
-      autogenerate_id_name
-    }
-  end
-
-  defp map_pks_and_attrs_to_put_row(
-         [],
-         {_, autogenerate_id_name, :id},
-         attr_columns,
-         prepared_pks,
-         _instance,
-         schema
-       ) do
-    attrs = map_attrs_to_row(schema, attr_columns)
-
-    {
-      Enum.reverse(prepared_pks),
-      attrs,
-      autogenerate_id_name
-    }
-  end
-
-  defp map_pks_and_attrs_to_put_row(
-         [primary_key | rest_primary_keys],
-         nil,
-         fields,
-         prepared_pks,
-         instance,
-         schema
-       ) do
-    {value, updated_fields} = Keyword.pop(fields, primary_key)
-
-    if value == nil,
-      do: raise("Invalid usecase - primary key: `#{primary_key}` can not be nil.")
-
-    update = [{Atom.to_string(primary_key), value} | prepared_pks]
-    map_pks_and_attrs_to_put_row(rest_primary_keys, nil, updated_fields, update, instance, schema)
-  end
-
-  defp map_pks_and_attrs_to_put_row(
-         [primary_key | rest_primary_keys],
-         {_, autogenerate_id_name, EctoTablestore.Hashids} = autogenerate_id,
-         fields,
-         prepared_pks,
-         instance,
-         schema
-       )
-       when primary_key == autogenerate_id_name and is_list(prepared_pks) do
+  defp value_of_primary_keys_to_put_row(instance, schema, _, field, nil, {_, autogen_field, {:parameterized, Ecto.Hashids, _hashids} = type} = _autogenerate_id, _autogen_field)
+       when field == autogen_field do
     source = schema.__schema__(:source)
-
-    field_name_str = Atom.to_string(autogenerate_id_name)
-
-    next_value = Sequence.next_value(instance, key_to_global_sequence(source, field_name_str))
-
-    hashids_value = Hashids.encode(schema.hashids(primary_key), next_value)
-
-    prepared_pks = [{field_name_str, hashids_value} | prepared_pks]
-
-    map_pks_and_attrs_to_put_row(
-      rest_primary_keys,
-      autogenerate_id,
-      fields,
-      prepared_pks,
-      instance,
-      schema
-    )
+    next_value = Sequence.next_value(instance, key_to_global_sequence(source, Atom.to_string(field)))
+    {:ok, value} = Ecto.Type.dump(type, next_value)
+    {value, field}
   end
 
-  defp map_pks_and_attrs_to_put_row(
-         [primary_key | rest_primary_keys],
-         {_, autogenerate_id_name, EctoTablestore.Hashids} = autogenerate_id,
-         fields,
-         prepared_pks,
-         instance,
-         schema
-       )
-       when primary_key != autogenerate_id_name do
-    {value, updated_fields} = Keyword.pop(fields, primary_key)
-
-    if value == nil,
-      do: raise("Invalid usecase - autogenerate primary key: `#{primary_key}` can not be nil.")
-
-    prepared_pks = [{Atom.to_string(primary_key), value} | prepared_pks]
-
-    map_pks_and_attrs_to_put_row(
-      rest_primary_keys,
-      autogenerate_id,
-      updated_fields,
-      prepared_pks,
-      instance,
-      schema
-    )
-  end
-
-  defp map_pks_and_attrs_to_put_row(
-         [primary_key | rest_primary_keys],
-         {_, autogenerate_id_name, :id} = autogenerate_id,
-         fields,
-         [],
-         instance,
-         schema
-       )
-       when primary_key == autogenerate_id_name do
-    # Set partition_key as auto-generated, use sequence for this usecase
-
+  defp value_of_primary_keys_to_put_row(instance, schema, [], field, nil, {_, autogen_field, :id}, _autogen_field) when field == autogen_field do
+    # Set partition_key as an auto-generated, use sequence for this usecase
     source = schema.__schema__(:source)
-
-    field_name_str = Atom.to_string(autogenerate_id_name)
-
-    next_value = Sequence.next_value(instance, key_to_global_sequence(source, field_name_str))
-
-    prepared_pks = [{field_name_str, next_value}]
-
-    map_pks_and_attrs_to_put_row(
-      rest_primary_keys,
-      autogenerate_id,
-      fields,
-      prepared_pks,
-      instance,
-      schema
-    )
+    next_value = Sequence.next_value(instance, key_to_global_sequence(source, Atom.to_string(field)))
+    {next_value, field}
   end
 
-  defp map_pks_and_attrs_to_put_row(
-         [primary_key | rest_primary_keys],
-         {_, autogenerate_id_name, :id} = autogenerate_id,
-         fields,
-         prepared_pks,
-         instance,
-         schema
-       )
-       when primary_key == autogenerate_id_name do
-    update = [{Atom.to_string(autogenerate_id_name), PKType.auto_increment()} | prepared_pks]
-
-    map_pks_and_attrs_to_put_row(
-      rest_primary_keys,
-      autogenerate_id,
-      fields,
-      update,
-      instance,
-      schema
-    )
+  defp value_of_primary_keys_to_put_row(_instance, _schema, prepared_primary_keys, field, nil, {_, autogen_field, :id}, _autogen_field)
+       when field == autogen_field and prepared_primary_keys != [] do
+    # Exclude partition_key, start from the secondary primary key,
+    # set the value as `PKType.auto_increment` to use the auto increment by server side
+    {PKType.auto_increment(), field}
   end
 
-  defp map_pks_and_attrs_to_put_row(
-         [primary_key | rest_primary_keys],
-         {_, autogenerate_id_name, :id} = autogenerate_id,
-         fields,
-         prepared_pks,
-         instance,
-         schema
-       )
-       when primary_key != autogenerate_id_name do
-    {value, updated_fields} = Keyword.pop(fields, primary_key)
-
-    if value == nil,
-      do: raise("Invalid usecase - autogenerate primary key: `#{primary_key}` can not be nil.")
-
-    prepared_pks = [{Atom.to_string(primary_key), value} | prepared_pks]
-
-    map_pks_and_attrs_to_put_row(
-      rest_primary_keys,
-      autogenerate_id,
-      updated_fields,
-      prepared_pks,
-      instance,
-      schema
-    )
-  end
-
-  defp map_pks_and_attrs_to_put_row(
-         _,
-         {_, _autogenerate_id_name, :binary_id},
-         _fields,
-         _prepared_pks,
-         _instance,
-         _schema
-       ) do
-    raise "Not support autogenerate id as string (`:binary_id`)."
+  defp value_of_primary_keys_to_put_row(_instance, _schema, _, _field, value, _, autogen_field) do
+    {value, autogen_field}
   end
 
   defp map_attrs_to_row(schema, attr_columns) do

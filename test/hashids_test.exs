@@ -11,13 +11,23 @@ defmodule EctoTablestore.HashidsTest do
   setup_all do
     TestHelper.setup_all()
 
-    table = Post.__schema__(:source)
+    post_table = Post.__schema__(:source)
 
     pk = "keyid"
 
     ExAliyunOts.create_table(
       @instance,
-      table,
+      post_table,
+      [{pk, :string}]
+    )
+
+    post2_table = Post2.__schema__(:source)
+
+    pk = "id"
+
+    ExAliyunOts.create_table(
+      @instance,
+      post2_table,
       [{pk, :string}]
     )
 
@@ -25,16 +35,20 @@ defmodule EctoTablestore.HashidsTest do
     EctoTablestore.Sequence.create(@instance)
 
     on_exit(fn ->
-      ExAliyunOts.delete_table(@instance, table)
 
-      key = Ecto.Adapters.Tablestore.key_to_global_sequence(table, pk)
+      Enum.map([post_table, post2_table], fn table ->
+        ExAliyunOts.delete_table(@instance, table)
 
-      ExAliyunOts.delete_row(
-        @instance,
-        "ecto_tablestore_default_seq",
-        [{"name", key}],
-        condition: condition(:expect_exist)
-      )
+        key = Ecto.Adapters.Tablestore.key_to_global_sequence(table, pk)
+
+        ExAliyunOts.delete_row(
+          @instance,
+          "ecto_tablestore_default_seq",
+          [{"name", key}],
+          condition: condition(:expect_exist)
+        )
+      end)
+
     end)
   end
 
@@ -63,7 +77,15 @@ defmodule EctoTablestore.HashidsTest do
       TestRepo.insert(new_post, condition: condition(:expect_not_exist), return_type: :pk)
 
     assert new_post2.keyid != post2.keyid
-    hashids = Post.hashids(:keyid)
+    {:keyid, :keyid, {:parameterized, Ecto.Hashids, opts}} = Post.__schema__(:autogenerate_id)
+
+    # no Hashids related options defined in the `Post` schema
+    assert opts == [schema: Post]
+
+    app = Application.get_application(EctoTablestore.Application)
+    [{Post, config_hashids_opts}] = Application.get_env(app, :hashids)
+    hashids = Hashids.new(config_hashids_opts)
+
     [id2] = Hashids.decode!(hashids, new_post2.keyid)
     [id] = Hashids.decode!(hashids, post2.keyid)
     assert id2 == id + 1
@@ -94,7 +116,8 @@ defmodule EctoTablestore.HashidsTest do
         {changeset_post2, entity_full_match: true, return_type: :pk}
       ],
       put: [
-        {p3, condition: condition(:expect_not_exist), return_type: :pk}
+        {p3, condition: condition(:expect_not_exist), return_type: :pk},
+        {%Post2{content: "post2_p0"}, condition: condition(:expect_not_exist), return_type: :pk}
       ]
     ]
 
@@ -103,7 +126,12 @@ defmodule EctoTablestore.HashidsTest do
     post_batch_write_result = Keyword.get(result, Post)
 
     [{:ok, put_item}] = post_batch_write_result[:put]
-    assert put_item.content == "p3"
+    assert put_item.content == "p3" and is_bitstring(put_item.keyid) == true
+
+    post2_batch_write_result = Keyword.get(result, Post2)
+    [{:ok, put_item2}] = post2_batch_write_result[:put]
+    assert put_item2.content == "post2_p0" and is_bitstring(put_item2.id) == true
+
     [{:ok, delete_item1}, {:ok, delete_item2}] = post_batch_write_result[:delete]
     assert delete_item1.keyid == saved_p0.keyid
     assert delete_item2.keyid == saved_p1.keyid
@@ -111,40 +139,63 @@ defmodule EctoTablestore.HashidsTest do
     assert update_item.keyid == saved_p2.keyid and update_item.content == new_p2_content
   end
 
-  test "schema generate hashids function" do
-    hashids1 = Post.hashids(:keyid)
-    value = Hashids.encode(hashids1, 1)
-    assert String.length(value) == 2
-    [num] = Hashids.decode!(hashids1, value)
-    assert num == 1
+  describe "define :hashids options in app env" do
+    test "make sure hashids configurable in runtime" do
+      app = Application.get_application(EctoTablestore.Application)
 
-    hashids2 = Post2.hashids(:id)
-    value2 = Hashids.encode(hashids2, 10)
-    assert String.length(value2) == 5
-    assert is_integer(String.to_integer(value2)) == true
+      [{Post, config_hashids_opts}] = Application.get_env(app, :hashids)
 
-    [num2] = Hashids.decode!(hashids2, value2)
-    assert num2 == 10
+      {:keyid, :keyid, {:parameterized, Ecto.Hashids, opts} = type} = Post.__schema__(:autogenerate_id)
+      # no Hashids related options defined when schema initialized
+      assert opts == [schema: Post]
+
+      assert Ecto.Type.dump(type, 1) == {:ok, Hashids.new(config_hashids_opts) |> Hashids.encode(1)}
+
+      new_salt = "1234"
+      new_min_len = 12
+      Application.put_env(app, :hashids, [{Post, salt: new_salt, min_len: new_min_len}])
+
+      {:keyid, :keyid, {:parameterized, Ecto.Hashids, opts}} = Post.__schema__(:autogenerate_id)
+      assert opts == [schema: Post]
+
+      assert Ecto.Type.dump(type, 100) == {:ok, Hashids.new([salt: new_salt, min_len: new_min_len]) |> Hashids.encode(100)}
+
+      assert_raise ArgumentError, ~r/expect a keyword as options to Hashids/, fn ->
+        Application.put_env(app, :hashids, [{Post, :invalid_hashids_config}])
+        Ecto.Type.dump(type, 1)
+      end
+    end
   end
 
-  test "make sure hashids configurable in runtime" do
-    app = Application.get_application(EctoTablestore.Application)
+  describe "define :hashids options in field" do
+    test "verify dump with definition" do
+      alphabet = "1234567890cfhistu"
+      min_len = 5
+      salt = "testsalt"
 
-    [{Post, config_hashids_opts}] = Application.get_env(app, :hashids)
+      {:id, :id, {:parameterized, Ecto.Hashids, opts} = type} = Post2.__schema__(:autogenerate_id)
+      assert opts[:alphabet] == alphabet and opts[:min_len] == min_len and opts[:salt] == salt
 
-    hashids = Post.hashids(:keyid)
-    assert "#{hashids.salt}" == config_hashids_opts[:salt] and hashids.min_len == config_hashids_opts[:min_len]
+      assert Ecto.Type.dump(type, 100) == {:ok, Hashids.new([salt: salt, min_len: min_len, alphabet: alphabet]) |> Hashids.encode(100)}
+    end
 
-    new_salt = "1234"
-    new_min_len = 12
-    Application.put_env(app, :hashids, [{Post, salt: new_salt, min_len: new_min_len}])
+    test "always use field :hashids options once defined" do
+      # before change Post2's :hashids options in env
+      {:id, :id, {:parameterized, Ecto.Hashids, _opts} = type} = Post2.__schema__(:autogenerate_id)
+      {:ok, value} = Ecto.Type.dump(type, 100)
+      assert is_integer(String.to_integer(value)) == true and String.length(value) == 5
 
-    hashids = Post.hashids(:keyid)
-    assert "#{hashids.salt}" == new_salt and hashids.min_len == new_min_len
+      app = Application.get_application(EctoTablestore.Application)
+      alphabet = "1234567890cfhistu"
+      new_salt = "new_salt"
+      new_min_len = 20
+      Application.put_env(app, :hashids, [{Post2, salt: new_salt, min_len: new_min_len, alphabet: alphabet}])
 
-    assert_raise RuntimeError, ~r/:invalid_hashids_config/, fn ->
-      Application.put_env(app, :hashids, [{Post, :invalid_hashids_config}])
-      Post.hashids(:keyid)
+      # after change Post2's :hashids options in env
+      {:ok, value2} = Ecto.Type.dump(type, 100)
+      assert value == value2
+
+      assert value2 != Hashids.new([salt: new_salt, min_len: new_min_len, alphabet: alphabet]) |> Hashids.encode(100)
     end
   end
 end

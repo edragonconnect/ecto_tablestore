@@ -58,6 +58,7 @@ defmodule EctoTablestore.MixProject do
       ],
       groups_for_modules: [
         "Types": [
+          Ecto.Hashids,
           Ecto.ReplaceableString
         ],
         "Migration": [

@@ -67,138 +67,26 @@ defmodule EctoTablestore.Schema do
   end
 
   defmacro tablestore_schema(source, do: block) do
-    {block, hashids} = check_block(block, __CALLER__.module)
+    block = custom_type_to_full_module(block)
     quote do
       Ecto.Schema.schema(unquote(source), do: unquote(block))
-
-      unquote(generate_hashids_config(hashids))
     end
   end
 
-  defp generate_hashids_config(hashids) do
-    for {key, {opts, schema_module}} <- hashids do
-      quote location: :keep do
-        def hashids(unquote(key)) do
-          schema_module = unquote(schema_module)
-          opts = unquote(opts)
-
-          opts = fetch_hashids_opts(opts, schema_module)
-
-          if not is_list(opts) do
-            raise "Using invalid options: #{inspect(opts)} for `#{schema_module}` schema, please check it should be a keyword."
-          end
-
-          opts
-          |> Keyword.take([:salt, :min_len, :alphabet])
-          |> Hashids.new()
-        end
-
-        defp fetch_hashids_opts(nil, schema_module) do
-          Application.fetch_env!(:ecto_tablestore, :hashids) |> Keyword.get(schema_module, [])
-        end
-
-        defp fetch_hashids_opts(opts, _schema_module) do
-          opts
-        end
-
-      end
-    end
+  defp custom_type_to_full_module({:__block__, info, fields}) do
+    fields = Enum.map(fields, &map_custom_type/1)
+    {:__block__, info, fields}
   end
 
-  defp check_block({:__block__, info, fields}, schema_module) do
-    {fields, hashids} = supplement_fields(fields, [], [], schema_module)
-
-    {
-      {:__block__, info, fields},
-      Macro.escape(hashids)
-    }
+  defp map_custom_type({:field, info, [field_name, :hashids, opts]}) do
+    {:field, info, [field_name, Ecto.Hashids, opts]}
   end
-
-  defp check_block(block, _) do
-    block
+  defp map_custom_type({:field, info, [field_name, {:__aliases__, _, [:EctoTablestore, :Hashids]}, opts]}) do
+    # reserved for compatible with the deleted `EctoTablestore.Hashids` type
+    {:field, info, [field_name, Ecto.Hashids, opts]}
   end
-
-  defp supplement_fields([], prepared, hashids, _schema_module) do
-    {Enum.reverse(prepared), hashids}
-  end
-
-  defp supplement_fields(
-         [
-           {defined_macro, field_line, [field_name, :hashids, opts]} = field
-           | rest_fields
-         ],
-         prepared,
-         prepared_hashids,
-         schema_module
-       ) do
-    if Keyword.get(opts, :primary_key, false) do
-      {field, new_hashids} =
-        supplement_hashids_field(defined_macro, field_line, field_name, opts, schema_module)
-
-      supplement_fields(
-        rest_fields,
-        [field | prepared],
-        [new_hashids | prepared_hashids],
-        schema_module
-      )
-    else
-      supplement_fields(rest_fields, [field | prepared], prepared_hashids, schema_module)
-    end
-  end
-
-  defp supplement_fields(
-         [
-           {defined_macro, field_line, [field_name, {:__aliases__, _line, type}, opts]} = field
-           | rest_fields
-         ],
-         prepared,
-         prepared_hashids,
-         schema_module
-       )
-       when type == [:EctoTablestore, :Hashids]
-       when type == [:Hashids] do
-    if Keyword.get(opts, :primary_key, false) do
-      {field, new_hashids} =
-        supplement_hashids_field(defined_macro, field_line, field_name, opts, schema_module)
-
-      supplement_fields(
-        rest_fields,
-        [field | prepared],
-        [new_hashids | prepared_hashids],
-        schema_module
-      )
-    else
-      supplement_fields(rest_fields, [field | prepared], prepared_hashids, schema_module)
-    end
-  end
-
-  defp supplement_fields(
-         [{defined_macro, field_line, field_info} | rest_fields],
-         prepared,
-         hashids,
-         schema_module
-       ) do
-    supplement_fields(
-      rest_fields,
-      [{defined_macro, field_line, field_info} | prepared],
-      hashids,
-      schema_module
-    )
-  end
-
-  defp supplement_hashids_field(defined_macro, field_line, field_name, opts, schema_module) do
-
-    field = {
-      defined_macro,
-      field_line,
-      [
-        field_name,
-        EctoTablestore.Hashids,
-        opts
-      ]
-    }
-
-    {field, {field_name, {opts[:hashids], schema_module}}}
+  defp map_custom_type(field) do
+    field
   end
 
 end
