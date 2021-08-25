@@ -1,6 +1,6 @@
 defmodule EctoTablestore.Sequence do
   @moduledoc false
-  require Logger
+
   alias ExAliyunOts.{Var, Sequence}
 
   @default_seq "ecto_tablestore_default_seq"
@@ -8,9 +8,7 @@ defmodule EctoTablestore.Sequence do
   def default_table, do: @default_seq
 
   def create(instance, seq_name \\ @default_seq) do
-    result = Sequence.create(instance, %Var.NewSequence{name: seq_name})
-    Logger.info("create a sequence: #{seq_name} result: #{inspect(result)}")
-    result
+    Sequence.create(instance, %Var.NewSequence{name: seq_name})
   end
 
   def next_value(instance, seq_name, field_name)
