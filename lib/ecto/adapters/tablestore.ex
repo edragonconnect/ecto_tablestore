@@ -181,6 +181,9 @@ defmodule Ecto.Adapters.Tablestore do
   end
 
   @impl true
+  def checked_out?(_adapter_meta), do: false
+
+  @impl true
   def checkout(_adapter_meta, _config, function), do: function.()
 
   @impl true
