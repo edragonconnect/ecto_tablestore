@@ -67,13 +67,13 @@ defmodule EctoTablestore.Schema do
   end
 
   defmacro tablestore_schema(source, do: block) do
-    block = custom_type_to_full_module(block)
+    block = transfer_custom_type_fields(block)
     quote do
       Ecto.Schema.schema(unquote(source), do: unquote(block))
     end
   end
 
-  defp custom_type_to_full_module({:__block__, info, fields}) do
+  defp transfer_custom_type_fields({:__block__, info, fields}) do
     fields = Enum.map(fields, &map_custom_type/1)
     {:__block__, info, fields}
   end
