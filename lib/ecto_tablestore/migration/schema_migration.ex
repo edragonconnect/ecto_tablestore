@@ -7,7 +7,7 @@ defmodule EctoTablestore.Migration.SchemaMigration do
   import EctoTablestore.Query
   alias Ecto.{Changeset, MigrationError}
 
-  tablestore_schema "schema_migrations" do
+  schema "schema_migrations" do
     field(:version, :integer, primary_key: true)
     timestamps(updated_at: false)
   end

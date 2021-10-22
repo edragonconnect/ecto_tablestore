@@ -4,13 +4,13 @@ defmodule EctoTablestore.ReplaceableStringTest do
   alias Ecto.Changeset
   alias EctoTablestore.TestRepo
   alias __MODULE__
-  
+
   import EctoTablestore.Query, only: [condition: 1]
 
   defmodule ReplaceableSchema do
     use EctoTablestore.Schema
 
-    tablestore_schema "test_replaceable_schema" do
+    schema "test_replaceable_schema" do
       field(:id, :string, primary_key: true)
 
       embeds_one(:profile, ReplaceableStringTest.Profile, on_replace: :delete)
@@ -24,7 +24,7 @@ defmodule EctoTablestore.ReplaceableStringTest do
         on_load: [pattern: ~r/foo/, replacement: "FOO"])
       field(:field_on_load_array_replace, {:array, Ecto.ReplaceableString},
         on_load: [pattern: ~r(http://), replacement: "https://"])
-      
+
       field(:price, :decimal)
     end
   end
@@ -39,7 +39,7 @@ defmodule EctoTablestore.ReplaceableStringTest do
       field(:name, :string)
       field(:urls, {:array, Ecto.ReplaceableString},
         on_load: [pattern: ~r(http://), replacement: "https://"])
-      field(:comment, Ecto.ReplaceableString, 
+      field(:comment, Ecto.ReplaceableString,
         on_dump: [pattern: "", replacement: "."])
     end
 
@@ -63,14 +63,14 @@ defmodule EctoTablestore.ReplaceableStringTest do
   end
 
   test "bad values" do
-    message = "Ecto.ReplaceableString type must both have a `:pattern` option specified as a string or a regex\n" <> 
+    message = "Ecto.ReplaceableString type must both have a `:pattern` option specified as a string or a regex\n" <>
       "type and a `:replacement` option as a string type"
 
     assert_raise ArgumentError, ~r/#{message}/, fn ->
       defmodule SchemaInvalidReplaceable do
         use EctoTablestore.Schema
 
-        tablestore_schema "invalid" do
+        schema "invalid" do
           field :id, :string, primary_key: true
           field :name, Ecto.ReplaceableString,
             on_dump: [pattern: ~r/pattern/]
@@ -82,7 +82,7 @@ defmodule EctoTablestore.ReplaceableStringTest do
       defmodule SchemaInvalidReplaceable do
         use EctoTablestore.Schema
 
-        tablestore_schema "invalid" do
+        schema "invalid" do
           field :id, :string, primary_key: true
           field :name, Ecto.ReplaceableString,
             on_dump: [replacement: "test"]
@@ -97,7 +97,7 @@ defmodule EctoTablestore.ReplaceableStringTest do
       # in this case, the defined type of field is :string
       use EctoTablestore.Schema
 
-      tablestore_schema "replaceable_as_string" do
+      schema "replaceable_as_string" do
         field :id, :string, primary_key: true
         field :name, Ecto.ReplaceableString
         field :tags, {:array, Ecto.ReplaceableString}
@@ -170,7 +170,7 @@ defmodule EctoTablestore.ReplaceableStringTest do
       assert profile_changes.changes == %{comment: "test comment"}
       assert profile_changes.valid? == true
     end
-    
+
     test "reject bad strings" do
       type = ReplaceableSchema.__schema__(:type, :field_on_dump_array_replace)
       assert %Changeset{
@@ -276,7 +276,7 @@ defmodule EctoTablestore.ReplaceableStringTest do
     test "dump with embeds" do
       assert %ReplaceableSchema{profile: %Profile{comment: "test"}, id: id} =
         TestRepo.insert!(%ReplaceableSchema{id: "6", profile: %{comment: "test"}}, condition: condition(:ignore))
-      
+
       expected_saved_value = ".t.e.s.t."
 
       # verify to read from server

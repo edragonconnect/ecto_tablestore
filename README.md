@@ -142,8 +142,8 @@ to generate your *hash* ids when insert row(s), for `Repo.insert/2` or `Repo.bat
 defmodule Module do
   use EctoTablestore.Schema
 
-  tablestore_schema "table_name" do
-    field(:id, :hashids, primary_key: true, autogenerate: true,
+  schema "table_name" do
+    field(:id, Ecto.Hashids, primary_key: true, autogenerate: true,
       hashids: [salt: "123", min_len: 2, alphabet: "..."])
     field(:content, :string)
   end

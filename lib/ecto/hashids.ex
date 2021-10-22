@@ -6,19 +6,17 @@ if Code.ensure_loaded?(Hashids) do
     the partition key (the first defined primary key).
 
     Define `:hashids` type to the primary key of schema, for example:
-      
+
         defmodule MySchema do
           use EctoTablestore.Schema
 
-          tablestore_schema "table_name" do
-            field(:id, :hashids, primary_key: true, autogenerate: true)
-            # or 
+          schema "table_name" do
             field(:id, Ecto.Hashids, primary_key: true, autogenerate: true)
           end
 
         end
 
-    In the above case, there will try to find a schema `:hashids` configuration from 
+    In the above case, there will try to find a schema `:hashids` configuration from
     the application environment:
 
         config :ecto_tablestore,
@@ -26,7 +24,7 @@ if Code.ensure_loaded?(Hashids) do
             {MySchema, [salt: "...", min_len: ..., alphabet: "..."]}
           ]
 
-    If the `:hashids` option of the application environment is not defined, there will use default 
+    If the `:hashids` option of the application environment is not defined, there will use default
     options("`[]`") to `Hashids.new/1`.
 
     We can also set the options when define the `:hashids` type to the primary key,
@@ -43,19 +41,19 @@ if Code.ensure_loaded?(Hashids) do
 
     Please see the options of `Hashids.new/1` for details.
     """
-  
+
     use Ecto.ParameterizedType
-  
+
     @hashids_opts [:alphabet, :min_len, :salt]
 
     @impl true
     def type(_options) do
-      # define type as `:binary_id` there will be processed as 
+      # define type as `:binary_id` there will be processed as
       # `autogenerate_id` by Ecto, and can properly return the primary key
       # with the expected value into the struct after insert.
       :binary_id
     end
-  
+
     @impl true
     def init(opts) do
       opts
@@ -63,7 +61,7 @@ if Code.ensure_loaded?(Hashids) do
       |> Keyword.take(@hashids_opts)
       |> Keyword.put(:schema, opts[:schema])
     end
-  
+
     @impl true
     def cast(value, _options) when is_bitstring(value) do
       {:ok, value}
@@ -73,7 +71,7 @@ if Code.ensure_loaded?(Hashids) do
     def load(value, _loader, _options) do
       {:ok, value}
     end
-  
+
     @impl true
     def dump(nil, _, _), do: {:ok, nil}
     def dump(value, _dumper, options) when is_integer(value) and value >= 0 do
@@ -85,7 +83,7 @@ if Code.ensure_loaded?(Hashids) do
       # for example, insert and then update it with an generated hashids
       {:ok, value}
     end
-  
+
     defp new_hashids(opts) do
       hashids_opts = Keyword.take(opts, @hashids_opts)
 
