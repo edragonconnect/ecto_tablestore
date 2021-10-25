@@ -134,7 +134,13 @@ end
 ## Integrate Hashids
 
 Base on unique integer of atomic-increment sequence, provides a way to simply integrate `Hashids`
-to generate your *hash* ids when insert row(s), for `Repo.insert/2` or `Repo.batch_write/1`.
+to generate your *hash* ids as the primary key when insert row(s), for `Repo.insert/2` or `Repo.batch_write/1`.
+
+Add a dependency to your Mix project
+
+```elixir
+{:hashids, "~> 2.0"}
+```
 
 ### Use in schema
 
