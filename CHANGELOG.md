@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.13.1 (2021-10-25)
+
+* Update document to clarify `Ecto.TablestoreSchema` use.
+
 ## v0.13.0 (2021-08-25)
 
 * Refactor `:hashids` type with Ecto.ParameterizedType.
