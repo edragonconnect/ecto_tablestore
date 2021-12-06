@@ -153,6 +153,27 @@ defmodule EctoTablestore.Repo do
   @callback get(schema, ids :: list, options) :: schema | {:error, term()} | nil
 
   @doc """
+  Get multiple structs by range to the schema, result in `:forward` direction by default.
+
+  ## Example
+
+    Simply get result in a range request:
+
+      Repo.get_range(Order)
+      Repo.get_range(Order, direction: :backward)
+
+    If the `Order` schema has multiple primary keys, and the `:id` field is the partition key,
+    we can get records in range under the partition key `"1"` in this way:
+
+      Repo.get_range(%Order{id: "1"})
+
+  ## Options
+
+  See `c:get_range/4`.
+  """
+  @callback get_range(schema, options) :: {nil, nil} | {list, nil} | {list, binary()} | {:error, term()}
+
+  @doc """
   Get multiple structs by range from one table, rely on the conjunction of the partition key and
   other primary key(s).
 
