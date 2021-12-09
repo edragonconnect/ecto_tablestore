@@ -1,7 +1,7 @@
 if Code.ensure_loaded?(Hashids) do
   defmodule Ecto.Hashids do
     @moduledoc """
-    A cutom type leverages the generated sequence integer value to
+    A custom type leverages the generated sequence integer value to
     encode a hashid string for the primary key, recommend to use this for
     the partition key (the first defined primary key).
 
