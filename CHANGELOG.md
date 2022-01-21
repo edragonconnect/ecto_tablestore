@@ -1,8 +1,14 @@
 # Changelog
 
-## v0.13.1 (2021-10-25)
+## v0.13.2 (2022-01-21)
+
+* Fix schema's timestamps() as as the original with second time unit.
+* Fix `Repo.get_range/4` document missed.
+
+## ~~v0.13.1 (2021-10-25)~~
 
 * Update document to clarify `EctoTablestore.Schema` use.
+* Some changes to schema's timestamps() but with unexpected change the time unit of `inserted_at`/`updated_at` fields from second to nanosecond, fixed in `0.13.2`, so please DO NOT use this version.
 
 ## v0.13.0 (2021-08-25)
 
