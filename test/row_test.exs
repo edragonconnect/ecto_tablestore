@@ -50,6 +50,9 @@ defmodule EctoTablestore.RowTest do
     {:ok, returned_user} = TestRepo.insert(user, condition: condition(:expect_not_exist), return_type: :pk)
     assert length(returned_user.cars) == 2
 
+    # ensure the inserted_at/updated_at fields are in second unit by default.
+    assert returned_user.inserted_at <= System.os_time(:second)
+
     # override
     user =
       user
@@ -89,7 +92,9 @@ defmodule EctoTablestore.RowTest do
     assert :ok == status
 
     one_result = TestRepo.one(user4)
-    assert user4 == one_result
+    assert user4.cars == one_result.cars and
+             user4.info == one_result.info and
+             user4.item == one_result.item
 
     info = %{
       name: "Ben"

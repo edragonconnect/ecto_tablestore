@@ -45,7 +45,7 @@ defmodule EctoTablestore.TestSchema.User do
 
     timestamps(
       type: :integer,
-      autogenerate: {System, :os_time, []}
+      autogenerate: {System, :os_time, [:second]}
     )
   end
 
@@ -122,6 +122,8 @@ defmodule EctoTablestore.TestSchema.User4 do
     end
 
     embeds_one(:item, EctoTablestore.TestSchema.EmbedItem, on_replace: :update)
+
+    timestamps()
   end
 end
 

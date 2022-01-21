@@ -21,7 +21,7 @@ defmodule EctoTablestore.Schema do
           field(:name, :string)
           timestamps(
             type: :integer,
-            autogenerate: {System, :os_time, []}
+            autogenerate: {System, :os_time, [:second]}
           )
         end
       end
@@ -82,7 +82,7 @@ defmodule EctoTablestore.Schema do
   end
 
   def __timestamps__() do
-    System.os_time()
+    System.os_time(:second)
   end
 
   @doc """
