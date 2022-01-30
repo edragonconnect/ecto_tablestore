@@ -1436,4 +1436,20 @@ defmodule EctoTablestore.RowTest do
 
     assert user == user4
   end
+
+  test "schema default value" do
+    user = %User2{id: "default1", age: 30}
+    {:ok, user_inserted} = TestRepo.insert(user, condition: condition(:ignore))
+
+    changeset = Changeset.change(user_inserted, %{name: "new"})
+    {:ok, updated_user} = TestRepo.update(changeset, condition: condition(:expect_exist))
+    assert updated_user.name == "new"
+
+    changeset = Changeset.change(user, %{age: 31}) |> Changeset.force_change(:name, user_inserted.name)
+    {:ok, updated_user} = TestRepo.update(changeset, condition: condition(:expect_exist))
+    assert updated_user.name == user.name # default value
+
+    final = TestRepo.one(user)
+    assert final.name == user.name and final.age == 31
+  end
 end
