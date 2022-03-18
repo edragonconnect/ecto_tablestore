@@ -1265,7 +1265,7 @@ defmodule Ecto.Adapters.Tablestore do
     raise("Invalid usecase - input invalid batch get request: #{inspect(request)}")
   end
 
-  defp format_ids_groups(schema, [ids] = ids_groups) when is_list(ids) do
+  defp format_ids_groups(schema, [ids | _] = ids_groups) when is_list(ids) do
     ids_groups
     |> Enum.map(fn ids_group ->
       if is_list(ids_group),
