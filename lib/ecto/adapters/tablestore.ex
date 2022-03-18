@@ -128,15 +128,28 @@ defmodule Ecto.Adapters.Tablestore do
             when gets: [
                    {
                      module :: Ecto.Schema.t(),
-                     [{key :: String.t() | atom(), value :: integer | String.t()}],
-                     options :: Keyword.t()
+                     [
+                       [{key :: String.t() | atom(), value :: integer | String.t()}]
+                     ]
                    }
+                   | {
+                       module :: Ecto.Schema.t(),
+                       [
+                         [{key :: String.t() | atom(), value :: integer | String.t()}]
+                       ],
+                       options
+                     }
                    | {
                        module :: Ecto.Schema.t(),
                        [{key :: String.t() | atom(), value :: integer | String.t()}]
                      }
-                   | (schema_entity :: Ecto.Schema.t())
-                   | {[schema_entity :: Ecto.Schema.t()], options :: Keyword.t()}
+                     | {
+                         module :: Ecto.Schema.t(),
+                         [{key :: String.t() | atom(), value :: integer | String.t()}],
+                         options
+                       }
+                     | [schema_entity :: Ecto.Schema.t()]
+                       | {[schema_entity :: Ecto.Schema.t()], options}
                  ]
       def batch_get(gets), do: Tablestore.batch_get(get_dynamic_repo(), gets)
 
