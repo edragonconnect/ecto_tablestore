@@ -158,7 +158,7 @@ defmodule EctoTablestore.Support.Search do
       )
 
     Logger.info("waiting for indexing...")
-    Process.sleep(35_000)
+    Process.sleep(90_000)
   end
 
   defp create_search_index(@instance, table, index_name) do
