@@ -771,6 +771,45 @@ defmodule EctoTablestore.RowTest do
     end
   end
 
+  test "repo - batch_get from table with multiple pks" do
+    saved_orders  =
+      Enum.reduce(1..3, [], fn var, cur_orders ->
+        order = %Order{id: "#{var}", desc: "desc#{var}", num: var, price: 1.8 * var}
+        {:ok, saved_order} =
+          TestRepo.insert(order, condition: condition(:ignore), return_type: :pk)
+        cur_orders ++ [saved_order]
+      end)
+
+    requests1 = [
+      [
+        %Order{id: "1", internal_id: Enum.at(saved_orders, 0).internal_id},
+        %Order{id: "2", internal_id: Enum.at(saved_orders, 1).internal_id},
+        %Order{id: "3", internal_id: Enum.at(saved_orders, 2).internal_id}
+      ]
+    ]
+
+    requests2 = [
+      {Order, [
+        [{"id", "1"}, {"internal_id", Enum.at(saved_orders, 0).internal_id}],
+        [{"id", "2"}, {"internal_id", Enum.at(saved_orders, 1).internal_id}],
+        [{"id", "3"}, {"internal_id", Enum.at(saved_orders, 2).internal_id}]
+      ]}
+    ]
+
+    {:ok, result} = TestRepo.batch_get(requests1)
+    {:ok, ^result} = TestRepo.batch_get(requests2)
+
+    [{Order, query_orders}] = result
+
+    assert length(query_orders) == 3
+
+    for order <- saved_orders do
+      TestRepo.delete(%Order{id: order.id, internal_id: order.internal_id},
+        condition: condition(:expect_exist)
+      )
+    end
+  end
+
   test "repo - batch_write" do
     order0 = %Order{id: "order0", desc: "desc0"}
     {:ok, saved_order0} = TestRepo.insert(order0, condition: condition(:ignore), return_type: :pk)

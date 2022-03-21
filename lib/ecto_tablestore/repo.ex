@@ -250,31 +250,86 @@ defmodule EctoTablestore.Repo do
 
   ## Example
 
+  When the schema has only 1 primary key, and you use default options:
+
+      # get_row style
       batch_get([
-        {Schema1, [[ids: ids1], [ids: ids2]]},
-        [%Schema2{keys: keys1}, %Schema2{keys: keys2}]
+        {Schema1, [[{"id", 1}], [{"id", 2}]]},
+        {Schema2, [[{"id", 3}], [{"id", 4}]]}
       ])
 
+      # get_row style
+      # if only get one row from one schema could also be:
       batch_get([
-        {Schema1, [[ids: ids1], [ids: ids2]]},
+        {Schema1, [{"id", 1}]},
+        {Schema2, [{"id", 3}]}
+      ])
+
+      # schema_entity style
+      batch_get([
+        [%Schema1{id: 1}, %Schema1{id: 2}],
+        [%Schema2{id: 3}, %Schema2{id: 4}]
+      ])
+
+
+  When the schema has only 1 primary key, and you use custom options:
+
+      # get_row style
+      batch_get([
+        {Schema1, [{"id", 1}], [{"id", 2}], columns_to_get: ["field1"]},
+        {Schema2, [{"id", 3}], [{"id", 4}], columns_to_get: ["field2"]}
+      ])
+
+      # schema_entity style
+      batch_get([
         {
-          [
-            %Schema2{keys: keys1},
-            %Schema2{keys: keys2}
-          ],
+          [%Schema1{id: 1}, %Schema1{id: 2}],
+          columns_to_get: ["field1"]
+        },
+        {
+          [%Schema2{id: 3}, %Schema2{id: 4}],
+          columns_to_get: ["field2"]
+        }
+      ])
+
+  Entity full match:
+
+      # only schema_entity style
+      batch_get([
+        {
+          [%Schema1{id: 1, field1: 10}, %Schema1{id: 2, field1: 20}],
+          entity_full_match: true
+        },
+        {
+          [%Schema2{id: 3, field2: 30}, %Schema2{id: 4, field2: 40}],
           entity_full_match: true
         }
       ])
 
+  When the schema has multiple primary keys:
+
+      # get_row style
       batch_get([
-        {
-          [
-            %Schema2{keys: keys1},
-            %Schema2{keys: keys2}
-          ],
-          filter: filter("attr_field" == 1),
-          columns_to_get: ["attr_field", "attr_field2"]
-        }
+        {Schema3, [
+          [{"id", 1}, {"another_pk", "example1"}],
+          [{"id", 2}, {"another_pk", "example2"}]
+        ]},
+        {Schema4, [
+          [{"id", 3}, {"another_pk", "example3"}],
+          [{"id", 4}, {"another_pk", "example4"}]
+        ]}
+      ])
+
+      # schema_entity style
+      batch_get([
+        [
+          %Schema3{id: 1, another_pk: "example1"},
+          %Schema3{id: 2, another_pk: "example2"}
+        ],
+        [
+          %Schema4{id: 3, another_pk: "example3"},
+          %Schema4{id: 4, another_pk: "example4"}
+        ]
       ])
 
   """
@@ -282,14 +337,27 @@ defmodule EctoTablestore.Repo do
             when gets: [
                    {
                      module :: Ecto.Schema.t(),
-                     [{key :: String.t() | atom(), value :: integer | String.t()}],
-                     options
+                     [
+                       [{key :: String.t() | atom(), value :: integer | String.t()}]
+                     ]
                    }
+                   | {
+                       module :: Ecto.Schema.t(),
+                       [
+                         [{key :: String.t() | atom(), value :: integer | String.t()}]
+                       ],
+                       options
+                     }
                    | {
                        module :: Ecto.Schema.t(),
                        [{key :: String.t() | atom(), value :: integer | String.t()}]
                      }
-                   | (schema_entity :: Ecto.Schema.t())
+                   | {
+                       module :: Ecto.Schema.t(),
+                       [{key :: String.t() | atom(), value :: integer | String.t()}],
+                       options
+                     }
+                   | [schema_entity :: Ecto.Schema.t()]
                    | {[schema_entity :: Ecto.Schema.t()], options}
                  ]
 
