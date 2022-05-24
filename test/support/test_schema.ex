@@ -115,7 +115,7 @@ defmodule EctoTablestore.TestSchema.User4 do
       field(:status, Ecto.Enum, values: [:foo, :bar, :baz])
     end
 
-    embeds_one :info, Info, primary_key: false, on_replace: :update do
+    embeds_one :info, Info, primary_key: false, on_replace: :delete do
       field(:name, Ecto.ReplaceableString)
       field(:money, :decimal)
       field(:status, Ecto.Enum, values: [:foo, :bar, :baz])
