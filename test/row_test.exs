@@ -1422,7 +1422,7 @@ defmodule EctoTablestore.RowTest do
   end
 
   test "by default use schema attribute fields into columns_to_get" do
-    {_adapter, meta} = Ecto.Repo.Registry.lookup(TestRepo)
+    meta = Ecto.Adapter.lookup_meta(TestRepo)
 
     cars = Jason.encode!(
       [%{name: "c1", status: :bar}, %{name: "c2", status: :foo}]

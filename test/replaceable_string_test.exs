@@ -311,7 +311,7 @@ defmodule EctoTablestore.ReplaceableStringTest do
   end
 
   defp instance() do
-    {_adapter, %{instance: instance}} = Ecto.Repo.Registry.lookup(TestRepo)
+    %{instance: instance} = Ecto.Adapter.lookup_meta(TestRepo)
     instance
   end
 

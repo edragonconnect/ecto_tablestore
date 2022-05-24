@@ -390,7 +390,7 @@ defmodule Ecto.Adapters.Tablestore do
 
   @doc false
   def search(repo, schema, index_name, options) do
-    {_adapter, meta} = Ecto.Repo.Registry.lookup(repo)
+    meta = Ecto.Adapter.lookup_meta(repo)
 
     options = schema_fields_for_columns_to_get(schema, options)
 
@@ -423,7 +423,7 @@ defmodule Ecto.Adapters.Tablestore do
 
   @doc false
   def stream_search(repo, schema, index_name, options) do
-    {_adapter, meta} = Ecto.Repo.Registry.lookup(repo)
+    meta = Ecto.Adapter.lookup_meta(repo)
 
     options = schema_fields_for_columns_to_get(schema, options)
 
@@ -444,7 +444,7 @@ defmodule Ecto.Adapters.Tablestore do
 
   @doc false
   def get(repo, schema, ids, options) do
-    {_adapter, meta} = Ecto.Repo.Registry.lookup(repo)
+    meta = Ecto.Adapter.lookup_meta(repo)
 
     options = schema_fields_for_columns_to_get(schema, options)
 
@@ -467,7 +467,7 @@ defmodule Ecto.Adapters.Tablestore do
 
   @doc false
   def get_range(repo, schema, start_primary_keys, end_primary_keys, options) do
-    {_adapter, meta} = Ecto.Repo.Registry.lookup(repo)
+    meta = Ecto.Adapter.lookup_meta(repo)
 
     options = schema_fields_for_columns_to_get(schema, options)
 
@@ -494,7 +494,7 @@ defmodule Ecto.Adapters.Tablestore do
 
   @doc false
   def stream_range(repo, schema, start_primary_keys, end_primary_keys, options) do
-    {_adapter, meta} = Ecto.Repo.Registry.lookup(repo)
+    meta = Ecto.Adapter.lookup_meta(repo)
 
     options = schema_fields_for_columns_to_get(schema, options)
 
@@ -551,7 +551,7 @@ defmodule Ecto.Adapters.Tablestore do
 
   @doc false
   def batch_get(repo, gets) do
-    {_adapter, meta} = Ecto.Repo.Registry.lookup(repo)
+    meta = Ecto.Adapter.lookup_meta(repo)
 
     {requests, schemas_mapping} = Enum.reduce(gets, {[], %{}}, &map_batch_gets/2)
 

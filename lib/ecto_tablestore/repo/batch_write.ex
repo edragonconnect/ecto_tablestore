@@ -9,7 +9,7 @@ defmodule EctoTablestore.Repo.BatchWrite do
   @adapter Tablestore
 
   def batch_write(repo, writes, options) do
-    {_adapter, meta} = Ecto.Repo.Registry.lookup(repo)
+    meta = Ecto.Adapter.lookup_meta(repo)
 
     instance = meta.instance
 
