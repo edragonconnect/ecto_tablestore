@@ -2,7 +2,7 @@
 
 ## v0.13.3 (2022-05-24)
 
-* Fix and update document to `EctoTablestore.Repo.batch_get/1`.
+* Fix and update document to Repo's batch get.
 * Fix to use the public API `Ecto.Adapter.lookup_meta/1` when upgrade to `ecto ~> 3.8.*`.
 
 ## v0.13.2 (2022-01-21)
