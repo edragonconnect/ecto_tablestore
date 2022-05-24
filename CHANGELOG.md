@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.13.3 (2022-05-24)
+
+* Fix and update document to `EctoTablestore.Repo.batch_get/1`.
+* Fix to use the public API `Ecto.Adapter.lookup_meta/1` when upgrade to `ecto ~> 3.8.*`.
+
 ## v0.13.2 (2022-01-21)
 
 * Fix schema's timestamps() as as the original with second time unit.
