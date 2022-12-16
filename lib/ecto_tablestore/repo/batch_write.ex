@@ -1,10 +1,8 @@
 defmodule EctoTablestore.Repo.BatchWrite do
   @moduledoc false
 
+  require ExAliyunOts.Const.OperationType, as: OperationType
   alias Ecto.Adapters.Tablestore
-  alias ExAliyunOts.Const.OperationType
-
-  require OperationType
 
   @adapter Tablestore
 
@@ -17,7 +15,6 @@ defmodule EctoTablestore.Repo.BatchWrite do
       writes
       |> Enum.map(&map_batch_writes(instance, &1))
       |> Enum.unzip()
-
 
     {prepared_requests, opers} =
       write_requests
@@ -36,7 +33,6 @@ defmodule EctoTablestore.Repo.BatchWrite do
           [{source, reqs} | req_acc],
           Map.put(oper_acc, source, opers)
         }
-
       end)
 
     structs = reduce_merge_map(structs_map)
@@ -57,7 +53,7 @@ defmodule EctoTablestore.Repo.BatchWrite do
 
   defp map_batch_writes(_instance, {:delete, deletes}) do
     Enum.reduce(deletes, {%{}, %{}}, fn delete, {delete_acc, acc} ->
-      {source, pks, options, struct} = map_batch_write(:delete, delete) 
+      {source, pks, options, struct} = map_batch_write(:delete, delete)
       prepared_request = ExAliyunOts.write_delete(pks, options)
 
       delete_acc = update_map_with_list(delete_acc, source, prepared_request)
@@ -183,7 +179,7 @@ defmodule EctoTablestore.Repo.BatchWrite do
     embeds = schema.__schema__(:embeds)
     embeds = Ecto.Embedded.prepare(changeset, embeds, @adapter, :insert)
 
-    changes = 
+    changes =
       changeset.changes
       |> Map.merge(embeds)
       |> Map.take(fields)
@@ -193,7 +189,8 @@ defmodule EctoTablestore.Repo.BatchWrite do
     autogen_fields = Tablestore.autogen_fields(schema)
     changes = Keyword.merge(autogen_fields, changes)
 
-    {pks, attrs, _autogenerate_id_name} = Tablestore.pks_and_attrs_to_put_row(instance, schema, changes)
+    {pks, attrs, _autogenerate_id_name} =
+      Tablestore.pks_and_attrs_to_put_row(instance, schema, changes)
 
     struct =
       changeset
@@ -228,9 +225,7 @@ defmodule EctoTablestore.Repo.BatchWrite do
       opers_in_table = Map.get(opers, table_name, [])
 
       results =
-        Enum.zip(
-          [opers_in_table, table.rows, structs_in_table]
-        )
+        Enum.zip([opers_in_table, table.rows, structs_in_table])
         |> Enum.reduce([], fn {oper, %{is_ok: is_ok, row: row} = response, struct}, oper_acc ->
           # `row` should be:
           #   pks only
@@ -248,7 +243,7 @@ defmodule EctoTablestore.Repo.BatchWrite do
             [return | current]
           end)
         end)
-      
+
       schema = List.first(structs_in_table).__meta__.schema
       Keyword.put(acc, schema, results)
     end)
@@ -298,10 +293,10 @@ defmodule EctoTablestore.Repo.BatchWrite do
     case Ecto.Type.adapter_dump(@adapter, type, value) do
       {:ok, value} ->
         value
+
       :error ->
         raise Ecto.ChangeError,
-              "value `#{inspect(value)}` for `#{schema}.#{field}` does not match type #{inspect type}"
+              "value `#{inspect(value)}` for `#{schema}.#{field}` does not match type #{inspect(type)}"
     end
   end
-
 end

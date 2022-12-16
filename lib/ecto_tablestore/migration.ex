@@ -308,14 +308,14 @@ defmodule EctoTablestore.Migration do
         # No partition key defined
         partition_key_count == 0 ->
           raise MigrationError,
-            message: "Please define at least one partition primary keys for table: " <> table.name
+            message: "Please define at least one partition primary keys for table: #{table.name}"
 
         # The partition key only can define one
         true ->
           raise MigrationError,
             message:
-              "The maximum number of partition primary keys is 1, now is #{partition_key_count} defined on table: " <>
-                table.name <> " columns:\n" <> inspect(pk_columns)
+              "The maximum number of partition primary keys is 1, now is #{partition_key_count} defined on " <>
+                "table: #{table.name} columns:\n" <> inspect(pk_columns)
       end
 
     case Enum.count(pk_columns) do
@@ -323,8 +323,8 @@ defmodule EctoTablestore.Migration do
       pk_count when pk_count > 4 ->
         raise MigrationError,
           message:
-            "The maximum number of primary keys is 4, now is #{pk_count} defined on table: " <>
-              table.name <> " columns:\n" <> inspect(pk_columns)
+            "The maximum number of primary keys is 4, now is #{pk_count} defined on " <>
+              "table: #{table.name} columns:\n" <> inspect(pk_columns)
 
       # Only support to define one primary key as auto_increment integer
       _pk_count ->
@@ -337,10 +337,8 @@ defmodule EctoTablestore.Migration do
 
         if (total_increment_count = auto_increment_count + hashids_count) > 1 do
           raise MigrationError,
-            message:
-              "The maximum number of [auto_increment & hashids] primary keys is 1, but now find #{
-                total_increment_count
-              } primary keys defined on table: " <> table.name
+                "The maximum number of [auto_increment & hashids] primary keys is 1, " <>
+                  "but now find #{total_increment_count} primary keys defined on table: #{table.name}"
         else
           %{
             table: table,
@@ -362,9 +360,7 @@ defmodule EctoTablestore.Migration do
 
       [missing] ->
         raise MigrationError,
-              "Missing #{missing} definition when creating: #{inspect(secondary_index)}, please use add_#{
-                missing
-              }/1 when creating secondary index."
+              "Missing #{missing} definition when creating: #{inspect(secondary_index)}, please use add_#{missing}/1 when creating secondary index."
 
       _ ->
         raise MigrationError,
@@ -422,21 +418,16 @@ defmodule EctoTablestore.Migration do
     primary_keys = Enum.map(pk_columns, &transform_table_column/1)
     defined_columns = Enum.map(pre_defined_columns, &transform_table_column/1)
 
-    print_list =
-      Enum.reject(
-        [
-          primary_keys: primary_keys,
-          defined_columns: defined_columns,
-          index_metas: index_metas
-        ],
-        &match?({_, []}, &1)
-      )
+    print_description =
+      [
+        primary_keys: primary_keys,
+        defined_columns: defined_columns,
+        index_metas: index_metas
+      ]
+      |> Enum.reject(&match?({_, []}, &1))
+      |> inspect(pretty: true, limit: :infinity)
 
-    Logger.info(fn ->
-      ">> creating table: #{table_name_str} by #{
-        inspect(print_list, pretty: true, limit: :infinity)
-      } "
-    end)
+    Logger.info(">> creating table: #{table_name_str} by #{print_description}")
 
     options =
       Keyword.merge(table.meta,
@@ -448,13 +439,13 @@ defmodule EctoTablestore.Migration do
     case ExAliyunOts.create_table(instance, table_name, primary_keys, options) do
       :ok ->
         result_str = IO.ANSI.format([:green, "ok", :reset])
-        Logger.info(fn -> ">>>> create table: #{table_name_str} result: #{result_str}" end)
+        Logger.info(">>>> create table: #{table_name_str} result: #{result_str}")
 
         create_seq_table!(create_seq_table?, table_name, instance)
         :ok
 
       {:error, error} ->
-        raise MigrationError, "create table: #{table_name} error: " <> error.message
+        raise MigrationError, "create table: #{table_name} error: #{error.message}"
     end
   end
 
@@ -470,19 +461,20 @@ defmodule EctoTablestore.Migration do
     include_base_data = secondary_index.include_base_data
     repo_meta = Ecto.Adapter.lookup_meta(repo)
 
-    Logger.info(fn ->
-      ">> creating secondary_index: #{index_name_str} for table: #{table_name_str} by #{
-        inspect(
-          [
-            primary_keys: primary_keys,
-            defined_columns: defined_columns,
-            include_base_data: include_base_data
-          ],
-          pretty: true,
-          limit: :infinity
-        )
-      } "
-    end)
+    print_description =
+      inspect(
+        [
+          primary_keys: primary_keys,
+          defined_columns: defined_columns,
+          include_base_data: include_base_data
+        ],
+        pretty: true,
+        limit: :infinity
+      )
+
+    Logger.info(
+      ">> creating secondary_index: #{index_name_str} for table: #{table_name_str} by #{print_description}"
+    )
 
     case ExAliyunOts.create_index(
            repo_meta.instance,
@@ -495,18 +487,15 @@ defmodule EctoTablestore.Migration do
       :ok ->
         result_str = IO.ANSI.format([:green, "ok", :reset])
 
-        Logger.info(fn ->
-          ">>>> create secondary_index: #{index_name_str} for table: #{table_name_str} result: #{
-            result_str
-          }"
-        end)
+        Logger.info(
+          ">>>> create secondary_index: #{index_name_str} for table: #{table_name_str} result: #{result_str}"
+        )
 
         :ok
 
       {:error, error} ->
         raise MigrationError,
-              "create secondary index: #{index_name} for table: #{table_name} error: " <>
-                error.message
+              "create secondary index: #{index_name} for table: #{table_name} error: #{error.message}"
     end
   end
 
@@ -521,15 +510,15 @@ defmodule EctoTablestore.Migration do
     index_name_str = IO.ANSI.format([:green, index_name, :reset])
     repo_meta = Ecto.Adapter.lookup_meta(repo)
 
-    Logger.info(fn ->
-      ">> creating search index: #{index_name_str} for table: #{table_name_str} by #{
-        inspect(
-          [field_schemas: field_schemas, index_sorts: index_sorts],
-          pretty: true,
-          limit: :infinity
-        )
-      } "
-    end)
+    print_description =
+      inspect([field_schemas: field_schemas, index_sorts: index_sorts],
+        pretty: true,
+        limit: :infinity
+      )
+
+    Logger.info(
+      ">> creating search index: #{index_name_str} for table: #{table_name_str} by #{print_description}"
+    )
 
     case ExAliyunOts.create_search_index(
            repo_meta.instance,
@@ -541,18 +530,15 @@ defmodule EctoTablestore.Migration do
       {:ok, _} ->
         result_str = IO.ANSI.format([:green, "ok", :reset])
 
-        Logger.info(fn ->
-          ">>>> create search index: #{index_name_str} for table: #{table_name_str} result: #{
-            result_str
-          }"
-        end)
+        Logger.info(
+          ">>>> create search index: #{index_name_str} for table: #{table_name_str} result: #{result_str}"
+        )
 
         :ok
 
       {:error, error} ->
         raise MigrationError,
-              "create search index: #{index_name} for table: #{table_name} error: " <>
-                error.message
+              "create search index: #{index_name} for table: #{table_name} error: #{error.message}"
     end
   end
 
@@ -561,25 +547,21 @@ defmodule EctoTablestore.Migration do
 
   defp create_seq_table!(true, table_name, instance) do
     seq_table_name = Sequence.default_table()
+    sequence = %ExAliyunOts.Var.NewSequence{name: seq_table_name}
     # check if not exists
     with {:list_table, {:ok, %{table_names: table_names}}} <-
            {:list_table, ExAliyunOts.list_table(instance)},
          true <- seq_table_name not in table_names,
-         :ok <-
-           ExAliyunOts.Sequence.create(instance, %ExAliyunOts.Var.NewSequence{
-             name: seq_table_name
-           }) do
-      Logger.info(fn ->
-        ">> auto create table: #{seq_table_name} for table: " <> table_name
-      end)
+         :ok <- ExAliyunOts.Sequence.create(instance, sequence) do
+      Logger.info(">> auto create table: #{seq_table_name} for table: #{table_name}")
 
       :ok
     else
       {:list_table, {:error, error}} ->
-        raise MigrationError, "list_table error: " <> error.message
+        raise MigrationError, "list_table error: #{error.message}"
 
       {:error, error} ->
-        raise MigrationError, "create table: #{seq_table_name} error: " <> error.message
+        raise MigrationError, "create table: #{seq_table_name} error: #{error.message}"
 
       false ->
         :already_exists
@@ -816,9 +798,7 @@ defmodule EctoTablestore.Migration do
       :ok
     else
       raise ArgumentError,
-            "#{inspect(type)} is not a valid pre-defined column type for column: `#{
-              inspect(column)
-            }`, " <>
+            "#{inspect(type)} is not a valid pre-defined column type for column: `#{inspect(column)}`, " <>
               "please use an atom as :integer | :double | :boolean | :string | :binary ."
     end
   end
@@ -905,17 +885,17 @@ defmodule EctoTablestore.Migration do
       repo_meta = Ecto.Adapter.lookup_meta(repo)
       instance = repo_meta.instance
 
-      Logger.info(fn -> ">> dropping table: #{table_name_str}" end)
+      Logger.info(">> dropping table: #{table_name_str}")
 
       case ExAliyunOts.delete_table(instance, table_name) do
         :ok ->
           result_str = IO.ANSI.format([:green, "ok", :reset])
-          Logger.info(fn -> ">>>> dropping table: #{table_name_str} result: #{result_str}" end)
+          Logger.info(">>>> dropping table: #{table_name_str} result: #{result_str}")
           :ok
 
         {:error, %{code: "OTSObjectNotExist"}} when if_exists ->
           result_str = IO.ANSI.format([:green, "not exists", :reset])
-          Logger.info(fn -> ">>>> dropping table: #{table_name_str} result: #{result_str}" end)
+          Logger.info(">>>> dropping table: #{table_name_str} result: #{result_str}")
           :ok
 
         {:error, error} ->
@@ -931,41 +911,36 @@ defmodule EctoTablestore.Migration do
       index_name_str = IO.ANSI.format([:green, index_name, :reset])
       repo_meta = Ecto.Adapter.lookup_meta(repo)
 
-      Logger.info(fn ->
+      Logger.info(
         ">> dropping secondary_index table: #{table_name_str}, index: #{index_name_str}"
-      end)
+      )
 
       case ExAliyunOts.delete_index(repo_meta.instance, table_name, index_name) do
         :ok ->
           result_str = IO.ANSI.format([:green, "ok", :reset])
 
-          Logger.info(fn ->
-            ">>>> dropping secondary_index table: #{table_name_str}, index: #{index_name_str} result: #{
-              result_str
-            }"
-          end)
+          Logger.info(
+            ">>>> dropping secondary_index table: #{table_name_str}, index: #{index_name_str} result: #{result_str}"
+          )
 
           :ok
 
         {:error, %{code: "OTSObjectNotExist"}} when if_exists ->
           result_str = IO.ANSI.format([:green, "not exists", :reset])
 
-          Logger.info(fn ->
-            ">>>> dropping secondary_index table: #{table_name_str}, index: #{index_name_str} result: #{
-              result_str
-            }"
-          end)
+          Logger.info(
+            ">>>> dropping secondary_index table: #{table_name_str}, index: #{index_name_str} result: #{result_str}"
+          )
 
           :ok
 
-        {:error, %{code: "OTSParameterInvalid", message: "Index does not exist" <> _}} when if_exists ->
+        {:error, %{code: "OTSParameterInvalid", message: "Index does not exist" <> _}}
+        when if_exists ->
           result_str = IO.ANSI.format([:green, "not exists", :reset])
 
-          Logger.info(fn ->
-            ">>>> dropping secondary_index table: #{table_name_str}, index: #{index_name_str} result: #{
-              result_str
-            }"
-          end)
+          Logger.info(
+            ">>>> dropping secondary_index table: #{table_name_str}, index: #{index_name_str} result: #{result_str}"
+          )
 
           :ok
 
@@ -984,30 +959,24 @@ defmodule EctoTablestore.Migration do
       index_name_str = IO.ANSI.format([:green, index_name, :reset])
       repo_meta = Ecto.Adapter.lookup_meta(repo)
 
-      Logger.info(fn ->
-        ">> dropping search index table: #{table_name_str}, index: #{index_name_str}"
-      end)
+      Logger.info(">> dropping search index table: #{table_name_str}, index: #{index_name_str}")
 
       case ExAliyunOts.delete_search_index(repo_meta.instance, table_name, index_name) do
         {:ok, _} ->
           result_str = IO.ANSI.format([:green, "ok", :reset])
 
-          Logger.info(fn ->
-            ">>>> dropping search index table: #{table_name_str}, index: #{index_name_str} result: #{
-              result_str
-            }"
-          end)
+          Logger.info(
+            ">>>> dropping search index table: #{table_name_str}, index: #{index_name_str} result: #{result_str}"
+          )
 
           :ok
 
         {:error, %{code: "OTSObjectNotExist"}} when if_exists ->
           result_str = IO.ANSI.format([:green, "not exists", :reset])
 
-          Logger.info(fn ->
-            ">>>> dropping search index table: #{table_name_str}, index: #{index_name_str} result: #{
-              result_str
-            }"
-          end)
+          Logger.info(
+            ">>>> dropping search index table: #{table_name_str}, index: #{index_name_str} result: #{result_str}"
+          )
 
           :ok
 

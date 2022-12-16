@@ -9,5 +9,4 @@ defmodule Ecto.Adapters.Tablestore.Supervisor do
   def init([]) do
     DynamicSupervisor.init(strategy: :one_for_one)
   end
-
 end
