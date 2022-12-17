@@ -48,6 +48,55 @@ defmodule EctoTablestore.Repo do
   @type options :: Keyword.t()
   @type start_primary_keys :: list | binary
   @type end_primary_keys :: list
+  @type index_name :: String.t()
+
+  @typep batch_get_item ::
+           {
+             module :: Ecto.Schema.t(),
+             [
+               [{key :: String.t() | atom, value :: integer | String.t()}]
+             ]
+           }
+           | {
+               module :: Ecto.Schema.t(),
+               [
+                 [{key :: String.t() | atom, value :: integer | String.t()}]
+               ],
+               options :: Keyword.t()
+             }
+           | {
+               module :: Ecto.Schema.t(),
+               [{key :: String.t() | atom, value :: integer | String.t()}]
+             }
+           | {
+               module :: Ecto.Schema.t(),
+               [{key :: String.t() | atom, value :: integer | String.t()}],
+               options :: Keyword.t()
+             }
+           | [schema_entity :: Ecto.Schema.t()]
+           | {[schema_entity :: Ecto.Schema.t()], options :: Keyword.t()}
+  @type batch_gets :: [batch_get_item]
+
+  @typep batch_put_item ::
+           Ecto.Schema.t()
+           | {schema_entity :: Ecto.Schema.t(), options :: Keyword.t()}
+           | {module :: Ecto.Schema.t(), ids :: list, attrs :: list, options :: Keyword.t()}
+           | {changeset :: Ecto.Changeset.t(), operation :: Keyword.t()}
+
+  @typep batch_update_item ::
+           Ecto.Changeset.t()
+           | {changeset :: Ecto.Changeset.t(), options :: Keyword.t()}
+
+  @typep batch_delete_item ::
+           Ecto.Schema.t()
+           | {schema_entity :: Ecto.Schema.t(), options :: Keyword.t()}
+           | {module :: Ecto.Schema.t(), ids :: list, options :: Keyword.t()}
+
+  @type batch_writes :: [
+          {operation :: :put, items :: [batch_put_item]}
+          | {operation :: :update, items :: [batch_update_item]}
+          | {operation :: :delete, items :: [batch_delete_item]}
+        ]
 
   defmacro __using__(opts) do
     quote bind_quoted: [opts: opts] do
@@ -91,8 +140,7 @@ defmodule EctoTablestore.Repo do
   )
   ```
   """
-  @callback search(schema, index_name :: String.t(), options) ::
-              {:ok, search_result} | {:error, term}
+  @callback search(schema, index_name, options) :: {:ok, search_result} | {:error, term}
 
   @doc """
   As a wrapper built on `ExAliyunOts.stream_search/4` to create composable and lazy enumerables
@@ -102,7 +150,7 @@ defmodule EctoTablestore.Repo do
 
   Please see options of `c:search/3` for details.
   """
-  @callback stream_search(schema, index_name :: String.t(), options) :: Enumerable.t()
+  @callback stream_search(schema, index_name, options) :: Enumerable.t()
 
   @doc """
   Similar to `c:get/3`, please ensure schema entity has been filled with the whole primary key(s).
@@ -122,6 +170,11 @@ defmodule EctoTablestore.Repo do
   Other options please refer `c:get/3`.
   """
   @callback one(schema, options) :: schema | {:error, term} | nil
+
+  @doc """
+  See `c:one/2` for more details.
+  """
+  @callback one!(schema, options) :: schema | {:error, term} | nil
 
   @doc """
   Fetch a single struct from tablestore where the whole primary key(s) match the given ids.
@@ -331,33 +384,7 @@ defmodule EctoTablestore.Repo do
       ])
 
   """
-  @callback batch_get(gets) :: {:ok, Keyword.t()} | {:error, term}
-            when gets: [
-                   {
-                     module :: Ecto.Schema.t(),
-                     [
-                       [{key :: String.t() | atom(), value :: integer | String.t()}]
-                     ]
-                   }
-                   | {
-                       module :: Ecto.Schema.t(),
-                       [
-                         [{key :: String.t() | atom(), value :: integer | String.t()}]
-                       ],
-                       options :: Keyword.t()
-                     }
-                   | {
-                       module :: Ecto.Schema.t(),
-                       [{key :: String.t() | atom(), value :: integer | String.t()}]
-                     }
-                   | {
-                       module :: Ecto.Schema.t(),
-                       [{key :: String.t() | atom(), value :: integer | String.t()}],
-                       options :: Keyword.t()
-                     }
-                   | [schema_entity :: Ecto.Schema.t()]
-                   | {[schema_entity :: Ecto.Schema.t()], options :: Keyword.t()}
-                 ]
+  @callback batch_get(batch_gets) :: {:ok, Keyword.t()} | {:error, term}
 
   @doc """
   Batch write several rows of data from one or more tables, this batch request puts multiple
@@ -420,35 +447,7 @@ defmodule EctoTablestore.Repo do
       )
 
   """
-  @callback batch_write(writes, options) :: {:ok, Keyword.t()} | {:error, term}
-            when writes: [
-                   {
-                     operation :: :put,
-                     items :: [
-                       item ::
-                         {schema_entity :: Ecto.Schema.t(), options}
-                         | {module :: Ecto.Schema.t(), ids :: list, attrs :: list, options}
-                         | {changeset :: Ecto.Changeset.t(), operation :: Keyword.t()}
-                     ]
-                   }
-                   | {
-                       operation :: :update,
-                       items :: [
-                         changeset ::
-                           Ecto.Changeset.t()
-                           | {changeset :: Ecto.Changeset.t(), options}
-                       ]
-                     }
-                   | {
-                       operation :: :delete,
-                       items :: [
-                         schema_entity ::
-                           Ecto.Schema.t()
-                           | {schema_entity :: Ecto.Schema.t(), options}
-                           | {module :: Ecto.Schema.t(), ids :: list, options}
-                       ]
-                     }
-                 ]
+  @callback batch_write(batch_writes, options) :: {:ok, Keyword.t()} | {:error, term}
 
   @doc """
   Inserts a struct defined via EctoTablestore.Schema or a changeset.

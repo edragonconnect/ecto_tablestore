@@ -6,6 +6,7 @@ defmodule Ecto.Adapters.Tablestore do
 
   alias __MODULE__
 
+  alias EctoTablestore.Repo
   alias EctoTablestore.Sequence
   alias ExAliyunOts.Error
   alias ExAliyunOts.TableStore.Condition
@@ -31,64 +32,6 @@ defmodule Ecto.Adapters.Tablestore do
 
   require Logger
 
-  @type options :: Keyword.t()
-  @type start_primary_keys :: list | binary
-  @type end_primary_keys :: list
-  @type batch_gets :: [
-          {
-            module :: Ecto.Schema.t(),
-            [
-              [{key :: String.t() | atom, value :: integer | String.t()}]
-            ]
-          }
-          | {
-              module :: Ecto.Schema.t(),
-              [
-                [{key :: String.t() | atom, value :: integer | String.t()}]
-              ],
-              options :: Keyword.t()
-            }
-          | {
-              module :: Ecto.Schema.t(),
-              [{key :: String.t() | atom, value :: integer | String.t()}]
-            }
-          | {
-              module :: Ecto.Schema.t(),
-              [{key :: String.t() | atom, value :: integer | String.t()}],
-              options :: Keyword.t()
-            }
-          | [schema_entity :: Ecto.Schema.t()]
-          | {[schema_entity :: Ecto.Schema.t()], options :: Keyword.t()}
-        ]
-  @type batch_writes :: [
-          {
-            operation :: :put,
-            items :: [
-              schema_entity ::
-                Ecto.Schema.t()
-                | {schema_entity :: Ecto.Schema.t(), options :: Keyword.t()}
-                | {module :: Ecto.Schema.t(), ids :: list, attrs :: list, options :: Keyword.t()}
-            ]
-          }
-          | {
-              operation :: :update,
-              items :: [
-                changeset ::
-                  Ecto.Changeset.t()
-                  | {changeset :: Ecto.Changeset.t(), options :: Keyword.t()}
-              ]
-            }
-          | {
-              operation :: :delete,
-              items :: [
-                schema_entity ::
-                  Ecto.Schema.t()
-                  | {schema_entity :: Ecto.Schema.t(), options :: Keyword.t()}
-                  | {module :: Ecto.Schema.t(), ids :: list, options :: Keyword.t()}
-              ]
-            }
-        ]
-
   @ots_condition_check_fail "OTSConditionCheckFail"
 
   @impl true
@@ -96,42 +39,50 @@ defmodule Ecto.Adapters.Tablestore do
     quote do
       ## Query
 
-      @spec search(Ecto.Schema.t(), ExAliyunOts.index_name(), Tablestore.options()) ::
-              {:ok, EctoTablestore.Repo.search_result()} | {:error, term}
+      @spec search(Repo.schema(), Repo.index_name(), Repo.options()) ::
+              {:ok, Repo.search_result()} | {:error, term}
       def search(schema, index_name, options) do
         Tablestore.search(get_dynamic_repo(), schema, index_name, options)
       end
 
-      @spec stream_search(Ecto.Schema.t(), ExAliyunOts.index_name(), Tablestore.options()) ::
-              Enumerable.t()
+      @spec stream_search(Repo.schema(), Repo.index_name(), Repo.options()) :: Enumerable.t()
       def stream_search(schema, index_name, options) do
         Tablestore.stream_search(get_dynamic_repo(), schema, index_name, options)
       end
 
-      @spec one(Ecto.Schema.t(), Tablestore.options()) ::
-              Ecto.Schema.t() | {:error, term} | nil
+      @spec one(Repo.schema(), Repo.options()) :: Repo.schema() | {:error, term} | nil
       def one(%{__meta__: meta} = entity, options \\ []) do
         options = Tablestore.generate_filter_options(entity, options)
         get(meta.schema, Ecto.primary_key(entity), options)
       end
 
-      @spec get(Ecto.Schema.t(), ids :: list, Tablestore.options()) ::
-              Ecto.Schema.t() | {:error, term} | nil
+      @spec one!(Repo.schema(), Repo.options()) :: Repo.schema() | {:error, term} | nil
+      def one!(%{__meta__: meta} = entity, options \\ []) do
+        options = Tablestore.generate_filter_options(entity, options)
+
+        case get(meta.schema, Ecto.primary_key(entity), options) do
+          nil -> raise "expected at least one result but got none in query: #{inspect(entity)}"
+          one -> one
+        end
+      end
+
+      @spec get(Repo.schema(), ids :: list, Repo.options()) ::
+              Repo.schema() | {:error, term} | nil
       def get(schema, ids, options \\ []) do
         Tablestore.get(get_dynamic_repo(), schema, ids, options)
       end
 
-      @spec get_range(Ecto.Schema.t(), Tablestore.options()) ::
+      @spec get_range(Repo.schema(), Repo.options()) ::
               {nil, nil} | {list, nil} | {list, binary} | {:error, term}
       def get_range(schema, options \\ [direction: :forward]) do
         Tablestore.get_range(get_dynamic_repo(), schema, options)
       end
 
       @spec get_range(
-              Ecto.Schema.t(),
-              Tablestore.start_primary_keys(),
-              Tablestore.end_primary_keys(),
-              Tablestore.options()
+              Repo.schema(),
+              Repo.start_primary_keys(),
+              Repo.end_primary_keys(),
+              Repo.options()
             ) :: {nil, nil} | {list, nil} | {list, binary} | {:error, term}
       def get_range(
             schema,
@@ -148,16 +99,16 @@ defmodule Ecto.Adapters.Tablestore do
         )
       end
 
-      @spec stream(Ecto.Schema.t(), Tablestore.options()) :: Enumerable.t()
+      @spec stream(Repo.schema(), Repo.options()) :: Enumerable.t()
       def stream(schema, options \\ [direction: :forward]) do
         Tablestore.stream_range(get_dynamic_repo(), schema, options)
       end
 
       @spec stream_range(
-              Ecto.Schema.t(),
-              Tablestore.start_primary_keys(),
-              Tablestore.end_primary_keys(),
-              Tablestore.options()
+              Repo.schema(),
+              Repo.start_primary_keys(),
+              Repo.end_primary_keys(),
+              Repo.options()
             ) :: Enumerable.t()
       def stream_range(
             schema,
