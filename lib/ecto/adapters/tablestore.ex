@@ -125,12 +125,12 @@ defmodule Ecto.Adapters.Tablestore do
         )
       end
 
-      @spec batch_get(Tablestore.batch_gets()) :: {:ok, Keyword.t()} | {:error, term}
+      @spec batch_get(Repo.batch_gets()) :: {:ok, Keyword.t()} | {:error, term}
       def batch_get(gets), do: Tablestore.batch_get(get_dynamic_repo(), gets)
 
       ## Addition
 
-      @spec batch_write(Tablestore.batch_writes(), Tablestore.options()) ::
+      @spec batch_write(Repo.batch_writes(), Tablestore.options()) ::
               {:ok, Keyword.t()} | {:error, term}
       def batch_write(writes, options \\ []) do
         Tablestore.batch_write(get_dynamic_repo(), writes, options)
