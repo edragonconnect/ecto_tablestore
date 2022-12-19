@@ -494,9 +494,16 @@ defmodule EctoTablestore.RowTest do
       assert {backward_orders, nil} = TestRepo.get_range(Order, direction: :backward)
       assert orders == Enum.reverse(backward_orders)
 
-      assert {limit_orders, next_token} = TestRepo.get_range(Order, limit: 3)
-      assert length(limit_orders) == 3
+      assert {limit_orders1, next_token} = TestRepo.get_range(Order, limit: 10)
+      assert length(limit_orders1) == 10
       assert is_binary(next_token)
+      assert {limit_orders2, nil} = TestRepo.get_range(Order, limit: 10, token: next_token)
+      assert length(limit_orders2) == 1
+      assert orders == limit_orders1 ++ limit_orders2
+
+      assert {backward_orders1, next_token} = TestRepo.get_range(Order, direction: :backward, limit: 10)
+      assert {backward_orders2, nil} = TestRepo.get_range(Order, direction: :backward, limit: 10, token: next_token)
+      assert backward_orders == backward_orders1 ++ backward_orders2
     end
 
     test "repo - get_range/3-4" do

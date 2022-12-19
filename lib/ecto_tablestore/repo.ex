@@ -37,16 +37,17 @@ defmodule EctoTablestore.Repo do
   ```
   """
 
+  @type next_token :: binary | nil
   @type search_result :: %{
           is_all_succeeded: boolean,
-          next_token: binary | nil,
+          next_token: next_token,
           schemas: list,
           total_hits: integer
         }
   @type schema :: Ecto.Schema.t()
   @type schema_or_changeset :: Ecto.Schema.t() | Ecto.Changeset.t()
   @type options :: Keyword.t()
-  @type start_primary_keys :: list | binary
+  @type start_primary_keys :: list | (token :: binary)
   @type end_primary_keys :: list
   @type index_name :: String.t()
 
@@ -226,8 +227,7 @@ defmodule EctoTablestore.Repo do
 
   See `c:get_range/4`.
   """
-  @callback get_range(schema, options) ::
-              {nil, nil} | {list, nil} | {list, binary} | {:error, term}
+  @callback get_range(schema, options) :: {list | nil, next_token} | {:error, term}
 
   @doc """
   Get multiple structs by range from one table, rely on the conjunction of the partition key and
@@ -266,7 +266,7 @@ defmodule EctoTablestore.Repo do
       ```
   """
   @callback get_range(schema, start_primary_keys, end_primary_keys, options) ::
-              {nil, nil} | {list, nil} | {list, binary} | {:error, term}
+              {list | nil, next_token} | {:error, term}
 
   @doc """
   As a wrapper built on `stream_range/4` to create composable and lazy enumerables

@@ -73,7 +73,7 @@ defmodule Ecto.Adapters.Tablestore do
       end
 
       @spec get_range(Repo.schema(), Repo.options()) ::
-              {nil, nil} | {list, nil} | {list, binary} | {:error, term}
+              {list | nil, Repo.next_token()} | {:error, term}
       def get_range(schema, options \\ [direction: :forward]) do
         Tablestore.get_range(get_dynamic_repo(), schema, options)
       end
@@ -83,7 +83,7 @@ defmodule Ecto.Adapters.Tablestore do
               Repo.start_primary_keys(),
               Repo.end_primary_keys(),
               Repo.options()
-            ) :: {nil, nil} | {list, nil} | {list, binary} | {:error, term}
+            ) :: {list | nil, Repo.next_token()} | {:error, term}
       def get_range(
             schema,
             start_primary_keys,
@@ -371,7 +371,9 @@ defmodule Ecto.Adapters.Tablestore do
 
   @doc false
   def get_range(repo, schema, options) do
-    {schema, start_primary_keys, end_primary_keys} = get_range_params_by_schema(schema, options)
+    {schema, start_primary_keys, end_primary_keys, options} =
+      get_range_params_by_schema(schema, options)
+
     get_range(repo, schema, start_primary_keys, end_primary_keys, options)
   end
 
@@ -403,7 +405,9 @@ defmodule Ecto.Adapters.Tablestore do
 
   @doc false
   def stream_range(repo, schema, options) do
-    {schema, start_primary_keys, end_primary_keys} = get_range_params_by_schema(schema, options)
+    {schema, start_primary_keys, end_primary_keys, options} =
+      get_range_params_by_schema(schema, options)
+
     stream_range(repo, schema, start_primary_keys, end_primary_keys, options)
   end
 
@@ -443,6 +447,12 @@ defmodule Ecto.Adapters.Tablestore do
         {schema.__struct__, Ecto.primary_key(schema)}
       end
 
+    {start_fill_key, end_fill_key} =
+      case Keyword.get(options, :direction, :forward) do
+        :forward -> {:inf_min, :inf_max}
+        _ -> {:inf_max, :inf_min}
+      end
+
     fun = fn fill ->
       fn
         {k, nil} -> {k, fill}
@@ -450,16 +460,16 @@ defmodule Ecto.Adapters.Tablestore do
       end
     end
 
-    {start_primary_keys, end_primary_keys} =
-      case Keyword.get(options, :direction, :forward) do
-        :forward ->
-          {Enum.map(primary_keys, fun.(:inf_min)), Enum.map(primary_keys, fun.(:inf_max))}
+    case Keyword.pop(options, :token) do
+      {start_token, options} when is_binary(start_token) ->
+        end_primary_keys = Enum.map(primary_keys, fun.(end_fill_key))
+        {schema, start_token, end_primary_keys, options}
 
-        _ ->
-          {Enum.map(primary_keys, fun.(:inf_max)), Enum.map(primary_keys, fun.(:inf_min))}
-      end
-
-    {schema, start_primary_keys, end_primary_keys}
+      {_, options} ->
+        start_primary_keys = Enum.map(primary_keys, fun.(start_fill_key))
+        end_primary_keys = Enum.map(primary_keys, fun.(end_fill_key))
+        {schema, start_primary_keys, end_primary_keys, options}
+    end
   end
 
   @doc false
