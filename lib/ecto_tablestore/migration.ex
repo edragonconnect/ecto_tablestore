@@ -260,6 +260,8 @@ defmodule EctoTablestore.Migration do
   defmacro create(object, do: block), do: expand_create(object, block)
 
   defp expand_create(object, block) do
+    columns_str = Macro.to_string(block)
+
     columns =
       case block do
         {:__block__, _, columns} -> columns
@@ -267,7 +269,10 @@ defmodule EctoTablestore.Migration do
       end
 
     quote do
-      map = unquote(__MODULE__).__create__(unquote(object), unquote(columns))
+      map =
+        unquote(__MODULE__).__create__(unquote(object), unquote(columns))
+        |> Map.put(:columns_str, unquote(columns_str))
+
       Runner.push_command(&unquote(__MODULE__).do_create(&1, map))
     end
   end
@@ -308,23 +313,21 @@ defmodule EctoTablestore.Migration do
         # No partition key defined
         partition_key_count == 0 ->
           raise MigrationError,
-            message: "Please define at least one partition primary keys for table: #{table.name}"
+                "Please define at least one partition primary keys for table: #{table.name}"
 
         # The partition key only can define one
         true ->
           raise MigrationError,
-            message:
-              "The maximum number of partition primary keys is 1, now is #{partition_key_count} defined on " <>
-                "table: #{table.name} columns:\n" <> inspect(pk_columns)
+                "The maximum number of partition primary keys is 1, now is #{partition_key_count} defined on " <>
+                  "table: #{table.name} columns:\n" <> inspect(pk_columns)
       end
 
     case Enum.count(pk_columns) do
       # The number of primary keys can not be more than 4
       pk_count when pk_count > 4 ->
         raise MigrationError,
-          message:
-            "The maximum number of primary keys is 4, now is #{pk_count} defined on " <>
-              "table: #{table.name} columns:\n" <> inspect(pk_columns)
+              "The maximum number of primary keys is 4, now is #{pk_count} defined on " <>
+                "table: #{table.name} columns:\n" <> inspect(pk_columns)
 
       # Only support to define one primary key as auto_increment integer
       _pk_count ->
@@ -503,21 +506,16 @@ defmodule EctoTablestore.Migration do
   def do_create(repo, %{
         search_index: search_index,
         field_schemas: field_schemas,
-        index_sorts: index_sorts
+        index_sorts: index_sorts,
+        columns_str: columns_str
       }) do
     {table_name, index_name} = get_index_name(search_index, repo.config())
     table_name_str = IO.ANSI.format([:green, table_name, :reset])
     index_name_str = IO.ANSI.format([:green, index_name, :reset])
     repo_meta = Ecto.Adapter.lookup_meta(repo)
 
-    print_description =
-      inspect([field_schemas: field_schemas, index_sorts: index_sorts],
-        pretty: true,
-        limit: :infinity
-      )
-
     Logger.info(
-      ">> creating search index: #{index_name_str} for table: #{table_name_str} by #{print_description}"
+      ">> creating search index: #{index_name_str} for table: #{table_name_str} by defines:\n#{columns_str}"
     )
 
     case ExAliyunOts.create_search_index(
@@ -899,7 +897,7 @@ defmodule EctoTablestore.Migration do
           :ok
 
         {:error, error} ->
-          raise MigrationError, "dropping table: #{table_name} error: " <> error.message
+          raise MigrationError, "dropping table: #{table_name} error: #{error.message}"
       end
     end)
   end
@@ -946,8 +944,7 @@ defmodule EctoTablestore.Migration do
 
         {:error, error} ->
           raise MigrationError,
-                "dropping secondary_index index: #{index_name} for table: #{table_name} error: " <>
-                  error.message
+                "dropping secondary_index index: #{index_name} for table: #{table_name} error: #{error.message}"
       end
     end)
   end
@@ -982,8 +979,7 @@ defmodule EctoTablestore.Migration do
 
         {:error, error} ->
           raise MigrationError,
-                "dropping search index index: #{index_name} for table: #{table_name} error: " <>
-                  error.message
+                "dropping search index index: #{index_name} for table: #{table_name} error: #{error.message}"
       end
     end)
   end
