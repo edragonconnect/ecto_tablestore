@@ -465,6 +465,10 @@ defmodule Ecto.Adapters.Tablestore do
         end_primary_keys = Enum.map(primary_keys, fun.(end_fill_key))
         {schema, start_token, end_primary_keys, options}
 
+      {start_token, options} when is_list(start_token) ->
+        end_primary_keys = Enum.map(primary_keys, fun.(end_fill_key))
+        {schema, start_token, end_primary_keys, options}
+
       {_, options} ->
         start_primary_keys = Enum.map(primary_keys, fun.(start_fill_key))
         end_primary_keys = Enum.map(primary_keys, fun.(end_fill_key))
