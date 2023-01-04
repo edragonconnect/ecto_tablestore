@@ -6,8 +6,11 @@ defmodule Ecto.Adapters.Tablestore do
 
   alias __MODULE__
 
+  alias EctoTablestore.Repo
   alias EctoTablestore.Sequence
   alias ExAliyunOts.Error
+  alias ExAliyunOts.TableStore.Condition
+  alias ExAliyunOts.TableStoreFilter.{Filter, CompositeColumnValueFilter, SingleColumnValueFilter}
 
   alias ExAliyunOts.Const.{
     PKType,
@@ -36,49 +39,57 @@ defmodule Ecto.Adapters.Tablestore do
     quote do
       ## Query
 
-      @spec search(schema :: Ecto.Schema.t(), index_name :: String.t(), options :: Keyword.t()) ::
-              {:ok, EctoTablestore.Repo.search_result()} | {:error, term()}
+      @spec search(Repo.schema(), Repo.index_name(), Repo.options()) ::
+              {:ok, Repo.search_result()} | {:error, term}
       def search(schema, index_name, options) do
         Tablestore.search(get_dynamic_repo(), schema, index_name, options)
       end
 
-      @spec stream_search(
-              schema :: Ecto.Schema.t(),
-              index_name :: String.t(),
-              options :: Keyword.t()
-            ) :: Enumerable.t()
+      @spec stream_search(Repo.schema(), Repo.index_name(), Repo.options()) :: Enumerable.t()
       def stream_search(schema, index_name, options) do
         Tablestore.stream_search(get_dynamic_repo(), schema, index_name, options)
       end
 
-      @spec one(entity :: Ecto.Schema.t(), options :: Keyword.t()) ::
-              Ecto.Schema.t() | {:error, term()} | nil
+      @spec one(Repo.schema(), Repo.options()) :: Repo.schema() | {:error, term} | nil
       def one(%{__meta__: meta} = entity, options \\ []) do
         options = Tablestore.generate_filter_options(entity, options)
         get(meta.schema, Ecto.primary_key(entity), options)
       end
 
-      @spec get(schema :: Ecto.Schema.t(), ids :: list, options :: Keyword.t()) ::
-              Ecto.Schema.t() | {:error, term()} | nil
+      @spec one!(Repo.schema(), Repo.options()) :: Repo.schema()
+      def one!(%{__meta__: meta} = entity, options \\ []) do
+        options = Tablestore.generate_filter_options(entity, options)
+
+        case get(meta.schema, Ecto.primary_key(entity), options) do
+          nil ->
+            raise "expected at least one result but got none in query: #{inspect(entity)}"
+
+          {:error, error} ->
+            raise "got error: #{inspect(error)} when query: #{inspect(entity)}"
+
+          one when is_map(one) ->
+            one
+        end
+      end
+
+      @spec get(Repo.schema(), ids :: list, Repo.options()) ::
+              Repo.schema() | {:error, term} | nil
       def get(schema, ids, options \\ []) do
         Tablestore.get(get_dynamic_repo(), schema, ids, options)
       end
 
-      @spec get_range(schema :: Ecto.Schema.t(), options :: Keyword.t()) ::
-              {nil, nil} | {list, nil} | {list, binary()} | {:error, term()}
+      @spec get_range(Repo.schema(), Repo.options()) ::
+              {list | nil, Repo.next_token()} | {:error, term}
       def get_range(schema, options \\ [direction: :forward]) do
-        {schema, start_primary_keys, end_primary_keys} =
-          Tablestore.get_range_params_by_schema(schema, options)
-
-        get_range(schema, start_primary_keys, end_primary_keys, options)
+        Tablestore.get_range(get_dynamic_repo(), schema, options)
       end
 
       @spec get_range(
-              schema :: Ecto.Schema.t(),
-              start_primary_keys :: list | binary(),
-              end_primary_keys :: list,
-              options :: Keyword.t()
-            ) :: {nil, nil} | {list, nil} | {list, binary()} | {:error, term()}
+              Repo.schema(),
+              Repo.start_primary_keys(),
+              Repo.end_primary_keys(),
+              Repo.options()
+            ) :: {list | nil, Repo.next_token()} | {:error, term}
       def get_range(
             schema,
             start_primary_keys,
@@ -94,19 +105,16 @@ defmodule Ecto.Adapters.Tablestore do
         )
       end
 
-      @spec stream(schema :: Ecto.Schema.t(), options :: Keyword.t()) :: Enumerable.t()
+      @spec stream(Repo.schema(), Repo.options()) :: Enumerable.t()
       def stream(schema, options \\ [direction: :forward]) do
-        {schema, start_primary_keys, end_primary_keys} =
-          Tablestore.get_range_params_by_schema(schema, options)
-
-        stream_range(schema, start_primary_keys, end_primary_keys, options)
+        Tablestore.stream_range(get_dynamic_repo(), schema, options)
       end
 
       @spec stream_range(
-              schema :: Ecto.Schema.t(),
-              start_primary_keys :: list,
-              end_primary_keys :: list,
-              options :: Keyword.t()
+              Repo.schema(),
+              Repo.start_primary_keys(),
+              Repo.end_primary_keys(),
+              Repo.options()
             ) :: Enumerable.t()
       def stream_range(
             schema,
@@ -123,73 +131,16 @@ defmodule Ecto.Adapters.Tablestore do
         )
       end
 
-      @spec batch_get(gets) ::
-              {:ok, Keyword.t()} | {:error, term()}
-            when gets: [
-                   {
-                     module :: Ecto.Schema.t(),
-                     [
-                       [{key :: String.t() | atom(), value :: integer | String.t()}]
-                     ]
-                   }
-                   | {
-                       module :: Ecto.Schema.t(),
-                       [
-                         [{key :: String.t() | atom(), value :: integer | String.t()}]
-                       ],
-                       options :: Keyword.t()
-                     }
-                   | {
-                       module :: Ecto.Schema.t(),
-                       [{key :: String.t() | atom(), value :: integer | String.t()}]
-                     }
-                     | {
-                         module :: Ecto.Schema.t(),
-                         [{key :: String.t() | atom(), value :: integer | String.t()}],
-                         options :: Keyword.t()
-                       }
-                     | [schema_entity :: Ecto.Schema.t()]
-                       | {[schema_entity :: Ecto.Schema.t()], options :: Keyword.t()}
-                 ]
+      @spec batch_get(Repo.batch_gets()) :: {:ok, Keyword.t()} | {:error, term}
       def batch_get(gets), do: Tablestore.batch_get(get_dynamic_repo(), gets)
 
       ## Addition
 
-      @spec batch_write(writes, options :: Keyword.t()) ::
-              {:ok, Keyword.t()} | {:error, term()}
-            when writes: [
-                   {
-                     operation :: :put,
-                     items :: [
-                       schema_entity ::
-                         Ecto.Schema.t()
-                         | {schema_entity :: Ecto.Schema.t(), options :: Keyword.t()}
-                         | {module :: Ecto.Schema.t(), ids :: list(), attrs :: list(),
-                            options :: Keyword.t()}
-                     ]
-                   }
-                   | {
-                       operation :: :update,
-                       items :: [
-                         changeset ::
-                           Ecto.Changeset.t()
-                           | {changeset :: Ecto.Changeset.t(), options :: Keyword.t()}
-                       ]
-                     }
-                   | {
-                       operation :: :delete,
-                       items :: [
-                         schema_entity ::
-                           Ecto.Schema.t()
-                           | {schema_entity :: Ecto.Schema.t(), options :: Keyword.t()}
-                           | {module :: Ecto.Schema.t(), ids :: list(), options :: Keyword.t()}
-                       ]
-                     }
-                 ]
+      @spec batch_write(Repo.batch_writes(), Tablestore.options()) ::
+              {:ok, Keyword.t()} | {:error, term}
       def batch_write(writes, options \\ []) do
         Tablestore.batch_write(get_dynamic_repo(), writes, options)
       end
-
     end
   end
 
@@ -232,31 +183,18 @@ defmodule Ecto.Adapters.Tablestore do
 
   @impl true
   def insert(repo, schema_meta, fields, _on_conflict, _returning, options) do
-
     schema = schema_meta.schema
-
     instance = repo.instance
 
     {pks, attrs, autogenerate_id_name} = pks_and_attrs_to_put_row(instance, schema, fields)
 
     options =
       case condition_when_put_row_with_auto_increment_pk(schema, options) do
-        {:ok, options} ->
-          options
-        _ ->
-          options
+        {:ok, options} -> options
+        _ -> options
       end
 
-    result =
-      ExAliyunOts.put_row(
-        instance,
-        schema_meta.source,
-        pks,
-        attrs,
-        options
-      )
-
-    case result do
+    case ExAliyunOts.put_row(instance, schema_meta.source, pks, attrs, options) do
       {:ok, response} ->
         case response.row do
           {pks, _attrs} ->
@@ -281,15 +219,12 @@ defmodule Ecto.Adapters.Tablestore do
 
   @impl true
   def delete(repo, schema_meta, filters, options) do
-    result =
-      ExAliyunOts.delete_row(
-        repo.instance,
-        schema_meta.source,
-        primary_key_as_string(schema_meta.schema, filters),
-        Keyword.take(options, [:condition, :transaction_id])
-      )
-
-    case result do
+    case ExAliyunOts.delete_row(
+           repo.instance,
+           schema_meta.source,
+           primary_key_as_string(schema_meta.schema, filters),
+           Keyword.take(options, [:condition, :transaction_id])
+         ) do
       {:ok, _response} ->
         {:ok, []}
 
@@ -333,15 +268,12 @@ defmodule Ecto.Adapters.Tablestore do
 
       options = may_put_optimistic_lock_into_condition(schema, ids, options)
 
-      result =
-        ExAliyunOts.update_row(
-          repo.instance,
-          schema_meta.source,
-          primary_key_as_string(schema, ids),
-          options
-        )
-
-      case result do
+      case ExAliyunOts.update_row(
+             repo.instance,
+             schema_meta.source,
+             primary_key_as_string(schema, ids),
+             options
+           ) do
         {:ok, response} ->
           case response.row do
             nil ->
@@ -380,29 +312,18 @@ defmodule Ecto.Adapters.Tablestore do
   @impl true
   def insert_all(repo, schema_meta, header, list, on_conflict, returning, placeholders, options) do
     IO.puts(
-      "insert_all - repo: #{inspect(repo)}, schema_meta: #{inspect(schema_meta)}, header: #{
-        inspect(header)
-      }, list: #{inspect(list)}, on_conflict: #{inspect(on_conflict)}, returning: #{
-        inspect(returning)
-      }, placeholders: #{inspect(placeholders)}, options: #{inspect(options)}\nplease use `batch_write` instead this function"
+      "insert_all - repo: #{inspect(repo)}, schema_meta: #{inspect(schema_meta)}, header: #{inspect(header)}, " <>
+        "list: #{inspect(list)}, on_conflict: #{inspect(on_conflict)}, returning: #{inspect(returning)}, " <>
+        "placeholders: #{inspect(placeholders)}, options: #{inspect(options)}\nplease use `batch_write` instead this function"
     )
   end
 
   @doc false
   def search(repo, schema, index_name, options) do
     meta = Ecto.Adapter.lookup_meta(repo)
-
     options = schema_fields_for_columns_to_get(schema, options)
 
-    result =
-      ExAliyunOts.search(
-        meta.instance,
-        schema.__schema__(:source),
-        index_name,
-        options
-      )
-
-    case result do
+    case ExAliyunOts.search(meta.instance, schema.__schema__(:source), index_name, options) do
       {:ok, response} ->
         {
           :ok,
@@ -416,15 +337,14 @@ defmodule Ecto.Adapters.Tablestore do
           }
         }
 
-      _error ->
-        result
+      error ->
+        error
     end
   end
 
   @doc false
   def stream_search(repo, schema, index_name, options) do
     meta = Ecto.Adapter.lookup_meta(repo)
-
     options = schema_fields_for_columns_to_get(schema, options)
 
     ExAliyunOts.stream_search(
@@ -434,41 +354,38 @@ defmodule Ecto.Adapters.Tablestore do
       options
     )
     |> Stream.flat_map(fn
-      {:ok, response} ->
-        transfer_rows_by_schema(response.rows, schema, [])
-
-      error ->
-        [error]
+      {:ok, response} -> transfer_rows_by_schema(response.rows, schema, [])
+      error -> [error]
     end)
   end
 
   @doc false
   def get(repo, schema, ids, options) do
     meta = Ecto.Adapter.lookup_meta(repo)
-
     options = schema_fields_for_columns_to_get(schema, options)
 
-    result =
-      ExAliyunOts.get_row(
-        meta.instance,
-        schema.__schema__(:source),
-        primary_key_as_string(schema, ids),
-        options
-      )
-
-    case result do
-      {:ok, response} ->
-        row_to_schema(schema, response.row)
-
-      _error ->
-        result
+    case ExAliyunOts.get_row(
+           meta.instance,
+           schema.__schema__(:source),
+           primary_key_as_string(schema, ids),
+           options
+         ) do
+      {:ok, response} -> row_to_schema(schema, response.row)
+      error -> error
     end
+  end
+
+  @doc false
+  def get_range(repo, schema, options) do
+    {schema, start_primary_keys, end_primary_keys, options} =
+      get_range_params_by_schema(schema, options)
+
+    get_range(repo, schema, start_primary_keys, end_primary_keys, options)
   end
 
   @doc false
   def get_range(repo, schema, start_primary_keys, end_primary_keys, options) do
     meta = Ecto.Adapter.lookup_meta(repo)
-
     options = schema_fields_for_columns_to_get(schema, options)
 
     result =
@@ -493,9 +410,16 @@ defmodule Ecto.Adapters.Tablestore do
   end
 
   @doc false
+  def stream_range(repo, schema, options) do
+    {schema, start_primary_keys, end_primary_keys, options} =
+      get_range_params_by_schema(schema, options)
+
+    stream_range(repo, schema, start_primary_keys, end_primary_keys, options)
+  end
+
+  @doc false
   def stream_range(repo, schema, start_primary_keys, end_primary_keys, options) do
     meta = Ecto.Adapter.lookup_meta(repo)
-
     options = schema_fields_for_columns_to_get(schema, options)
 
     meta.instance
@@ -521,13 +445,18 @@ defmodule Ecto.Adapters.Tablestore do
     Enum.map(rows, &row_to_schema(schema, &1))
   end
 
-  @doc false
-  def get_range_params_by_schema(schema, options) do
+  defp get_range_params_by_schema(schema, options) do
     {schema, primary_keys} =
       if is_atom(schema) do
         {schema, schema |> struct() |> Ecto.primary_key()}
       else
         {schema.__struct__, Ecto.primary_key(schema)}
+      end
+
+    {start_fill_key, end_fill_key} =
+      case Keyword.get(options, :direction, :forward) do
+        :forward -> {:inf_min, :inf_max}
+        _ -> {:inf_max, :inf_min}
       end
 
     fun = fn fill ->
@@ -537,37 +466,34 @@ defmodule Ecto.Adapters.Tablestore do
       end
     end
 
-    {start_primary_keys, end_primary_keys} =
-      case Keyword.get(options, :direction, :forward) do
-        :forward ->
-          {Enum.map(primary_keys, fun.(:inf_min)), Enum.map(primary_keys, fun.(:inf_max))}
+    case Keyword.pop(options, :token) do
+      {start_token, options} when is_binary(start_token) ->
+        end_primary_keys = Enum.map(primary_keys, fun.(end_fill_key))
+        {schema, start_token, end_primary_keys, options}
 
-        _ ->
-          {Enum.map(primary_keys, fun.(:inf_max)), Enum.map(primary_keys, fun.(:inf_min))}
-      end
+      {start_token, options} when is_list(start_token) ->
+        end_primary_keys = Enum.map(primary_keys, fun.(end_fill_key))
+        {schema, start_token, end_primary_keys, options}
 
-    {schema, start_primary_keys, end_primary_keys}
+      {_, options} ->
+        start_primary_keys = Enum.map(primary_keys, fun.(start_fill_key))
+        end_primary_keys = Enum.map(primary_keys, fun.(end_fill_key))
+        {schema, start_primary_keys, end_primary_keys, options}
+    end
   end
 
   @doc false
   def batch_get(repo, gets) do
     meta = Ecto.Adapter.lookup_meta(repo)
-
     {requests, schemas_mapping} = Enum.reduce(gets, {[], %{}}, &map_batch_gets/2)
-
     prepared_requests = Enum.reverse(requests)
 
-    result = ExAliyunOts.batch_get(meta.instance, prepared_requests)
-
-    case result do
+    case ExAliyunOts.batch_get(meta.instance, prepared_requests) do
       {:ok, response} ->
-        {
-          :ok,
-          batch_get_row_response_to_schemas(response.tables, schemas_mapping)
-        }
+        {:ok, batch_get_row_response_to_schemas(response.tables, schemas_mapping)}
 
-      _error ->
-        result
+      error ->
+        error
     end
   end
 
@@ -589,6 +515,7 @@ defmodule Ecto.Adapters.Tablestore do
     case condition_when_put_row_with_auto_increment_pk(schema, options) do
       {:ok, options} ->
         options
+
       _ ->
         # schema definition no server side auth increment primary_key
         generate_condition_options(entity, options)
@@ -602,9 +529,7 @@ defmodule Ecto.Adapters.Tablestore do
       # must set `:IGNORE` condition.
       {
         :ok,
-        Keyword.put(options, :condition, %ExAliyunOts.TableStore.Condition{
-          row_existence: RowExistence.ignore()
-        })
+        Keyword.put(options, :condition, %Condition{row_existence: RowExistence.ignore()})
       }
     else
       _ ->
@@ -619,11 +544,9 @@ defmodule Ecto.Adapters.Tablestore do
 
   @doc false
   def generate_filter_options(%{__meta__: _meta} = entity, options) do
-    {entity_full_match?, options} = Keyword.pop(options, :entity_full_match, false)
-    if entity_full_match? == true do
-      extract_filter_options_from_entity(entity, options)
-    else
-      options
+    case Keyword.pop(options, :entity_full_match, false) do
+      {true, options} -> extract_filter_options_from_entity(entity, options)
+      {_, options} -> options
     end
   end
 
@@ -637,13 +560,9 @@ defmodule Ecto.Adapters.Tablestore do
 
     columns_to_get_opt = Keyword.get(options, :columns_to_get, [])
 
-    if not is_list(columns_to_get_opt),
-      do:
-        raise(
-          "Invalid usecase - require `columns_to_get` as list, but got: #{
-            inspect(columns_to_get_opt)
-          }"
-        )
+    if not is_list(columns_to_get_opt) do
+      raise "Invalid usecase - require `columns_to_get` as list, but got: #{inspect(columns_to_get_opt)}"
+    end
 
     if columns_to_get_opt == [] do
       options
@@ -669,19 +588,15 @@ defmodule Ecto.Adapters.Tablestore do
     generate_filter_from_entity(fields, [])
   end
 
-  defp generate_filter_from_entity([], []) do
-    nil
-  end
+  defp generate_filter_from_entity([], []), do: nil
 
-  defp generate_filter_from_entity([], [
-         %ExAliyunOts.TableStoreFilter.Filter{type: FilterType.single_column()} = filter
-       ]) do
+  defp generate_filter_from_entity([], [%Filter{type: FilterType.single_column()} = filter]) do
     filter
   end
 
   defp generate_filter_from_entity([], prepared) do
-    %ExAliyunOts.TableStoreFilter.Filter{
-      filter: %ExAliyunOts.TableStoreFilter.CompositeColumnValueFilter{
+    %Filter{
+      filter: %CompositeColumnValueFilter{
         combinator: :LO_AND,
         sub_filters: prepared
       },
@@ -691,8 +606,8 @@ defmodule Ecto.Adapters.Tablestore do
 
   defp generate_filter_from_entity([{field_name, value} | rest], prepared)
        when is_map(value) or is_list(value) do
-    filter = %ExAliyunOts.TableStoreFilter.Filter{
-      filter: %ExAliyunOts.TableStoreFilter.SingleColumnValueFilter{
+    filter = %Filter{
+      filter: %SingleColumnValueFilter{
         column_name: Atom.to_string(field_name),
         column_value: Jason.encode!(value),
         comparator: ComparatorType.equal(),
@@ -706,8 +621,8 @@ defmodule Ecto.Adapters.Tablestore do
   end
 
   defp generate_filter_from_entity([{field_name, value} | rest], prepared) do
-    filter = %ExAliyunOts.TableStoreFilter.Filter{
-      filter: %ExAliyunOts.TableStoreFilter.SingleColumnValueFilter{
+    filter = %Filter{
+      filter: %SingleColumnValueFilter{
         column_name: Atom.to_string(field_name),
         column_value: value,
         comparator: ComparatorType.equal(),
@@ -725,34 +640,27 @@ defmodule Ecto.Adapters.Tablestore do
     "#{table_name},#{field}"
   end
 
-  defp merge_condition([], nil) do
-    nil
-  end
-
-  defp merge_condition([], %ExAliyunOts.TableStore.Condition{} = condition) do
-    condition
-  end
+  defp merge_condition([], nil), do: nil
+  defp merge_condition([], %Condition{} = condition), do: condition
 
   defp merge_condition([filter: filter_from_entity], nil) do
-    %ExAliyunOts.TableStore.Condition{
+    %Condition{
       column_condition: filter_from_entity,
       row_existence: RowExistence.expect_exist()
     }
   end
 
-  defp merge_condition([filter: filter_from_entity], %ExAliyunOts.TableStore.Condition{
-        column_condition: nil,
-       }) do
-    %ExAliyunOts.TableStore.Condition{
+  defp merge_condition([filter: filter_from_entity], %Condition{column_condition: nil}) do
+    %Condition{
       column_condition: filter_from_entity,
       row_existence: RowExistence.expect_exist()
     }
   end
 
-  defp merge_condition([filter: filter_from_entity], %ExAliyunOts.TableStore.Condition{
+  defp merge_condition([filter: filter_from_entity], %Condition{
          column_condition: column_condition
        }) do
-    %ExAliyunOts.TableStore.Condition{
+    %Condition{
       column_condition: do_generate_filter(filter_from_entity, :and, column_condition),
       row_existence: RowExistence.expect_exist()
     }
@@ -762,41 +670,33 @@ defmodule Ecto.Adapters.Tablestore do
     filter_to_options(filter_from_entity, [])
   end
 
-  defp filter_to_options(nil, options) do
-    options
-  end
+  defp filter_to_options(nil, options), do: options
 
   defp filter_to_options(filter_from_entity, options) do
     merged = do_generate_filter(filter_from_entity, :and, options[:filter])
     Keyword.put(options, :filter, merged)
   end
 
-  defp do_generate_filter(filter_from_entity, :and, nil) do
-    filter_from_entity
-  end
+  defp do_generate_filter(filter_from_entity, :and, nil), do: filter_from_entity
 
-  defp do_generate_filter(
-         filter_from_entity,
-         :and,
-         %ExAliyunOts.TableStoreFilter.Filter{} = filter_from_opt
-       ) do
+  defp do_generate_filter(filter_from_entity, :and, %Filter{} = filter_from_opt) do
     filter_names_from_opt = flatten_filter(filter_from_opt)
 
     filter_from_entity = do_drop_filter_from_entity(filter_from_entity, filter_names_from_opt)
 
     case filter_from_entity do
       filter_from_entity when is_list(filter_from_entity) ->
-        %ExAliyunOts.TableStoreFilter.Filter{
-          filter: %ExAliyunOts.TableStoreFilter.CompositeColumnValueFilter{
+        %Filter{
+          filter: %CompositeColumnValueFilter{
             combinator: LogicOperator.and(),
             sub_filters: Enum.reverse([filter_from_opt | filter_from_entity])
           },
           type: FilterType.composite_column()
         }
 
-      %ExAliyunOts.TableStoreFilter.Filter{type: FilterType.single_column()} ->
-        %ExAliyunOts.TableStoreFilter.Filter{
-          filter: %ExAliyunOts.TableStoreFilter.CompositeColumnValueFilter{
+      %Filter{type: FilterType.single_column()} ->
+        %Filter{
+          filter: %CompositeColumnValueFilter{
             combinator: LogicOperator.and(),
             sub_filters: [filter_from_entity, filter_from_opt]
           },
@@ -808,13 +708,9 @@ defmodule Ecto.Adapters.Tablestore do
     end
   end
 
-  defp do_generate_filter(
-         filter_from_entity,
-         :or,
-         %ExAliyunOts.TableStoreFilter.Filter{} = filter_from_opt
-       ) do
-    %ExAliyunOts.TableStoreFilter.Filter{
-      filter: %ExAliyunOts.TableStoreFilter.CompositeColumnValueFilter{
+  defp do_generate_filter(filter_from_entity, :or, %Filter{} = filter_from_opt) do
+    %Filter{
+      filter: %CompositeColumnValueFilter{
         combinator: LogicOperator.or(),
         sub_filters: [filter_from_entity, filter_from_opt]
       },
@@ -826,18 +722,16 @@ defmodule Ecto.Adapters.Tablestore do
     raise("Invalid usecase - input invalid `:filter` option: #{inspect(filter_from_opt)}")
   end
 
-  defp flatten_filter(%ExAliyunOts.TableStoreFilter.Filter{
+  defp flatten_filter(%Filter{
          filter: %{sub_filters: sub_filters},
          type: FilterType.composite_column()
        }) do
     sub_filters
-    |> Enum.map(fn filter ->
-      flatten_filter(filter)
-    end)
+    |> Enum.map(&flatten_filter/1)
     |> List.flatten()
   end
 
-  defp flatten_filter(%ExAliyunOts.TableStoreFilter.Filter{
+  defp flatten_filter(%Filter{
          filter: %{column_name: column_name},
          type: FilterType.single_column()
        }) do
@@ -845,7 +739,7 @@ defmodule Ecto.Adapters.Tablestore do
   end
 
   defp do_drop_filter_from_entity(
-         %ExAliyunOts.TableStoreFilter.Filter{
+         %Filter{
            filter: %{column_name: column_name},
            type: FilterType.single_column()
          } = filter,
@@ -855,7 +749,7 @@ defmodule Ecto.Adapters.Tablestore do
   end
 
   defp do_drop_filter_from_entity(
-         %ExAliyunOts.TableStoreFilter.Filter{
+         %Filter{
            filter: %{sub_filters: sub_filters},
            type: FilterType.composite_column()
          },
@@ -885,9 +779,18 @@ defmodule Ecto.Adapters.Tablestore do
       schema.__schema__(:primary_key)
       |> Enum.reduce({[], fields, nil}, fn primary_key, {primary_keys, fields, autogen_field} ->
         {value, fields} = Keyword.pop(fields, primary_key)
-        {value, autogen_field} = value_of_primary_keys_to_put_row(
-          instance, schema, primary_keys, primary_key, value, autogenerate_id, autogen_field
-        )
+
+        {value, autogen_field} =
+          value_of_primary_keys_to_put_row(
+            instance,
+            schema,
+            primary_keys,
+            primary_key,
+            value,
+            autogenerate_id,
+            autogen_field
+          )
+
         {[{Atom.to_string(primary_key), value} | primary_keys], fields, autogen_field}
       end)
 
@@ -898,22 +801,53 @@ defmodule Ecto.Adapters.Tablestore do
     }
   end
 
-  defp value_of_primary_keys_to_put_row(instance, schema, _, field, nil, {_, autogen_field, {:parameterized, Ecto.Hashids, _hashids} = type} = _autogenerate_id, _autogen_field)
+  defp value_of_primary_keys_to_put_row(
+         instance,
+         schema,
+         _,
+         field,
+         nil,
+         {_, autogen_field, {:parameterized, Ecto.Hashids, _hashids} = type} = _autogenerate_id,
+         _autogen_field
+       )
        when field == autogen_field do
     source = schema.__schema__(:source)
-    next_value = Sequence.next_value(instance, key_to_global_sequence(source, Atom.to_string(field)))
+
+    next_value =
+      Sequence.next_value(instance, key_to_global_sequence(source, Atom.to_string(field)))
+
     {:ok, value} = Ecto.Type.dump(type, next_value)
     {value, field}
   end
 
-  defp value_of_primary_keys_to_put_row(instance, schema, [], field, nil, {_, autogen_field, :id}, _autogen_field) when field == autogen_field do
+  defp value_of_primary_keys_to_put_row(
+         instance,
+         schema,
+         [],
+         field,
+         nil,
+         {_, autogen_field, :id},
+         _autogen_field
+       )
+       when field == autogen_field do
     # Set partition_key as an auto-generated, use sequence for this usecase
     source = schema.__schema__(:source)
-    next_value = Sequence.next_value(instance, key_to_global_sequence(source, Atom.to_string(field)))
+
+    next_value =
+      Sequence.next_value(instance, key_to_global_sequence(source, Atom.to_string(field)))
+
     {next_value, field}
   end
 
-  defp value_of_primary_keys_to_put_row(_instance, _schema, prepared_primary_keys, field, nil, {_, autogen_field, :id}, _autogen_field)
+  defp value_of_primary_keys_to_put_row(
+         _instance,
+         _schema,
+         prepared_primary_keys,
+         field,
+         nil,
+         {_, autogen_field, :id},
+         _autogen_field
+       )
        when field == autogen_field and prepared_primary_keys != [] do
     # Exclude partition_key, start from the secondary primary key,
     # set the value as `PKType.auto_increment` to use the auto increment by server side
@@ -983,6 +917,7 @@ defmodule Ecto.Adapters.Tablestore do
     for {attr_key, attr_value, _ts} <- attrs do
       field = String.to_existing_atom(attr_key)
       type = schema.__schema__(:type, field)
+
       {
         field,
         load_field!(attr_value, type, field, schema)
@@ -1047,7 +982,12 @@ defmodule Ecto.Adapters.Tablestore do
     Jason.decode!(value) |> load!(type, field, struct)
   end
 
-  defp load_field!(value, {:parameterized, Ecto.Embedded, %{cardinality: embedded_type, related: schema}}, _field, _struct) do
+  defp load_field!(
+         value,
+         {:parameterized, Ecto.Embedded, %{cardinality: embedded_type, related: schema}},
+         _field,
+         _struct
+       ) do
     decode_json_to_embedded(embedded_type, schema, value)
   end
 
@@ -1064,6 +1004,7 @@ defmodule Ecto.Adapters.Tablestore do
     case Ecto.Type.adapter_load(__MODULE__, type, value) do
       {:ok, value} ->
         value
+
       :error ->
         field = field && " for field #{inspect(field)}"
         struct = struct && " in #{inspect(struct)}"
@@ -1097,6 +1038,7 @@ defmodule Ecto.Adapters.Tablestore do
 
   defp construct_row_updates({field, nil}, {schema, acc}) when is_atom(field) do
     field_str = Atom.to_string(field)
+
     {
       schema,
       Keyword.update(acc, :delete_all, [field_str], &[field_str | &1])
@@ -1157,10 +1099,12 @@ defmodule Ecto.Adapters.Tablestore do
        when is_list(start_primary_keys) do
     primary_key_as_string(schema, start_primary_keys)
   end
+
   defp prepare_start_primary_keys_by_order(_schema, start_primary_keys)
        when is_binary(start_primary_keys) do
     start_primary_keys
   end
+
   defp prepare_start_primary_keys_by_order(schema, start_primary_keys) do
     raise "Invalid start_primary_keys: #{inspect(start_primary_keys)} for #{schema}, expect it as `list` or `binary`"
   end
@@ -1187,16 +1131,13 @@ defmodule Ecto.Adapters.Tablestore do
         end
       )
 
-    if MapSet.size(source_set) > 1,
-      do:
-        raise(
-          "Invalid usecase - input batch get request: #{inspect(schema_entities)} are different types of schema entity in batch."
-        )
+    if MapSet.size(source_set) > 1 do
+      raise "Invalid usecase - input batch get request: #{inspect(schema_entities)} are different types of schema entity in batch."
+    end
 
     {conflict_schemas, filters, columns_to_get} =
       Enum.reduce(schema_entities, {[], [], []}, fn schema_entity,
                                                     {conflict_schemas, filters, columns_to_get} ->
-
         options = generate_filter_options(schema_entity, options)
 
         prepared_columns_to_get =
@@ -1216,9 +1157,10 @@ defmodule Ecto.Adapters.Tablestore do
       end)
 
     if length(filters) != 0 and length(conflict_schemas) != 0 do
-      raise "Invalid usecase - conflicts for schema_entities: #{inspect(conflict_schemas)}, they are only be with primary key(s), but generate filters: #{
-              inspect(filters)
-            } from other schema_entities attribute fields, please input schema_entities both have attribute fields or use the `filter` option."
+      raise "Invalid usecase - conflicts for schema_entities: #{inspect(conflict_schemas)}, " <>
+              "they are only be with primary key(s), but generate filters: #{inspect(filters)} from " <>
+              "other schema_entities attribute fields, please input schema_entities both have attribute fields " <>
+              "or use the `filter` option."
     end
 
     options =
@@ -1243,30 +1185,15 @@ defmodule Ecto.Adapters.Tablestore do
       end
 
     source = schema.__schema__(:source)
-
-    request =
-      ExAliyunOts.get(
-        source,
-        ids_groups,
-        options
-      )
-
+    request = ExAliyunOts.get(source, ids_groups, options)
     {[request | requests], Map.put(schemas_mapping, source, schema)}
   end
 
   defp map_batch_gets({schema, ids_groups, options}, {requests, schemas_mapping})
        when is_list(ids_groups) do
     source = schema.__schema__(:source)
-
     options = schema_fields_for_columns_to_get(schema, options)
-
-    request =
-      ExAliyunOts.get(
-        source,
-        format_ids_groups(schema, ids_groups),
-        options
-      )
-
+    request = ExAliyunOts.get(source, format_ids_groups(schema, ids_groups), options)
     {[request | requests], Map.put(schemas_mapping, source, schema)}
   end
 
@@ -1279,8 +1206,7 @@ defmodule Ecto.Adapters.Tablestore do
   end
 
   defp format_ids_groups(schema, [ids | _] = ids_groups) when is_list(ids) do
-    ids_groups
-    |> Enum.map(fn ids_group ->
+    Enum.map(ids_groups, fn ids_group ->
       if is_list(ids_group),
         do: primary_key_as_string(schema, ids_group),
         else: primary_key_as_string(schema, [ids_group])
@@ -1295,9 +1221,7 @@ defmodule Ecto.Adapters.Tablestore do
       format_ids_groups(schema, [ids_groups])
     else
       # fetch multi rows with multi primary_keys
-      Enum.map(ids_groups, fn ids_group ->
-        primary_key_as_string(schema, ids_group)
-      end)
+      Enum.map(ids_groups, &primary_key_as_string(schema, &1))
     end
   end
 
@@ -1306,7 +1230,7 @@ defmodule Ecto.Adapters.Tablestore do
     case schema.__schema__(:autogenerate) do
       [{autogen_fields, {m, f, a}}] ->
         autogen_value = apply(m, f, a)
-        Enum.map(autogen_fields, fn f -> {f, autogen_value} end)
+        Enum.map(autogen_fields, &{&1, autogen_value})
 
       _ ->
         []
@@ -1318,7 +1242,7 @@ defmodule Ecto.Adapters.Tablestore do
     case schema.__schema__(:autoupdate) do
       [{autoupdate_fields, {m, f, a}}] ->
         autoupdate_value = apply(m, f, a)
-        Enum.map(autoupdate_fields, fn f -> {f, autoupdate_value} end)
+        Enum.map(autoupdate_fields, &{&1, autoupdate_value})
 
       _ ->
         []
@@ -1351,11 +1275,8 @@ defmodule Ecto.Adapters.Tablestore do
         end)
 
       case schemas_data do
-        [] ->
-          [{schema, nil} | acc]
-
-        _ ->
-          [{schema, Enum.reverse(schemas_data)} | acc]
+        [] -> [{schema, nil} | acc]
+        _ -> [{schema, Enum.reverse(schemas_data)} | acc]
       end
     end)
     |> Enum.reverse()
@@ -1396,8 +1317,10 @@ defmodule Ecto.Adapters.Tablestore do
       Enum.reduce(pks, %{}, fn
         {pk_field, pk_value}, acc when is_atom(pk_field) ->
           Map.put(acc, Atom.to_string(pk_field), primary_key_value(pk_value))
+
         {pk_field, pk_value}, acc when is_bitstring(pk_field) ->
           Map.put(acc, pk_field, primary_key_value(pk_value))
+
         _, acc ->
           acc
       end)
@@ -1412,15 +1335,10 @@ defmodule Ecto.Adapters.Tablestore do
   end
 
   @doc false
-  def row_to_struct(%{__meta__: _} = struct, nil) do
-    struct
-  end
-  def row_to_struct(struct, {nil, attrs}) do
-    reduce_items_into_struct(struct, attrs)
-  end
-  def row_to_struct(struct, {pks, nil}) do
-    reduce_items_into_struct(struct, pks)
-  end
+  def row_to_struct(%{__meta__: _} = struct, nil), do: struct
+  def row_to_struct(struct, {nil, attrs}), do: reduce_items_into_struct(struct, attrs)
+  def row_to_struct(struct, {pks, nil}), do: reduce_items_into_struct(struct, pks)
+
   def row_to_struct(struct, {pks, attrs}) do
     struct
     |> reduce_items_into_struct(attrs)
@@ -1435,6 +1353,7 @@ defmodule Ecto.Adapters.Tablestore do
         type = schema.__schema__(:type, field)
         value = load_field!(value, type, field, schema)
         Map.put(acc, field, value)
+
       {field, value}, acc ->
         field = String.to_existing_atom(field)
         Map.put(acc, field, value)
@@ -1444,6 +1363,7 @@ defmodule Ecto.Adapters.Tablestore do
   defp schema_fields_for_columns_to_get(schema, []) do
     [columns_to_get: attribute_fields_to_string_list(schema)]
   end
+
   defp schema_fields_for_columns_to_get(schema, options) do
     options
     |> Keyword.get(:columns_to_get)
@@ -1453,12 +1373,14 @@ defmodule Ecto.Adapters.Tablestore do
   defp put_columns_to_get(nil, schema, options) do
     Keyword.put(options, :columns_to_get, attribute_fields_to_string_list(schema))
   end
+
   defp put_columns_to_get(value, schema, options)
        when value == :all
        when value == :RETURN_ALL do
     # used for search index function, e.g. [columns_to_get: :all]
     Keyword.put(options, :columns_to_get, attribute_fields_to_string_list(schema))
   end
+
   defp put_columns_to_get(value, schema, options)
        when value == :all_from_index
        when value == :RETURN_ALL_FROM_INDEX do
@@ -1466,6 +1388,7 @@ defmodule Ecto.Adapters.Tablestore do
     # e.g. [columns_to_get: :all_from_index]
     Keyword.put(options, :columns_to_get, attribute_fields_to_string_list(schema))
   end
+
   defp put_columns_to_get(_value, _schema, options) do
     options
   end
@@ -1473,31 +1396,21 @@ defmodule Ecto.Adapters.Tablestore do
   defp attribute_fields_to_string_list(schema) do
     schema
     |> attribute_fields()
-    |> Enum.map(fn(field) ->
-      Atom.to_string(field)
-    end)
+    |> Enum.map(&Atom.to_string/1)
   end
 
   defp attribute_fields(schema) do
-    (schema.__schema__(:fields) -- schema.__schema__(:primary_key))
+    schema.__schema__(:fields) -- schema.__schema__(:primary_key)
   end
 
   ## Storage
 
   @impl true
-  def storage_up(opts) do
-    impl_storage_tips(opts, "create")
-  end
-
+  def storage_up(opts), do: impl_storage_tips(opts, "create")
   @impl true
-  def storage_down(opts) do
-    impl_storage_tips(opts, "drop")
-  end
-
+  def storage_down(opts), do: impl_storage_tips(opts, "drop")
   @impl true
-  def storage_status(opts) do
-    impl_storage_tips(opts, "check")
-  end
+  def storage_status(opts), do: impl_storage_tips(opts, "check")
 
   defp impl_storage_tips(opts, action) do
     msg =
@@ -1518,5 +1431,4 @@ defmodule Ecto.Adapters.Tablestore do
       \n\nPlease #{action} tablestore instance/database visit Alibaba TableStore product console through
       https://otsnext.console.aliyun.com/
     """
-
 end

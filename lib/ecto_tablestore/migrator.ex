@@ -10,7 +10,7 @@ defmodule EctoTablestore.Migrator do
     pending =
       migration_source
       |> migrations_for()
-      |> Enum.filter(fn {version, _name, _file} -> not (version in versions) end)
+      |> Enum.filter(fn {version, _name, _file} -> version not in versions end)
 
     ensure_no_duplication!(pending)
 

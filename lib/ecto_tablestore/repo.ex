@@ -37,15 +37,67 @@ defmodule EctoTablestore.Repo do
   ```
   """
 
+  @type next_token :: binary | nil
   @type search_result :: %{
-          is_all_succeeded: boolean(),
-          next_token: binary() | nil,
-          schemas: list(),
-          total_hits: integer()
+          is_all_succeeded: boolean,
+          next_token: next_token,
+          schemas: list,
+          total_hits: integer
         }
   @type schema :: Ecto.Schema.t()
   @type schema_or_changeset :: Ecto.Schema.t() | Ecto.Changeset.t()
   @type options :: Keyword.t()
+  @type start_primary_keys :: list | (token :: binary)
+  @type end_primary_keys :: list
+  @type index_name :: String.t()
+
+  @typep batch_get_item ::
+           {
+             module :: Ecto.Schema.t(),
+             [
+               [{key :: String.t() | atom, value :: integer | String.t()}]
+             ]
+           }
+           | {
+               module :: Ecto.Schema.t(),
+               [
+                 [{key :: String.t() | atom, value :: integer | String.t()}]
+               ],
+               options :: Keyword.t()
+             }
+           | {
+               module :: Ecto.Schema.t(),
+               [{key :: String.t() | atom, value :: integer | String.t()}]
+             }
+           | {
+               module :: Ecto.Schema.t(),
+               [{key :: String.t() | atom, value :: integer | String.t()}],
+               options :: Keyword.t()
+             }
+           | [schema_entity :: Ecto.Schema.t()]
+           | {[schema_entity :: Ecto.Schema.t()], options :: Keyword.t()}
+  @type batch_gets :: [batch_get_item]
+
+  @typep batch_put_item ::
+           Ecto.Schema.t()
+           | {schema_entity :: Ecto.Schema.t(), options :: Keyword.t()}
+           | {module :: Ecto.Schema.t(), ids :: list, attrs :: list, options :: Keyword.t()}
+           | {changeset :: Ecto.Changeset.t(), operation :: Keyword.t()}
+
+  @typep batch_update_item ::
+           Ecto.Changeset.t()
+           | {changeset :: Ecto.Changeset.t(), options :: Keyword.t()}
+
+  @typep batch_delete_item ::
+           Ecto.Schema.t()
+           | {schema_entity :: Ecto.Schema.t(), options :: Keyword.t()}
+           | {module :: Ecto.Schema.t(), ids :: list, options :: Keyword.t()}
+
+  @type batch_writes :: [
+          {operation :: :put, items :: [batch_put_item]}
+          | {operation :: :update, items :: [batch_update_item]}
+          | {operation :: :delete, items :: [batch_delete_item]}
+        ]
 
   defmacro __using__(opts) do
     quote bind_quoted: [opts: opts] do
@@ -89,8 +141,7 @@ defmodule EctoTablestore.Repo do
   )
   ```
   """
-  @callback search(schema, index_name :: String.t(), options) ::
-              {:ok, search_result} | {:error, term()}
+  @callback search(schema, index_name, options) :: {:ok, search_result} | {:error, term}
 
   @doc """
   As a wrapper built on `ExAliyunOts.stream_search/4` to create composable and lazy enumerables
@@ -100,7 +151,7 @@ defmodule EctoTablestore.Repo do
 
   Please see options of `c:search/3` for details.
   """
-  @callback stream_search(schema, index_name :: String.t(), options) :: Enumerable.t()
+  @callback stream_search(schema, index_name, options) :: Enumerable.t()
 
   @doc """
   Similar to `c:get/3`, please ensure schema entity has been filled with the whole primary key(s).
@@ -119,7 +170,12 @@ defmodule EctoTablestore.Repo do
 
   Other options please refer `c:get/3`.
   """
-  @callback one(schema, options) :: schema | {:error, term()} | nil
+  @callback one(schema, options) :: schema | {:error, term} | nil
+
+  @doc """
+  See `c:one/2` for more details.
+  """
+  @callback one!(schema, options) :: schema | {:error, term} | nil
 
   @doc """
   Fetch a single struct from tablestore where the whole primary key(s) match the given ids.
@@ -150,7 +206,7 @@ defmodule EctoTablestore.Repo do
       ```
   * `:transaction_id`, read under local transaction in a partition key.
   """
-  @callback get(schema, ids :: list, options) :: schema | {:error, term()} | nil
+  @callback get(schema, ids :: list, options) :: schema | {:error, term} | nil
 
   @doc """
   Get multiple structs by range to the schema, result in `:forward` direction by default.
@@ -171,7 +227,7 @@ defmodule EctoTablestore.Repo do
 
   See `c:get_range/4`.
   """
-  @callback get_range(schema, options) :: {nil, nil} | {list, nil} | {list, binary()} | {:error, term()}
+  @callback get_range(schema, options) :: {list | nil, next_token} | {:error, term}
 
   @doc """
   Get multiple structs by range from one table, rely on the conjunction of the partition key and
@@ -209,12 +265,8 @@ defmodule EctoTablestore.Repo do
       filter: filter(({"name", ignore_if_missing: true} == var_name and "age" > 1) or ("class" == "1"))
       ```
   """
-  @callback get_range(
-              schema,
-              start_primary_keys :: list | binary(),
-              end_primary_keys :: list,
-              options
-            ) :: {nil, nil} | {list, nil} | {list, binary()} | {:error, term()}
+  @callback get_range(schema, start_primary_keys, end_primary_keys, options) ::
+              {list | nil, next_token} | {:error, term}
 
   @doc """
   As a wrapper built on `stream_range/4` to create composable and lazy enumerables
@@ -234,8 +286,7 @@ defmodule EctoTablestore.Repo do
 
   Please see options of `c:get_range/4` for details.
   """
-  @callback stream_range(schema, start_primary_keys :: list, end_primary_keys :: list, options) ::
-              Enumerable.t()
+  @callback stream_range(schema, start_primary_keys, end_primary_keys, options) :: Enumerable.t()
 
   @doc """
   Batch get several rows of data from one or more tables, this batch request put multiple
@@ -333,33 +384,7 @@ defmodule EctoTablestore.Repo do
       ])
 
   """
-  @callback batch_get(gets) :: {:ok, Keyword.t()} | {:error, term()}
-            when gets: [
-                   {
-                     module :: Ecto.Schema.t(),
-                     [
-                       [{key :: String.t() | atom(), value :: integer | String.t()}]
-                     ]
-                   }
-                   | {
-                       module :: Ecto.Schema.t(),
-                       [
-                         [{key :: String.t() | atom(), value :: integer | String.t()}]
-                       ],
-                       options :: Keyword.t()
-                     }
-                   | {
-                       module :: Ecto.Schema.t(),
-                       [{key :: String.t() | atom(), value :: integer | String.t()}]
-                     }
-                   | {
-                       module :: Ecto.Schema.t(),
-                       [{key :: String.t() | atom(), value :: integer | String.t()}],
-                       options :: Keyword.t()
-                     }
-                   | [schema_entity :: Ecto.Schema.t()]
-                   | {[schema_entity :: Ecto.Schema.t()], options :: Keyword.t()}
-                 ]
+  @callback batch_get(batch_gets) :: {:ok, Keyword.t()} | {:error, term}
 
   @doc """
   Batch write several rows of data from one or more tables, this batch request puts multiple
@@ -422,35 +447,7 @@ defmodule EctoTablestore.Repo do
       )
 
   """
-  @callback batch_write(writes, options) :: {:ok, Keyword.t()} | {:error, term()}
-            when writes: [
-                   {
-                     operation :: :put,
-                     items :: [
-                       item ::
-                         {schema_entity :: Ecto.Schema.t(), options}
-                         | {module :: Ecto.Schema.t(), ids :: list(), attrs :: list(), options}
-                         | {changeset :: Ecto.Changeset.t(), operation :: Keyword.t()}
-                     ]
-                   }
-                   | {
-                       operation :: :update,
-                       items :: [
-                         changeset ::
-                           Ecto.Changeset.t()
-                           | {changeset :: Ecto.Changeset.t(), options}
-                       ]
-                     }
-                   | {
-                       operation :: :delete,
-                       items :: [
-                         schema_entity ::
-                           Ecto.Schema.t()
-                           | {schema_entity :: Ecto.Schema.t(), options}
-                           | {module :: Ecto.Schema.t(), ids :: list(), options}
-                       ]
-                     }
-                 ]
+  @callback batch_write(batch_writes, options) :: {:ok, Keyword.t()} | {:error, term}
 
   @doc """
   Inserts a struct defined via EctoTablestore.Schema or a changeset.
@@ -474,7 +471,7 @@ defmodule EctoTablestore.Repo do
 
     * `:transaction_id`, insert under local transaction in a partition key.
   """
-  @callback insert(schema_or_changeset, options) :: {:ok, schema} | {:error, term()}
+  @callback insert(schema_or_changeset, options) :: {:ok, schema} | {:error, term}
 
   @doc """
   Delete a struct using its primary key.
@@ -505,7 +502,7 @@ defmodule EctoTablestore.Repo do
     * `:stale_error_message` - The message to add to the configured `:stale_error_field` when
       stale errors happen, defaults to "is stale".
   """
-  @callback delete(schema_or_changeset, options) :: {:ok, schema} | {:error, term()}
+  @callback delete(schema_or_changeset, options) :: {:ok, schema} | {:error, term}
 
   @doc """
   Updates a changeset using its primary key.
@@ -541,7 +538,7 @@ defmodule EctoTablestore.Repo do
       If there is no `:increment` operation, the `:returning` option is no need to set. If set `returning: true`, but not
       really all fields are changed, the unchanged fields will be replaced as `nil` in the returned schema data.
   """
-  @callback update(changeset :: Ecto.Changeset.t(), options) :: {:ok, schema} | {:error, term()}
+  @callback update(changeset :: Ecto.Changeset.t(), options) :: {:ok, schema} | {:error, term}
 
   @doc """
   Please see `c:Ecto.Repo.start_link/1` for details.

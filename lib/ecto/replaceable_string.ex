@@ -43,7 +43,7 @@ defmodule Ecto.ReplaceableString do
   def init(opts) do
     opts
     |> Keyword.take([:on_dump, :on_load])
-    |> Enum.reduce(%{}, fn({key, opts}, acc) -> 
+    |> Enum.reduce(%{}, fn {key, opts}, acc ->
       prepare_init(key, opts, acc)
     end)
   end
@@ -52,6 +52,7 @@ defmodule Ecto.ReplaceableString do
   @impl true
   def cast(nil, _params), do: {:ok, nil}
   def cast(data, _params) when not is_bitstring(data), do: :error
+
   def cast(data, _params) do
     {:ok, data}
   end
@@ -59,19 +60,23 @@ defmodule Ecto.ReplaceableString do
   @doc false
   @impl true
   def load(nil, _loader, _params), do: {:ok, nil}
+
   def load(data, _loader, %{on_load: %{pattern: pattern, replacement: replacement} = on_load}) do
     data = String.replace(data, pattern, replacement, Map.get(on_load, :options, []))
     {:ok, data}
   end
+
   def load(data, _loader, _params), do: {:ok, data}
 
   @doc false
   @impl true
   def dump(nil, _dumper, _params), do: {:ok, nil}
+
   def dump(data, _dumper, %{on_dump: %{pattern: pattern, replacement: replacement} = on_dump}) do
     data = String.replace(data, pattern, replacement, Map.get(on_dump, :options, []))
     {:ok, data}
   end
+
   def dump(data, _dumper, _params), do: {:ok, data}
 
   @doc false
@@ -86,6 +91,7 @@ defmodule Ecto.ReplaceableString do
   def equal?(a, b, _params), do: a == b
 
   defp prepare_init(_key, nil, acc), do: acc
+
   defp prepare_init(key, opts, acc) do
     opts
     |> Keyword.take([:pattern, :replacement, :options])
@@ -96,10 +102,12 @@ defmodule Ecto.ReplaceableString do
   defp validate(opts, _key, acc) when opts === %{} do
     acc
   end
+
   defp validate(%{pattern: pattern, replacement: replacement} = opts, key, acc)
        when pattern != nil and is_bitstring(replacement) do
     Map.put(acc, key, opts)
   end
+
   defp validate(opts, key, _acc) do
     raise ArgumentError, """
     #{inspect(__MODULE__)} type must both have a `:pattern` option specified as a string or a regex
