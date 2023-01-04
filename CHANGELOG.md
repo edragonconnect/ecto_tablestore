@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.14.0 (2023-01-04)
+
+* Add `Repo.one!/2`.
+* Enhance `Repo.get_range/2`, `Repo.stream/2` with `token` option.
+* Enhance output when create search index.
+
 ## v0.13.3 (2022-05-24)
 
 * Fix and update document to Repo's batch get.
