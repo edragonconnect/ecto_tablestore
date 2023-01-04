@@ -56,13 +56,19 @@ defmodule Ecto.Adapters.Tablestore do
         get(meta.schema, Ecto.primary_key(entity), options)
       end
 
-      @spec one!(Repo.schema(), Repo.options()) :: Repo.schema() | {:error, term} | nil
+      @spec one!(Repo.schema(), Repo.options()) :: Repo.schema()
       def one!(%{__meta__: meta} = entity, options \\ []) do
         options = Tablestore.generate_filter_options(entity, options)
 
         case get(meta.schema, Ecto.primary_key(entity), options) do
-          nil -> raise "expected at least one result but got none in query: #{inspect(entity)}"
-          one -> one
+          nil ->
+            raise "expected at least one result but got none in query: #{inspect(entity)}"
+
+          {:error, error} ->
+            raise "got error: #{inspect(error)} when query: #{inspect(entity)}"
+
+          one when is_map(one) ->
+            one
         end
       end
 
