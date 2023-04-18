@@ -50,6 +50,7 @@ defmodule EctoTablestore.Repo do
   @type start_primary_keys :: list | (token :: binary)
   @type end_primary_keys :: list
   @type index_name :: String.t()
+  @type sql_query :: String.t()
 
   @typep batch_get_item ::
            {
@@ -287,6 +288,16 @@ defmodule EctoTablestore.Repo do
   Please see options of `c:get_range/4` for details.
   """
   @callback stream_range(schema, start_primary_keys, end_primary_keys, options) :: Enumerable.t()
+
+  @doc """
+  Use SQL query data, only support select query.
+
+  ## Example
+
+      sql_query(Schema1, "SELECT * FROM table LIMIT 20")
+
+  """
+  @callback sql_query(schema, sql_query) :: {:ok, [schema]} | {:error, term}
 
   @doc """
   Batch get several rows of data from one or more tables, this batch request put multiple

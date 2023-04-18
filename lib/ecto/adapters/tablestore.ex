@@ -131,6 +131,11 @@ defmodule Ecto.Adapters.Tablestore do
         )
       end
 
+      @spec sql_query(Repo.schema(), Repo.sql_query()) :: {:ok, [Repo.schema()]} | {:error, term}
+      def sql_query(schema, sql_query) do
+        Tablestore.sql_query(get_dynamic_repo(), schema, sql_query)
+      end
+
       @spec batch_get(Repo.batch_gets()) :: {:ok, Keyword.t()} | {:error, term}
       def batch_get(gets), do: Tablestore.batch_get(get_dynamic_repo(), gets)
 
@@ -436,6 +441,19 @@ defmodule Ecto.Adapters.Tablestore do
       error ->
         [error]
     end)
+  end
+
+  @doc false
+  def sql_query(repo, schema, query) do
+    meta = Ecto.Adapter.lookup_meta(repo)
+
+    case ExAliyunOts.sql_query(meta.instance, query) do
+      {:ok, response} ->
+        {:ok, Enum.map(response.rows, &row_to_schema(schema, &1))}
+
+      error ->
+        error
+    end
   end
 
   defp transfer_rows_by_schema(rows, schema, default \\ nil)
