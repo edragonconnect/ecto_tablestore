@@ -16,12 +16,14 @@ defmodule EctoTablestore.Support.SQL do
 
   def cleanup do
     ExAliyunOts.delete_search_index(@instance, @table, @table_index)
-    :ok = ExAliyunOts.drop_mapping_table(@instance, @table)
-    :ok = EctoTablestore.Support.Table.delete_order2()
-  catch
-    _, _ ->
-      Process.sleep(2000)
-      cleanup()
+
+    with :ok <- ExAliyunOts.drop_mapping_table(@instance, @table),
+         :ok <- EctoTablestore.Support.Table.delete_order2() do
+    else
+      _ ->
+        Process.sleep(2000)
+        cleanup()
+    end
   end
 
   def create_search_index do
