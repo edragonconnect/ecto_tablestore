@@ -27,6 +27,20 @@ defmodule EctoTablestore.TestSchema.Order do
   end
 end
 
+defmodule EctoTablestore.TestSchema.Order2 do
+  use EctoTablestore.Schema
+
+  schema "ecto_ots_test_order2" do
+    field(:id, :id, primary_key: true, autogenerate: true)
+    field(:name, :string)
+    field(:user, :string)
+    field(:num, :integer)
+    field(:success, :boolean)
+    field(:price, :float)
+    field(:items, {:array, :string})
+  end
+end
+
 defmodule EctoTablestore.TestSchema.User do
   use Ecto.Schema
 
@@ -48,7 +62,6 @@ defmodule EctoTablestore.TestSchema.User do
       autogenerate: {System, :os_time, [:second]}
     )
   end
-
 end
 
 defmodule EctoTablestore.TestSchema.Student do
@@ -64,7 +77,6 @@ defmodule EctoTablestore.TestSchema.Student do
     field(:comment, :string)
     field(:content, :string)
   end
-
 end
 
 defmodule EctoTablestore.TestSchema.Page do
@@ -100,7 +112,6 @@ defmodule EctoTablestore.TestSchema.User3 do
     field(:id, :string, primary_key: true)
     field(:name, :string)
   end
-
 end
 
 defmodule EctoTablestore.TestSchema.User4 do
