@@ -3,6 +3,7 @@ defmodule Ecto.Adapters.Tablestore do
   @behaviour Ecto.Adapter
   @behaviour Ecto.Adapter.Schema
   @behaviour Ecto.Adapter.Storage
+  @behaviour Ecto.Adapter.Transaction
 
   alias __MODULE__
 
@@ -198,6 +199,7 @@ defmodule Ecto.Adapters.Tablestore do
         {:ok, options} -> options
         _ -> options
       end
+      |> auto_set_transaction_id()
 
     case ExAliyunOts.put_row(instance, schema_meta.source, pks, attrs, options) do
       {:ok, response} ->
@@ -224,23 +226,13 @@ defmodule Ecto.Adapters.Tablestore do
 
   @impl true
   def delete(repo, schema_meta, filters, options) do
-    case ExAliyunOts.delete_row(
-           repo.instance,
-           schema_meta.source,
-           primary_key_as_string(schema_meta.schema, filters),
-           Keyword.take(options, [:condition, :transaction_id])
-         ) do
-      {:ok, _response} ->
-        {:ok, []}
+    options = options |> Keyword.take([:condition, :transaction_id]) |> auto_set_transaction_id()
+    primary_keys = primary_key_as_string(schema_meta.schema, filters)
 
-      {:error, error} ->
-        case error do
-          %Error{code: @ots_condition_check_fail} ->
-            {:error, :stale}
-
-          _ ->
-            {:invalid, [{:check, error.code}]}
-        end
+    case ExAliyunOts.delete_row(repo.instance, schema_meta.source, primary_keys, options) do
+      {:ok, _response} -> {:ok, []}
+      {:error, %Error{code: @ots_condition_check_fail}} -> {:error, :stale}
+      {:error, error} -> {:invalid, [{:check, error.code}]}
     end
   end
 
@@ -248,11 +240,8 @@ defmodule Ecto.Adapters.Tablestore do
   def update(repo, schema_meta, fields, ids, returning, options) do
     missing_fields_from_returning =
       Enum.find(fields, fn
-        {field_name, {:increment, _}} ->
-          field_name not in returning
-
-        _ ->
-          false
+        {field_name, {:increment, _}} -> field_name not in returning
+        _ -> false
       end)
 
     if missing_fields_from_returning != nil do
@@ -270,8 +259,8 @@ defmodule Ecto.Adapters.Tablestore do
         options
         |> Keyword.take([:condition, :transaction_id])
         |> Keyword.merge(map_attrs_to_update(schema, fields))
-
-      options = may_put_optimistic_lock_into_condition(schema, ids, options)
+        |> may_put_optimistic_lock_into_condition(schema, ids)
+        |> auto_set_transaction_id()
 
       case ExAliyunOts.update_row(
              repo.instance,
@@ -323,6 +312,98 @@ defmodule Ecto.Adapters.Tablestore do
     )
   end
 
+  ## Transaction
+
+  @impl true
+  def transaction(repo, opts, fun) do
+    with false <- in_transaction?(repo),
+         {_, {:ok, table}} <- {:table, Keyword.fetch(opts, :table)},
+         {_, {:ok, partition_key}} <- {:pk, Keyword.fetch(opts, :partition_key)},
+         {:ok, %{transaction_id: transaction_id}} <-
+           ExAliyunOts.start_local_transaction(repo.instance, table, partition_key) do
+      Process.put(:current_transaction_id, transaction_id)
+
+      result =
+        try do
+          fun.()
+        rescue
+          error ->
+            ExAliyunOts.abort_transaction(repo.instance, transaction_id)
+            {:error, error}
+        catch
+          error, reason ->
+            ExAliyunOts.abort_transaction(repo.instance, transaction_id)
+            {:error, Exception.format(error, reason, __STACKTRACE__)}
+        else
+          {:commit, return} ->
+            ExAliyunOts.commit_transaction(repo.instance, transaction_id)
+            {:ok, return}
+
+          {:abort, reason} ->
+            ExAliyunOts.abort_transaction(repo.instance, transaction_id)
+            {:error, reason}
+
+          return ->
+            if abort = Process.get(:abort_transaction) do
+              ExAliyunOts.abort_transaction(repo.instance, transaction_id)
+              abort
+            else
+              ExAliyunOts.commit_transaction(repo.instance, transaction_id)
+              {:ok, return}
+            end
+        end
+
+      clean_transaction()
+      result
+    else
+      true ->
+        raise ArgumentError, "can't nested use Repo.transaction/2"
+
+      {:table, :error} ->
+        raise ArgumentError, "missing option `:table` passed to Repo.transaction/2"
+
+      {:pk, :error} ->
+        raise ArgumentError, "missing option `:partition_key` passed to Repo.transaction/2"
+
+      error ->
+        error
+    end
+  end
+
+  @impl true
+  def in_transaction?(_repo) do
+    not is_nil(current_transaction_id())
+  end
+
+  @impl true
+  def rollback(repo, value) do
+    if in_transaction?(repo) do
+      Process.put(:abort_transaction, {:abort, value})
+      {:abort, value}
+    else
+      raise ExAliyunOts.RuntimeError, "please use Repo.rollback/2 with Repo.transaction/2"
+    end
+  end
+
+  defp auto_set_transaction_id(options) do
+    with false <- Keyword.has_key?(options, :transaction_id),
+         transaction_id when not is_nil(transaction_id) <- current_transaction_id() do
+      [{:transaction_id, transaction_id} | options]
+    else
+      _ -> options
+    end
+  end
+
+  defp current_transaction_id do
+    Process.get(:current_transaction_id)
+  end
+
+  defp clean_transaction do
+    Process.delete(:current_transaction_id)
+    Process.delete(:abort_transaction)
+    :ok
+  end
+
   @doc false
   def search(repo, schema, index_name, options) do
     meta = Ecto.Adapter.lookup_meta(repo)
@@ -367,7 +448,7 @@ defmodule Ecto.Adapters.Tablestore do
   @doc false
   def get(repo, schema, ids, options) do
     meta = Ecto.Adapter.lookup_meta(repo)
-    options = schema_fields_for_columns_to_get(schema, options)
+    options = schema_fields_for_columns_to_get(schema, options) |> auto_set_transaction_id()
 
     case ExAliyunOts.get_row(
            meta.instance,
@@ -391,7 +472,7 @@ defmodule Ecto.Adapters.Tablestore do
   @doc false
   def get_range(repo, schema, start_primary_keys, end_primary_keys, options) do
     meta = Ecto.Adapter.lookup_meta(repo)
-    options = schema_fields_for_columns_to_get(schema, options)
+    options = schema_fields_for_columns_to_get(schema, options) |> auto_set_transaction_id()
 
     result =
       ExAliyunOts.get_range(
@@ -425,7 +506,7 @@ defmodule Ecto.Adapters.Tablestore do
   @doc false
   def stream_range(repo, schema, start_primary_keys, end_primary_keys, options) do
     meta = Ecto.Adapter.lookup_meta(repo)
-    options = schema_fields_for_columns_to_get(schema, options)
+    options = schema_fields_for_columns_to_get(schema, options) |> auto_set_transaction_id()
 
     meta.instance
     |> ExAliyunOts.stream_range(
@@ -516,7 +597,10 @@ defmodule Ecto.Adapters.Tablestore do
   end
 
   @doc false
-  defdelegate batch_write(repo, writes, options), to: EctoTablestore.Repo.BatchWrite
+  def batch_write(repo, writes, options) do
+    options = auto_set_transaction_id(options)
+    EctoTablestore.Repo.BatchWrite.batch_write(repo, writes, options)
+  end
 
   @doc false
   def generate_condition_options(%{__meta__: _meta} = entity, options) do
@@ -659,6 +743,7 @@ defmodule Ecto.Adapters.Tablestore do
   end
 
   defp merge_condition([], nil), do: nil
+  defp merge_condition([], condition) when is_atom(condition), do: condition
   defp merge_condition([], %Condition{} = condition), do: condition
 
   defp merge_condition([filter: filter_from_entity], nil) do
@@ -737,7 +822,7 @@ defmodule Ecto.Adapters.Tablestore do
   end
 
   defp do_generate_filter(_filter_from_entity, :and, filter_from_opt) do
-    raise("Invalid usecase - input invalid `:filter` option: #{inspect(filter_from_opt)}")
+    raise "Invalid usecase - input invalid `:filter` option: #{inspect(filter_from_opt)}"
   end
 
   defp flatten_filter(%Filter{
@@ -1220,7 +1305,7 @@ defmodule Ecto.Adapters.Tablestore do
   end
 
   defp map_batch_gets(request, _acc) do
-    raise("Invalid usecase - input invalid batch get request: #{inspect(request)}")
+    raise "Invalid usecase - input invalid batch get request: #{inspect(request)}"
   end
 
   defp format_ids_groups(schema, [ids | _] = ids_groups) when is_list(ids) do
@@ -1304,7 +1389,7 @@ defmodule Ecto.Adapters.Tablestore do
     List.flatten([list1 | list2])
   end
 
-  defp may_put_optimistic_lock_into_condition(schema, ids, options) do
+  defp may_put_optimistic_lock_into_condition(options, schema, ids) do
     case Keyword.drop(ids, schema.__schema__(:primary_key)) do
       [] ->
         options
