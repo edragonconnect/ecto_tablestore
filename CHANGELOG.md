@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.15.0 (2024-01-22)
+
+* Implement `SQL` query ([#40](https://github.com/edragonconnect/ecto_tablestore/pull/40)).
+* Implement `Ecto.Adapter.Transaction` ([#41](https://github.com/edragonconnect/ecto_tablestore/pull/41))
+
 ## v0.14.0 (2023-01-04)
 
 * Add `Repo.one!/2`.
