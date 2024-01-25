@@ -137,19 +137,20 @@ defmodule EctoTablestore.Migration do
     * `:prefix` - the prefix for the table.
     * `:meta` - define the meta information when create table, can see Tablestore's document for details:
 
-    * `:reserved_throughput_write` - reserve the throughput for write when create table, an
-      integer, the default value is 0;
-    * `:reserved_throughput_read` - reserve the throughput for read when create table, an integer,
-      the default value is 0;
-    * `:time_to_live` - the survival time of the saved data, a.k.a TTL; an integer, unit as second,
-      the default value is -1 (permanent preservation);
-    * `:deviation_cell_version_in_sec` - maximum version deviation, the default value is 86400
-      seconds, which is 1 day;
-    * `stream_spec` - set the stream specification of Tablestore:
-
-      - `is_enabled`, open or close stream
-      - `expiration_time`, the expiration time of the table's stream
-
+      * `:reserved_throughput_write` - reserve the throughput for write when create table, an
+        integer, the default value is 0;
+      * `:reserved_throughput_read` - reserve the throughput for read when create table, an integer,
+        the default value is 0;
+      * `:time_to_live` - the survival time of the saved data, a.k.a TTL; an integer, unit as second,
+        the default value is -1 (permanent preservation);
+      * `:deviation_cell_version_in_sec` - maximum version deviation, the default value is 86400
+        seconds, which is 1 day;
+      * `stream_spec` - set the stream specification of Tablestore:
+        - `is_enabled`, open or close stream
+        - `expiration_time`, the expiration time of the table's stream
+      * `enable_local_txn` - specifies whether to enable the local transaction feature.
+        The value of this parameter is of the `:boolean` type. Default value: false.
+        If you want to enable the local transaction feature when you create a data table, set this parameter to true.
   """
   def table(name, opts \\ [])
 

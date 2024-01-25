@@ -8,6 +8,7 @@ defmodule EctoTablestore.TransactionTest do
 
   setup_all do
     TestHelper.setup_all()
+    EctoTablestore.Support.Table.create_transaction()
 
     {:ok, item1} =
       TestRepo.insert(%TransactionTestRange{key: "1", key2: 1, field1: "test", status: 1},
@@ -19,13 +20,11 @@ defmodule EctoTablestore.TransactionTest do
         condition: :ignore
       )
 
-    table = TransactionTestRange.__schema__(:source)
-
     on_exit(fn ->
-      ExAliyunOts.delete_row(@instance, table, [{"key", "1"}, {"key2", 1}], condition: :ignore)
-      ExAliyunOts.delete_row(@instance, table, [{"key", "1"}, {"key2", 2}], condition: :ignore)
+      EctoTablestore.Support.Table.delete_transaction()
     end)
 
+    table = TransactionTestRange.__schema__(:source)
     {:ok, table: table, items: [item1, item2]}
   end
 

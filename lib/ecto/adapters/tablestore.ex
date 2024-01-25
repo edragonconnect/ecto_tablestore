@@ -3,7 +3,6 @@ defmodule Ecto.Adapters.Tablestore do
   @behaviour Ecto.Adapter
   @behaviour Ecto.Adapter.Schema
   @behaviour Ecto.Adapter.Storage
-  @behaviour Ecto.Adapter.Transaction
 
   alias __MODULE__
 
@@ -147,6 +146,21 @@ defmodule Ecto.Adapters.Tablestore do
       def batch_write(writes, options \\ []) do
         Tablestore.batch_write(get_dynamic_repo(), writes, options)
       end
+
+      @spec transaction(
+              fun ::
+                (-> {:commit, return :: any}
+                    | any
+                    | {:error, reason :: any}
+                    | {:abort, reason :: any}),
+              options :: Keyword.t()
+            ) :: {:ok, any} | {:error, any}
+      def transaction(fun, options) when is_function(fun, 0) do
+        Tablestore.do_transaction(get_dynamic_repo(), options, fun)
+      end
+
+      defdelegate in_transaction?(), to: Tablestore
+      defdelegate rollback(value), to: Tablestore
     end
   end
 
@@ -225,7 +239,7 @@ defmodule Ecto.Adapters.Tablestore do
   end
 
   @impl true
-  def delete(repo, schema_meta, filters, options) do
+  def delete(repo, schema_meta, filters, _returning, options) do
     options = options |> Keyword.take([:condition, :transaction_id]) |> auto_set_transaction_id()
     primary_keys = primary_key_as_string(schema_meta.schema, filters)
 
@@ -314,13 +328,14 @@ defmodule Ecto.Adapters.Tablestore do
 
   ## Transaction
 
-  @impl true
-  def transaction(repo, opts, fun) do
-    with false <- in_transaction?(repo),
+  @doc false
+  def do_transaction(repo, opts, fun) do
+    with false <- in_transaction?(),
          {_, {:ok, table}} <- {:table, Keyword.fetch(opts, :table)},
          {_, {:ok, partition_key}} <- {:pk, Keyword.fetch(opts, :partition_key)},
+         meta <- Ecto.Adapter.lookup_meta(repo),
          {:ok, %{transaction_id: transaction_id}} <-
-           ExAliyunOts.start_local_transaction(repo.instance, table, partition_key) do
+           ExAliyunOts.start_local_transaction(meta.instance, table, partition_key) do
       Process.put(:current_transaction_id, transaction_id)
 
       result =
@@ -328,27 +343,27 @@ defmodule Ecto.Adapters.Tablestore do
           fun.()
         rescue
           error ->
-            ExAliyunOts.abort_transaction(repo.instance, transaction_id)
+            ExAliyunOts.abort_transaction(meta.instance, transaction_id)
             {:error, error}
         catch
           error, reason ->
-            ExAliyunOts.abort_transaction(repo.instance, transaction_id)
+            ExAliyunOts.abort_transaction(meta.instance, transaction_id)
             {:error, Exception.format(error, reason, __STACKTRACE__)}
         else
           {:commit, return} ->
-            ExAliyunOts.commit_transaction(repo.instance, transaction_id)
+            ExAliyunOts.commit_transaction(meta.instance, transaction_id)
             {:ok, return}
 
           {:abort, reason} ->
-            ExAliyunOts.abort_transaction(repo.instance, transaction_id)
+            ExAliyunOts.abort_transaction(meta.instance, transaction_id)
             {:error, reason}
 
           return ->
             if abort = Process.get(:abort_transaction) do
-              ExAliyunOts.abort_transaction(repo.instance, transaction_id)
+              ExAliyunOts.abort_transaction(meta.instance, transaction_id)
               abort
             else
-              ExAliyunOts.commit_transaction(repo.instance, transaction_id)
+              ExAliyunOts.commit_transaction(meta.instance, transaction_id)
               {:ok, return}
             end
         end
@@ -370,18 +385,16 @@ defmodule Ecto.Adapters.Tablestore do
     end
   end
 
-  @impl true
-  def in_transaction?(_repo) do
+  def in_transaction? do
     not is_nil(current_transaction_id())
   end
 
-  @impl true
-  def rollback(repo, value) do
-    if in_transaction?(repo) do
+  def rollback(value) do
+    if in_transaction?() do
       Process.put(:abort_transaction, {:abort, value})
       {:abort, value}
     else
-      raise ExAliyunOts.RuntimeError, "please use Repo.rollback/2 with Repo.transaction/2"
+      raise ExAliyunOts.RuntimeError, "please use Repo.rollback/1 with Repo.transaction/2"
     end
   end
 
