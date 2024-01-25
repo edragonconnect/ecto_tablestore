@@ -1,7 +1,16 @@
 defmodule EctoTablestore.Support.Table do
   @instance EDCEXTestInstance
 
-  alias EctoTablestore.TestSchema.{Order, Order2, User, User2, User3, Page, User4}
+  alias EctoTablestore.TestSchema.{
+    Order,
+    Order2,
+    User,
+    User2,
+    User3,
+    Page,
+    User4,
+    TransactionTestRange
+  }
 
   def create_order() do
     table = Order.__schema__(:source)
@@ -35,6 +44,14 @@ defmodule EctoTablestore.Support.Table do
     ExAliyunOts.create_table(@instance, table, [{"pid", :integer}, {"name", :string}])
 
     EctoTablestore.Sequence.create(@instance)
+  end
+
+  def create_transaction() do
+    table = TransactionTestRange.__schema__(:source)
+
+    ExAliyunOts.create_table(@instance, table, [{"key", :string}, {"key2", :integer}],
+      enable_local_txn: true
+    )
   end
 
   def create_user4() do
@@ -76,6 +93,11 @@ defmodule EctoTablestore.Support.Table do
 
   def delete_user4() do
     table = User4.__schema__(:source)
+    ExAliyunOts.delete_table(@instance, table)
+  end
+
+  def delete_transaction() do
+    table = TransactionTestRange.__schema__(:source)
     ExAliyunOts.delete_table(@instance, table)
   end
 end
