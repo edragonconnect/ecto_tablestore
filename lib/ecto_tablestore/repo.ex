@@ -49,6 +49,7 @@ defmodule EctoTablestore.Repo do
   @type options :: Keyword.t()
   @type start_primary_keys :: list | (token :: binary)
   @type end_primary_keys :: list
+  @type table_name :: String.t()
   @type index_name :: String.t()
   @type sql_query :: String.t()
 
@@ -99,6 +100,11 @@ defmodule EctoTablestore.Repo do
           | {operation :: :update, items :: [batch_update_item]}
           | {operation :: :delete, items :: [batch_delete_item]}
         ]
+
+  @type transaction_fun_return :: transaction_fun_error_return | transaction_fun_ok_return
+  @type transaction_fun_ok_return :: {:commit, return :: any} | any
+  @type transaction_fun_error_return :: {:error, reason :: any} | {:abort, reason :: any}
+  @type transaction_fun :: (-> transaction_fun_return)
 
   defmacro __using__(opts) do
     quote bind_quoted: [opts: opts] do
@@ -550,6 +556,39 @@ defmodule EctoTablestore.Repo do
       really all fields are changed, the unchanged fields will be replaced as `nil` in the returned schema data.
   """
   @callback update(changeset :: Ecto.Changeset.t(), options) :: {:ok, schema} | {:error, term}
+
+  @doc """
+  CRUD within OTS local transaction
+
+  ## Options
+    * `:table`, Specifies the table name to enable local transaction.
+    * `:partition_key`, Specifies the partition key value to enable local transactions.
+
+  ## Example
+
+  ```elixir
+  {:ok, item_updated} = TestRepo.transaction(fn ->
+      item = TestRepo.one(item)
+
+      {:ok, updated} =
+        item
+        |> Changeset.change(array: ["more" | item.array])
+        |> TestRepo.update(
+          condition: :expect_exist,
+          stale_error_message: "no_exist",
+          stale_error_field: :condition,
+          returning: [:array]
+        )
+      updated
+    end,
+    table: "TableName", partition_key: {"p_key", "pk_value1"}
+  )
+  ```
+  """
+  @callback transaction(
+              transaction_fun,
+              options :: [{:table, table_name}, {:partition_key, String.t()}]
+            ) :: {:ok, any} | {:error, any}
 
   @doc """
   Please see `c:Ecto.Repo.start_link/1` for details.
