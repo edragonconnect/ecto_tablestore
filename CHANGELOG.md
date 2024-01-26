@@ -1,9 +1,9 @@
 # Changelog
 
-## v0.15.0 (2024-01-22)
+## v0.15.0 (2024-01-26)
 
-* Implement `SQL` query ([#40](https://github.com/edragonconnect/ecto_tablestore/pull/40)).
-* Implement `Ecto.Adapter.Transaction` ([#41](https://github.com/edragonconnect/ecto_tablestore/pull/41))
+* Add `c:EctoTablestore.Repo.sql_query/2` ([#40](https://github.com/edragonconnect/ecto_tablestore/pull/40)).
+* Add `c:EctoTablestore.Repo.transaction/2` and `c:EctoTablestore.Repo.rollback/1` base on the local transaction ([#41](https://github.com/edragonconnect/ecto_tablestore/pull/41), [#42](https://github.com/edragonconnect/ecto_tablestore/pull/42)).
 
 ## v0.14.0 (2023-01-04)
 

@@ -1,5 +1,6 @@
 defmodule EctoTablestore.Repo do
-  @moduledoc ~S"""
+  @moduledoc """
+
   Defines a repository for Tablestore.
 
   A repository maps to an underlying data store, controlled by Ecto.Adapters.Tablestore adapter.
@@ -38,6 +39,7 @@ defmodule EctoTablestore.Repo do
   """
 
   @type next_token :: binary | nil
+
   @type search_result :: %{
           is_all_succeeded: boolean,
           next_token: next_token,
@@ -106,6 +108,7 @@ defmodule EctoTablestore.Repo do
   @type transaction_fun_error_return :: {:error, reason :: any} | {:abort, reason :: any}
   @type transaction_fun :: (-> transaction_fun_return)
 
+  @doc false
   defmacro __using__(opts) do
     quote bind_quoted: [opts: opts] do
       use Ecto.Repo,
@@ -117,6 +120,7 @@ defmodule EctoTablestore.Repo do
   @doc """
   Returns the adapter tied to the repository.
   """
+  @doc group: "Runtime API"
   @callback __adapter__ :: Ecto.Adapters.Tablestore.t()
 
   @doc """
@@ -148,6 +152,7 @@ defmodule EctoTablestore.Repo do
   )
   ```
   """
+  @doc group: "Query API"
   @callback search(schema, index_name, options) :: {:ok, search_result} | {:error, term}
 
   @doc """
@@ -158,6 +163,7 @@ defmodule EctoTablestore.Repo do
 
   Please see options of `c:search/3` for details.
   """
+  @doc group: "Query API"
   @callback stream_search(schema, index_name, options) :: Enumerable.t()
 
   @doc """
@@ -177,11 +183,13 @@ defmodule EctoTablestore.Repo do
 
   Other options please refer `c:get/3`.
   """
+  @doc group: "Query API"
   @callback one(schema, options) :: schema | {:error, term} | nil
 
   @doc """
   See `c:one/2` for more details.
   """
+  @doc group: "Query API"
   @callback one!(schema, options) :: schema | {:error, term} | nil
 
   @doc """
@@ -213,6 +221,7 @@ defmodule EctoTablestore.Repo do
       ```
   * `:transaction_id`, read under local transaction in a partition key.
   """
+  @doc group: "Query API"
   @callback get(schema, ids :: list, options) :: schema | {:error, term} | nil
 
   @doc """
@@ -234,6 +243,7 @@ defmodule EctoTablestore.Repo do
 
   See `c:get_range/4`.
   """
+  @doc group: "Query API"
   @callback get_range(schema, options) :: {list | nil, next_token} | {:error, term}
 
   @doc """
@@ -272,6 +282,7 @@ defmodule EctoTablestore.Repo do
       filter: filter(({"name", ignore_if_missing: true} == var_name and "age" > 1) or ("class" == "1"))
       ```
   """
+  @doc group: "Query API"
   @callback get_range(schema, start_primary_keys, end_primary_keys, options) ::
               {list | nil, next_token} | {:error, term}
 
@@ -283,6 +294,7 @@ defmodule EctoTablestore.Repo do
 
   Please see options of `c:get_range/4` for details.
   """
+  @doc group: "Query API"
   @callback stream(schema, options) :: Enumerable.t()
 
   @doc """
@@ -293,6 +305,7 @@ defmodule EctoTablestore.Repo do
 
   Please see options of `c:get_range/4` for details.
   """
+  @doc group: "Query API"
   @callback stream_range(schema, start_primary_keys, end_primary_keys, options) :: Enumerable.t()
 
   @doc """
@@ -303,6 +316,7 @@ defmodule EctoTablestore.Repo do
       sql_query(Schema1, "SELECT * FROM table LIMIT 20")
 
   """
+  @doc group: "Query API"
   @callback sql_query(schema, sql_query) :: {:ok, [schema]} | {:error, term}
 
   @doc """
@@ -401,6 +415,7 @@ defmodule EctoTablestore.Repo do
       ])
 
   """
+  @doc group: "Query API"
   @callback batch_get(batch_gets) :: {:ok, Keyword.t()} | {:error, term}
 
   @doc """
@@ -464,6 +479,7 @@ defmodule EctoTablestore.Repo do
       )
 
   """
+  @doc group: "Schema API"
   @callback batch_write(batch_writes, options) :: {:ok, Keyword.t()} | {:error, term}
 
   @doc """
@@ -488,6 +504,7 @@ defmodule EctoTablestore.Repo do
 
     * `:transaction_id`, insert under local transaction in a partition key.
   """
+  @doc group: "Schema API"
   @callback insert(schema_or_changeset, options) :: {:ok, schema} | {:error, term}
 
   @doc """
@@ -519,6 +536,7 @@ defmodule EctoTablestore.Repo do
     * `:stale_error_message` - The message to add to the configured `:stale_error_field` when
       stale errors happen, defaults to "is stale".
   """
+  @doc group: "Schema API"
   @callback delete(schema_or_changeset, options) :: {:ok, schema} | {:error, term}
 
   @doc """
@@ -526,8 +544,7 @@ defmodule EctoTablestore.Repo do
 
   ## Options
 
-    * `:condition`, this option is required, whether to add conditional judgment before data
-      update.
+    * `:condition`, this option is required, whether to add conditional judgment before data update.
 
       1. As `condition(:expect_exist)` means the primary key(s) can match a row to update, if the row is existed,
          the update result will be success, if the row is not existed, the update result will be fail.
@@ -555,14 +572,17 @@ defmodule EctoTablestore.Repo do
       If there is no `:increment` operation, the `:returning` option is no need to set. If set `returning: true`, but not
       really all fields are changed, the unchanged fields will be replaced as `nil` in the returned schema data.
   """
+  @doc group: "Schema API"
   @callback update(changeset :: Ecto.Changeset.t(), options) :: {:ok, schema} | {:error, term}
 
   @doc """
-  CRUD within OTS local transaction
+  Adapt to use the Tablestore's local transaction to perform read and write operations on the data, the feature can
+  perform atomic operations to read and write one or more rows.
 
   ## Options
-    * `:table`, Specifies the table name to enable local transaction.
-    * `:partition_key`, Specifies the partition key value to enable local transactions.
+
+    * `:table`, this option is required, specifies the table name to enable local transaction.
+    * `:partition_key`, this option is required as a tuple, specifies the partition key and its value to enable local transactions, for example `{"partition_key_name", "partition_key_value"}`
 
   ## Example
 
@@ -585,13 +605,44 @@ defmodule EctoTablestore.Repo do
   )
   ```
   """
+  @doc group: "Transaction API"
   @callback transaction(
               transaction_fun,
               options :: [{:table, table_name}, {:partition_key, String.t()}]
             ) :: {:ok, any} | {:error, any}
 
+
+  @doc """
+  Rolls back the current transaction.
+
+  The transaction will return the value given as `{:error, value}`.
+
+  Note that calling `rollback` causes the code in the transaction to stop executing.
+
+  Similar to `c:Ecto.Repo.rollback/1`.
+  """
+  @doc group: "Transaction API"
+  @callback rollback(value :: any) :: {:error, any}
+
+  @doc """
+  Returns true if the current process is inside a transaction.
+
+  ## Examples
+
+      MyRepo.in_transaction?
+      #=> false
+
+      MyRepo.transaction(fn ->
+        MyRepo.in_transaction? #=> true
+      end)
+
+  """
+  @doc group: "Transaction API"
+  @callback in_transaction?() :: boolean
+
   @doc """
   Please see `c:Ecto.Repo.start_link/1` for details.
   """
+  @doc group: "Runtime API"
   @callback start_link(options) :: {:ok, pid} | {:error, {:already_started, pid}} | {:error, term}
 end

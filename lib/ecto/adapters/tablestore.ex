@@ -139,8 +139,6 @@ defmodule Ecto.Adapters.Tablestore do
       @spec batch_get(Repo.batch_gets()) :: {:ok, Keyword.t()} | {:error, term}
       def batch_get(gets), do: Tablestore.batch_get(get_dynamic_repo(), gets)
 
-      ## Addition
-
       @spec batch_write(Repo.batch_writes(), Tablestore.options()) ::
               {:ok, Keyword.t()} | {:error, term}
       def batch_write(writes, options \\ []) do
@@ -394,7 +392,7 @@ defmodule Ecto.Adapters.Tablestore do
       Process.put(:abort_transaction, {:abort, value})
       {:abort, value}
     else
-      raise ExAliyunOts.RuntimeError, "please use Repo.rollback/1 with Repo.transaction/2"
+      raise ExAliyunOts.RuntimeError, "please use Repo.rollback/1 within Repo.transaction/2"
     end
   end
 

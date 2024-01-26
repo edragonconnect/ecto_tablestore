@@ -56,6 +56,12 @@ defmodule EctoTablestore.MixProject do
         "README.md",
         "CHANGELOG.md"
       ],
+      groups_for_docs: [
+        group_for_function("Query API"),
+        group_for_function("Schema API"),
+        group_for_function("Transaction API"),
+        group_for_function("Runtime API")
+      ],
       groups_for_modules: [
         "Types": [
           Ecto.Hashids,
@@ -70,4 +76,6 @@ defmodule EctoTablestore.MixProject do
 
   defp elixirc_paths(:test), do: ["lib", "test/support"]
   defp elixirc_paths(_), do: ["lib"]
+
+  defp group_for_function(group), do: {String.to_atom(group), &(&1[:group] == group)}
 end
