@@ -58,13 +58,18 @@ defmodule EctoTablestore.Migration do
   defmodule SecondaryIndex do
     @moduledoc false
 
-    defstruct table_name: nil, index_name: nil, prefix: nil, include_base_data: true
+    defstruct table_name: nil,
+              index_name: nil,
+              prefix: nil,
+              include_base_data: true,
+              index_type: :global
 
     @type t :: %__MODULE__{
             table_name: String.t(),
             index_name: String.t(),
             prefix: String.t() | nil,
-            include_base_data: boolean()
+            include_base_data: boolean(),
+            index_type: :global | :local
           }
   end
 
@@ -101,7 +106,8 @@ defmodule EctoTablestore.Migration do
           add_pk: 3,
           add_column: 1,
           add_column: 2,
-          add_index: 3
+          add_index: 3,
+          add_index: 4
         ]
 
       import ExAliyunOts.Search
@@ -176,11 +182,25 @@ defmodule EctoTablestore.Migration do
         add_column(:content)
       end
 
+      create secondary_index("posts", "posts_title", index_type: :global) do
+        add_pk(:title)
+        add_pk(:id)
+        add_column(:content)
+      end
+
   ## Options
 
     * `:include_base_data`, specifies whether the index table includes the existing data in the base table, if set it to
     `true` means the index includes the existing data, if set it to `false` means the index excludes the existing data,
     optional, by default it is `true`.
+
+    * `:index_type`, the type of the index, optional. Valid values: `:global` and `:local`. By default it is `:global`.
+      - If `:index_type` is not specified or is set to `:global`, the global secondary index feature is used.
+      If you use the global secondary index feature, Tablestore automatically synchronizes the columns to be indexed and data in primary key columns from a data table to an index table in asynchronous mode.
+      The synchronization latency is within a few milliseconds.
+      - If `:index_type` is set to `:local`, the local secondary index feature is used.
+      If you use the local secondary index feature, Tablestore automatically synchronizes data from the indexed columns and the primary key columns of a data table to the columns of an index table in synchronous mode.
+      After the data is written to the data table, you can query the data from the index table.
 
   """
   def secondary_index(table_name, index_name, opts \\ [])
@@ -462,6 +482,7 @@ defmodule EctoTablestore.Migration do
     {table_name, index_name} = get_index_name(secondary_index, repo.config())
     table_name_str = IO.ANSI.format([:green, table_name, :reset])
     index_name_str = IO.ANSI.format([:green, index_name, :reset])
+    index_type = secondary_index.index_type
     include_base_data = secondary_index.include_base_data
     repo_meta = Ecto.Adapter.lookup_meta(repo)
 
@@ -477,7 +498,7 @@ defmodule EctoTablestore.Migration do
       )
 
     Logger.info(
-      ">> creating secondary_index: #{index_name_str} for table: #{table_name_str} by #{print_description}"
+      ">> creating #{to_string(index_type)}_secondary_index: #{index_name_str} for table: #{table_name_str} by #{print_description}"
     )
 
     case ExAliyunOts.create_index(
@@ -486,20 +507,21 @@ defmodule EctoTablestore.Migration do
            index_name,
            primary_keys,
            defined_columns,
+           index_type: index_type,
            include_base_data: include_base_data
          ) do
       :ok ->
         result_str = IO.ANSI.format([:green, "ok", :reset])
 
         Logger.info(
-          ">>>> create secondary_index: #{index_name_str} for table: #{table_name_str} result: #{result_str}"
+          ">>>> create #{to_string(index_type)}_secondary_index: #{index_name_str} for table: #{table_name_str} result: #{result_str}"
         )
 
         :ok
 
       {:error, error} ->
         raise MigrationError,
-              "create secondary index: #{index_name} for table: #{table_name} error: #{error.message}"
+              "create #{to_string(index_type)}_secondary index: #{index_name} for table: #{table_name} error: #{error.message}"
     end
   end
 
@@ -815,12 +837,23 @@ defmodule EctoTablestore.Migration do
         add_column(:title, :string)
         add_column(:content, :string)
         add_index("posts_owner", [:owner_id, :id], [:title, :content])
-        add_index("posts_title", [:title, :id], [:content])
+        add_index("posts_title", [:title, :id], [:content], type: :global)
       end
 
+  ## Options
+
+    * `:index_type`, the type of the index, optional. Valid values: `:global` and `:local`. By default it is `:global`.
+      - If `:index_type` is not specified or is set to `:global`, the global secondary index feature is used.
+      If you use the global secondary index feature, Tablestore automatically synchronizes the columns to be indexed and data in primary key columns from a data table to an index table in asynchronous mode.
+      The synchronization latency is within a few milliseconds.
+      - If `:index_type` is set to `:local`, the local secondary index feature is used.
+      If you use the local secondary index feature, Tablestore automatically synchronizes data from the indexed columns and the primary key columns of a data table to the columns of an index table in synchronous mode.
+      After the data is written to the data table, you can query the data from the index table.
+
   """
-  defmacro add_index(index_name, primary_keys, defined_columns)
-           when is_binary(index_name) and is_list(primary_keys) and is_list(defined_columns) do
+  defmacro add_index(index_name, primary_keys, defined_columns, options \\ [])
+           when is_binary(index_name) and is_list(primary_keys) and is_list(defined_columns) and
+                  is_list(options) do
     check_and_transform_columns = fn columns ->
       columns
       |> Macro.prewalk(&Macro.expand(&1, __CALLER__))
@@ -842,7 +875,8 @@ defmodule EctoTablestore.Migration do
       {
         unquote(index_name),
         unquote(check_and_transform_columns.(primary_keys)),
-        unquote(check_and_transform_columns.(defined_columns))
+        unquote(check_and_transform_columns.(defined_columns)),
+        unquote(options)
       }
     end
   end
