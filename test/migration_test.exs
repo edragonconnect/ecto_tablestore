@@ -11,6 +11,8 @@ defmodule EctoTablestore.MigrationTest do
     "migration_test_create_table",
     "migration_test_create_table_id",
     "migration_test_create_table_hashids",
+    "migration_test_create_table_with_secondary_index",
+    "migration_test_create_table_and_secondary_index",
     "migration_test",
     "migration_test1",
     "migration_test2",
@@ -227,7 +229,10 @@ defmodule EctoTablestore.MigrationTest do
 
     index_metas = [
       add_index("table_name_index1", [:col1, :id], [:col2]),
-      add_index("table_name_index2", [:col4, :id], [:col1, :col2, :col3, :col5])
+      add_index("table_name_index2", [:col4, :id], [:col1, :col2, :col3, :col5],
+        index_type: :global
+      ),
+      add_index("table_name_index3", [:id, :col1], [:col2, :col3, :col5], index_type: :local)
     ]
 
     columns = pk_columns ++ pre_defined_columns ++ index_metas
@@ -325,6 +330,95 @@ defmodule EctoTablestore.MigrationTest do
     assert_raise MigrationError,
                  "create table: migration_test error: Requested table already exists.",
                  fn -> commands |> Enum.reverse() |> Enum.map(& &1.(repo)) end
+
+    stop_runner(runner)
+  end
+
+  test "create table with secondary index" do
+    table_name = "migration_test_create_table_with_secondary_index"
+    runner = setup_runner(@repo)
+
+    create table(table_name) do
+      add_pk(:partition_id, :integer, partition_key: true)
+      add_pk(:id, :integer)
+      add_column(:age, :integer)
+      add_column(:name, :string)
+      add_column(:other, :binary)
+      add_index("with_index_global1", [:id], [:other])
+      add_index("with_index_global2", [:name], [:other], index_type: :global)
+      add_index("with_index_local", [:partition_id, :name], [:other], index_type: :local)
+    end
+
+    %{commands: commands, repo: repo} = Agent.get(runner, & &1)
+    fun = fn -> commands |> Enum.reverse() |> Enum.map(& &1.(repo)) end
+    assert length(commands) == 1
+
+    assert fun.() == [:ok]
+
+    {:ok, %{table_names: table_names}} = ExAliyunOts.list_table(@instance)
+    assert table_name in table_names
+
+    {:ok, %{index_metas: index_metas}} = ExAliyunOts.describe_table(@instance, table_name)
+
+    %{index_update_mode: :IUM_ASYNC_INDEX, index_type: :IT_GLOBAL_INDEX} =
+      Enum.find(index_metas, &(&1.name == "with_index_global1"))
+
+    %{index_update_mode: :IUM_ASYNC_INDEX, index_type: :IT_GLOBAL_INDEX} =
+      Enum.find(index_metas, &(&1.name == "with_index_global2"))
+
+    %{index_update_mode: :IUM_SYNC_INDEX, index_type: :IT_LOCAL_INDEX} =
+      Enum.find(index_metas, &(&1.name == "with_index_local"))
+
+    stop_runner(runner)
+  end
+
+  test "create table and secondary index" do
+    table_name = "migration_test_create_table_and_secondary_index"
+    runner = setup_runner(@repo)
+
+    create table(table_name) do
+      add_pk(:partition_id, :integer, partition_key: true)
+      add_pk(:id, :integer)
+      add_column(:age, :integer)
+      add_column(:name, :string)
+      add_column(:other, :binary)
+    end
+
+    create secondary_index(table_name, "and_index_global1") do
+      add_pk(:id)
+      add_column(:other)
+    end
+
+    create secondary_index(table_name, "and_index_global2", index_type: :global) do
+      add_pk(:name)
+      add_column(:other)
+    end
+
+    create secondary_index(table_name, "and_index_local", index_type: :local) do
+      add_pk(:partition_id)
+      add_pk(:name)
+      add_column(:other)
+    end
+
+    %{commands: commands, repo: repo} = Agent.get(runner, & &1)
+    fun = fn -> commands |> Enum.reverse() |> Enum.map(& &1.(repo)) end
+    assert length(commands) == 4
+
+    assert fun.() == [:ok, :ok, :ok, :ok]
+
+    {:ok, %{table_names: table_names}} = ExAliyunOts.list_table(@instance)
+    assert table_name in table_names
+
+    {:ok, %{index_metas: index_metas}} = ExAliyunOts.describe_table(@instance, table_name)
+
+    %{index_update_mode: :IUM_ASYNC_INDEX, index_type: :IT_GLOBAL_INDEX} =
+      Enum.find(index_metas, &(&1.name == "and_index_global1"))
+
+    %{index_update_mode: :IUM_ASYNC_INDEX, index_type: :IT_GLOBAL_INDEX} =
+      Enum.find(index_metas, &(&1.name == "and_index_global2"))
+
+    %{index_update_mode: :IUM_SYNC_INDEX, index_type: :IT_LOCAL_INDEX} =
+      Enum.find(index_metas, &(&1.name == "and_index_local"))
 
     stop_runner(runner)
   end
