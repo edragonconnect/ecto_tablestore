@@ -352,7 +352,15 @@ defmodule Ecto.Adapters.Tablestore do
             ExAliyunOts.commit_transaction(meta.instance, transaction_id)
             {:ok, return}
 
+          {:ok, return} ->
+            ExAliyunOts.commit_transaction(meta.instance, transaction_id)
+            {:ok, return}
+
           {:abort, reason} ->
+            ExAliyunOts.abort_transaction(meta.instance, transaction_id)
+            {:error, reason}
+
+          {:error, reason} ->
             ExAliyunOts.abort_transaction(meta.instance, transaction_id)
             {:error, reason}
 
