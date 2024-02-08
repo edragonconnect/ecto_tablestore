@@ -145,14 +145,7 @@ defmodule Ecto.Adapters.Tablestore do
         Tablestore.batch_write(get_dynamic_repo(), writes, options)
       end
 
-      @spec transaction(
-              fun ::
-                (-> {:commit, return :: any}
-                    | any
-                    | {:error, reason :: any}
-                    | {:abort, reason :: any}),
-              options :: Keyword.t()
-            ) :: {:ok, any} | {:error, any}
+      @spec transaction(Repo.transaction_fun(), options :: Keyword.t()) :: {:ok, any} | {:error, any}
       def transaction(fun, options) when is_function(fun, 0) do
         Tablestore.do_transaction(get_dynamic_repo(), options, fun)
       end

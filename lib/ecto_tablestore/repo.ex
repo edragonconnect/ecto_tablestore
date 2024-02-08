@@ -103,9 +103,9 @@ defmodule EctoTablestore.Repo do
           | {operation :: :delete, items :: [batch_delete_item]}
         ]
 
-  @type transaction_fun_return :: transaction_fun_error_return | transaction_fun_ok_return
-  @type transaction_fun_ok_return :: {:commit, return :: any} | any
-  @type transaction_fun_error_return :: {:error, reason :: any} | {:abort, reason :: any}
+  @type transaction_fun_return :: transaction_fun_abort_return | transaction_fun_commit_return
+  @type transaction_fun_abort_return :: {:error, reason :: any} | {:abort, reason :: any}
+  @type transaction_fun_commit_return :: {:ok, return :: any} | {:commit, return :: any} | any
   @type transaction_fun :: (-> transaction_fun_return)
 
   @doc false
