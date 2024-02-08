@@ -48,14 +48,19 @@ defmodule EctoTablestore.TransactionTest do
 
     # commit return
     assert {:ok, :any_return} ==
+             TestRepo.transaction(fn -> {:ok, :any_return} end, transaction_opts)
+
+    assert {:ok, :any_return} ==
              TestRepo.transaction(fn -> {:commit, :any_return} end, transaction_opts)
 
     # abort return
     assert {:error, :any_return} ==
+             TestRepo.transaction(fn -> {:error, :any_return} end, transaction_opts)
+
+    assert {:error, :any_return} ==
              TestRepo.transaction(fn -> {:abort, :any_return} end, transaction_opts)
 
-    assert is_nil(Process.get(:current_transaction_id))
-    assert is_nil(Process.get(:abort_transaction))
+    assert clean?()
   end
 
   test "exit when use transaction", context do
@@ -79,37 +84,68 @@ defmodule EctoTablestore.TransactionTest do
     assert {:error, _} =
              TestRepo.transaction(fn -> exit("test") end, transaction_opts)
 
-    assert is_nil(Process.get(:current_transaction_id))
-    assert is_nil(Process.get(:abort_transaction))
+    assert clean?()
   end
 
   test "update & get in transaction", context do
     item = hd(context.items)
     transaction_opts = [table: context.table, partition_key: {"key", "1"}]
 
+    change_fun = fn ->
+      item
+      |> Changeset.change(status: {:increment, 1})
+      |> TestRepo.update(
+        condition: :expect_exist,
+        stale_error_message: "no_exist",
+        stale_error_field: :condition,
+        returning: [:status]
+      )
+    end
+
+    # rollback 1
     assert {:error, "rollback"} =
              TestRepo.transaction(
                fn ->
-                 {:ok, _} =
-                   item
-                   |> Changeset.change(status: {:increment, 1})
-                   |> TestRepo.update(
-                     condition: :expect_exist,
-                     stale_error_message: "no_exist",
-                     stale_error_field: :condition,
-                     returning: [:status]
-                   )
-
+                 {:ok, _} = change_fun.()
                  %{status: 2} = TestRepo.one(item)
                  TestRepo.rollback("rollback")
                end,
                transaction_opts
              )
 
-    assert is_nil(Process.get(:current_transaction_id))
-    assert is_nil(Process.get(:abort_transaction))
+    assert clean?()
+    assert %{status: 1} = TestRepo.one(item)
+
+    # rollback 2
+    assert {:error, :rollback} =
+             TestRepo.transaction(
+               fn ->
+                 {:ok, _} = change_fun.()
+                 %{status: 2} = TestRepo.one(item)
+                 {:error, :rollback}
+               end,
+               transaction_opts
+             )
 
     assert %{status: 1} = TestRepo.one(item)
+    assert clean?()
+
+    # commit 1
+    assert {:ok, _} = TestRepo.transaction(change_fun, transaction_opts)
+    assert %{status: 2} = TestRepo.one(item)
+    assert clean?()
+    # commit 2
+    assert {:ok, 3} =
+             TestRepo.transaction(
+               fn ->
+                 {:ok, _} = change_fun.()
+                 {:commit, 3}
+               end,
+               transaction_opts
+             )
+
+    assert %{status: 3} = TestRepo.one(item)
+    assert clean?()
   end
 
   test "insert & one in transaction", context do
@@ -131,8 +167,7 @@ defmodule EctoTablestore.TransactionTest do
                transaction_opts
              )
 
-    assert is_nil(Process.get(:current_transaction_id))
-    assert is_nil(Process.get(:abort_transaction))
+    assert clean?()
 
     assert match?(nil, TestRepo.one(%TransactionTestRange{key: "3", key2: 3}))
 
@@ -150,8 +185,7 @@ defmodule EctoTablestore.TransactionTest do
                transaction_opts
              )
 
-    assert is_nil(Process.get(:current_transaction_id))
-    assert is_nil(Process.get(:abort_transaction))
+    assert clean?()
 
     assert %{key: "3"} = TestRepo.one(item)
     {:ok, _} = TestRepo.delete(item, condition: :expect_exist)
@@ -171,8 +205,7 @@ defmodule EctoTablestore.TransactionTest do
                transaction_opts
              )
 
-    assert is_nil(Process.get(:current_transaction_id))
-    assert is_nil(Process.get(:abort_transaction))
+    assert clean?()
 
     assert %{key: "1"} = TestRepo.one(item)
   end
@@ -212,8 +245,7 @@ defmodule EctoTablestore.TransactionTest do
                transaction_opts
              )
 
-    assert is_nil(Process.get(:current_transaction_id))
-    assert is_nil(Process.get(:abort_transaction))
+    assert clean?()
 
     assert [] = TestRepo.stream(%TransactionTestRange{key: "3"}) |> Enum.to_list()
   end
@@ -265,8 +297,7 @@ defmodule EctoTablestore.TransactionTest do
                transaction_opts
              )
 
-    assert is_nil(Process.get(:current_transaction_id))
-    assert is_nil(Process.get(:abort_transaction))
+    assert clean?()
 
     assert 10 = TestRepo.stream(%TransactionTestRange{key: key}) |> Enum.to_list() |> length()
     assert %{status: 5} = TestRepo.one(%TransactionTestRange{key: key, key2: 1})
@@ -290,5 +321,9 @@ defmodule EctoTablestore.TransactionTest do
     ExAliyunOts.abort_transaction(@instance, transaction_id)
     item = TestRepo.one(%TransactionTestRange{key: "1", key2: 1})
     assert item.field1 == "test"
+  end
+
+  defp clean? do
+    is_nil(Process.get(:current_transaction_id)) and is_nil(Process.get(:abort_transaction))
   end
 end
