@@ -51,6 +51,7 @@ defmodule EctoTablestore.MixProject do
   defp docs do
     [
       main: "readme",
+      source_ref: "master",
       formatter_opts: [gfm: true],
       extras: [
         "README.md",
