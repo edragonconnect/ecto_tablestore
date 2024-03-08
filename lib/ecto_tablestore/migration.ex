@@ -278,16 +278,16 @@ defmodule EctoTablestore.Migration do
       end
 
   """
-  defmacro create(object, do: block), do: expand_create(object, block)
+  defmacro create(object, do: block), do: expand_create(object, block, __CALLER__)
 
-  defp expand_create(object, block) do
+  defp expand_create(object, block, caller) do
     columns_str = Macro.to_string(block)
 
     columns =
-      case block do
-        {:__block__, _, columns} -> columns
-        column -> [column]
-      end
+      Macro.prewalk(block, &Macro.expand(&1, caller))
+      |> unwrap_block()
+      |> List.wrap()
+      |> List.flatten()
 
     quote do
       map =
@@ -297,6 +297,12 @@ defmodule EctoTablestore.Migration do
       Runner.push_command(&unquote(__MODULE__).do_create(&1, map))
     end
   end
+
+  defp unwrap_block({:__block__, _, columns}) when is_list(columns) do
+    Enum.map(columns, &unwrap_block/1)
+  end
+
+  defp unwrap_block(block), do: block
 
   def __create__(%Table{} = table, columns) do
     {index_metas, columns} = Enum.split_with(columns, &is_tuple(&1))

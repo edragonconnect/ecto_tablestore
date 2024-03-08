@@ -499,6 +499,27 @@ defmodule EctoTablestore.MigrationTest do
     assert old ++ [3, 4] == SchemaMigration.versions(@repo)
     {:ok, %{table_names: table_names}} = ExAliyunOts.list_table(@instance)
     assert true = Enum.all?(["migration_test1", "migration_test2"], &(&1 in table_names))
+
+    assert {:ok,
+            %{
+              table_meta: %{
+                primary_key: [%{name: "id", type: :INTEGER}, %{name: "name", type: :STRING}],
+                defined_column: [
+                  %{name: "col1", type: :DCT_INTEGER},
+                  %{name: "col2", type: :DCT_DOUBLE},
+                  %{name: "col3", type: :DCT_BOOLEAN},
+                  %{name: "col4", type: :DCT_STRING},
+                  %{name: "col5", type: :DCT_BLOB}
+                ]
+              },
+              index_metas: [
+                %{
+                  name: "migration_test1_index",
+                  primary_key: ["col1", "id"],
+                  defined_column: ["col2"]
+                }
+              ]
+            }} = ExAliyunOts.describe_table(@instance, "migration_test1")
   end
 
   test "with_repo: drop" do
