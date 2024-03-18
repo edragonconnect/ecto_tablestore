@@ -28,7 +28,7 @@ defmodule EctoTablestore.MixProject do
   defp deps do
     [
       {:ecto, "~> 3.11"},
-      {:ex_aliyun_ots, github: "xinz/ex_aliyun_ots"},
+      {:ex_aliyun_ots, "~> 0.15"},
       {:jason, "~> 1.0"},
       {:ex_doc, ">= 0.0.0", only: :dev, runtime: false},
       {:hashids, "~> 2.0", optional: true}
