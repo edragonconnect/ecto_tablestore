@@ -2,6 +2,8 @@
 
 ## v0.15.1 (2024-03-18)
 
+* Add feature for local secondary index creation in migration ([#44](https://github.com/edragonconnect/ecto_tablestore/pull/44)).
+* Fix case match to `c:EctoTablestore.Repo.transaction/2` ([#45](https://github.com/edragonconnect/ecto_tablestore/pull/45), [#46](https://github.com/edragonconnect/ecto_tablestore/pull/46)).
 * Fix document source link was broken when entry from hexdocs.pm ([#47](https://github.com/edragonconnect/ecto_tablestore/pull/47)).
 * Make macro definition expandable in migration ([#48](https://github.com/edragonconnect/ecto_tablestore/pull/48)).
 
