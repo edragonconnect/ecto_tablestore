@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.15.1 (2024-03-18)
+
+* Fix document source link was broken when entry from hexdocs.pm ([#47](https://github.com/edragonconnect/ecto_tablestore/pull/47)).
+* Make macro definition expandable in migration ([#48](https://github.com/edragonconnect/ecto_tablestore/pull/48)).
+
 ## v0.15.0 (2024-01-26)
 
 * Add `c:EctoTablestore.Repo.sql_query/2` ([#40](https://github.com/edragonconnect/ecto_tablestore/pull/40)).
