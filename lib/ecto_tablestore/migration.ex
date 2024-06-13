@@ -983,6 +983,22 @@ defmodule EctoTablestore.Migration do
 
           :ok
 
+        {:error,
+         %{
+           code: "OTSParameterInvalid",
+           message:
+             <<"table [", ^table_name::binary-size(byte_size(table_name)), "] does not exist",
+               _::binary>>
+         }}
+        when if_exists ->
+          result_str = IO.ANSI.format([:green, "not exists", :reset])
+
+          Logger.info(
+            ">>>> dropping secondary_index table: #{table_name_str}, index: #{index_name_str} result: #{result_str}"
+          )
+
+          :ok
+
         {:error, error} ->
           raise MigrationError,
                 "dropping secondary_index index: #{index_name} for table: #{table_name} error: #{error.message}"
@@ -1010,6 +1026,22 @@ defmodule EctoTablestore.Migration do
           :ok
 
         {:error, %{code: "OTSObjectNotExist"}} when if_exists ->
+          result_str = IO.ANSI.format([:green, "not exists", :reset])
+
+          Logger.info(
+            ">>>> dropping search index table: #{table_name_str}, index: #{index_name_str} result: #{result_str}"
+          )
+
+          :ok
+
+        {:error,
+         %{
+           code: "OTSParameterInvalid",
+           message:
+             <<"table [", ^table_name::binary-size(byte_size(table_name)), "] does not exist",
+               _::binary>>
+         }}
+        when if_exists ->
           result_str = IO.ANSI.format([:green, "not exists", :reset])
 
           Logger.info(
